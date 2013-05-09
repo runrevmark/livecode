@@ -140,6 +140,26 @@ void MCImageBitmapClearRegion(MCImageBitmap *p_bitmap, MCRectangle p_region)
 	p_bitmap->has_transparency = true;
 }
 
+// MW-2013-05-09: [[ ClearImage ]] Clear the specified regin of the bitmap to the
+//   given color.
+void MCImageBitmapClearRegionToColor(MCImageBitmap *p_bitmap, MCRectangle p_region, const MCColor& p_color)
+{
+	uint32_t t_pixel;
+	t_pixel = p_color . pixel | 0xff000000;
+
+	uint32_t *t_pixel_ptr;
+	uint32_t t_pixel_stride;
+	t_pixel_stride = p_bitmap -> stride / sizeof(uint32_t);
+	t_pixel_ptr = p_bitmap -> data + p_region . y * t_pixel_stride + p_region . x;
+	for(int32_t y = 0; y < p_region . height; y++)
+	{
+		for(int32_t x = 0; x < p_region . width; x++)
+			t_pixel_ptr[x] = t_pixel;
+			
+		t_pixel_ptr += t_pixel_stride;
+	}
+}
+
 //////////
 
 void MCImageBitmapSet(MCImageBitmap *p_bitmap, uint32_t p_pixel_value)

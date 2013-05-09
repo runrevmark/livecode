@@ -52,6 +52,7 @@ bool MCImageCopyBitmapRegion(MCImageBitmap *p_bitmap, MCRectangle &p_region, MCI
 
 void MCImageBitmapClear(MCImageBitmap *p_bitmap);
 void MCImageBitmapClearRegion(MCImageBitmap *p_bitmap, MCRectangle p_region);
+void MCImageBitmapClearRegionToColor(MCImageBitmap *p_bitmap, MCRectangle p_region, const MCColor& p_color);
 void MCImageBitmapSet(MCImageBitmap *p_bitmap, uint32_t p_pixel_value);
 void MCImageBitmapCopyRegionToBitmap(MCImageBitmap *p_dst, MCImageBitmap *p_src, MCPoint p_dst_offset, MCRectangle p_src_rect);
 void MCImageBitmapCopyRegionToBuffer(MCImageBitmap *p_bitmap, int32_t p_sx, int32_t p_sy, int32_t p_sw, int32_t p_sh, uindex_t p_buffer_stride, uint8_t *p_buffer);

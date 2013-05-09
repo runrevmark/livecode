@@ -538,6 +538,10 @@ class MCDelete : public MCStatement
 	Boolean url;
 	MCVarref *var;
 	bool session;
+	
+	// MW-2013-05-08: [[ ClearImage ]] If non-nil this is 'clear image ... to <color>'.
+	MCExpression *color;
+	
 public:
 	MCDelete()
 	{
@@ -546,6 +550,7 @@ public:
 		directory = url = False;
 		var = NULL;
 		session = false;
+		color = nil;
 	}
 	virtual ~MCDelete();
 	virtual Parse_stat parse(MCScriptPoint &);

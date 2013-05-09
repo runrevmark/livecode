@@ -240,6 +240,10 @@ public:
 	void stampsel();
 	void rotatesel(int2 angle);
 	void flipsel(Boolean ishorizontal);
+	
+	// MW-2013-05-09: [[ ClearImage ]] Clear the current selection to the given color
+	//   or transparent if color is nil.
+	void clearsel(const MCColor *color);
 
 	void pasteimage(MCImageBitmap *p_bitmap);
 
@@ -450,6 +454,10 @@ public:
 
 	void rotatesel(int2 angle);
 	void flipsel(Boolean ishorizontal);
+	
+	// MW-2013-05-09: [[ ClearImage ]] Clear the current selection to the given color
+	//   or transparent if color is nil.
+	void clearsel(const MCColor *color);
 
 	void compute_gravity(MCRectangle &trect, int2 &xorigin, int2 &yorigin);
 	void compute_offset(MCRectangle &p_rect, int16_t &r_xoffset, int16_t &r_yoffset);

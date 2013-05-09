@@ -2363,6 +2363,19 @@ void MCMutableImageRep::flipsel(Boolean ishorizontal)
 	m_owner->invalidate_rep(rect);
 }
 
+// MW-2013-05-09: [[ ClearImage ]] Clear the current selection to the given color
+//   or transparent if color is nil.
+void MCMutableImageRep::clearsel(const MCColor *p_color)
+{
+	if (p_color == nil)
+		MCImageBitmapClearRegion(m_bitmap, selrect);
+	else
+		MCImageBitmapClearRegionToColor(m_bitmap, selrect, *p_color);
+		
+	// Make sure we redraw the owning object.
+	m_owner -> invalidate_rep(rect);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void MCMutableImageRep::pasteimage(MCImageBitmap *p_bitmap)

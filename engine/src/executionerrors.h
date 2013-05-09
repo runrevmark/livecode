@@ -2371,6 +2371,18 @@ enum Exec_errors
 	
 	// {EE-0778} image cache limit: not a number
 	EE_PROPERTY_BADIMAGECACHELIMIT,
+	
+	// {EE-0779} clear: couldn't find target object
+	EE_CLEAR_NOIMAGE,
+	
+	// {EE-0780} clear: target object isn't an image
+	EE_CLEAR_NOTIMAGE,
+	
+	// {EE-0782} clear: couldn't evaluate color expression
+	EE_CLEAR_BADCOLOR,
+	
+	// {EE-0781} clear: not a valid color
+	EE_CLEAR_NOTACOLOR,
 };
 
 extern const char *MCexecutionerrors;

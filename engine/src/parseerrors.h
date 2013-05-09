@@ -1597,6 +1597,9 @@ enum Parse_errors
 	
 	// {PE-0523} split/combine: bad form clause
 	PE_ARRAYOP_BADFORM,
+	
+	// {PE-0524} clear: bad color expression
+	PE_CLEAR_BADCOLOREXPR,
 
 };
 

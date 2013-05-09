@@ -1075,8 +1075,10 @@ MCDelete::~MCDelete()
 	delete file;
 	deletetargets(&targets);
 	delete var;
+	delete color;
 }
 
+// MW-2013-05-08: [[ ClearImage ]] 'clear' <target> 'to' <color>
 Parse_stat MCDelete::parse(MCScriptPoint &sp)
 {
 	initpoint(sp);
@@ -1131,6 +1133,17 @@ Parse_stat MCDelete::parse(MCScriptPoint &sp)
 				sp = oldsp;
 			}
 			MCerrorlock--;
+			
+			// MW-2013-05-08: [[ ClearImage ]] If there is a single target then see if
+			//   there is a 'to' clause.
+			if (targets != nil && targets -> next == nil && sp . skip_token(SP_FACTOR, TT_TO, PT_TO) == PS_NORMAL)
+			{
+				if (sp . parseexp(False, True, &color) != PS_NORMAL)
+				{
+					MCperror -> add(PE_CLEAR_BADCOLOREXPR, sp);
+					return PS_ERROR;
+				}
+			}
 		}
 	}
 	return PS_NORMAL;
@@ -1204,7 +1217,56 @@ Exec_stat MCDelete::exec(MCExecPoint &ep)
 		}
 		return ES_NORMAL;
 	}
-	if (targets != NULL)
+	
+	if (color != nil)
+	{
+		// MW-2013-05-08: [[ ClearImage ]] Handle the 'clear image' case.
+		
+		// First resolve the chunk.
+		MCObject *t_image;
+		uint4 t_part_id;
+		if (targets -> getobj(ep, t_image, t_part_id, True) != ES_NORMAL)
+		{
+			MCeerror->add(EE_CLEAR_NOIMAGE, line, pos);
+			return ES_ERROR;
+		}
+		
+		// If it's not an image, then it's an error.
+		if (t_image -> gettype() != CT_IMAGE)
+		{
+			MCeerror->add(EE_CLEAR_NOTIMAGE, line, pos);
+			return ES_ERROR;
+		}
+		
+		// Now evaluate the color...
+		if (color -> eval(ep) != ES_NORMAL)
+		{
+			MCeerror -> add(EE_CLEAR_BADCOLOR, line, pos);
+			return ES_ERROR;
+		}
+		
+		// And check it is either empty or a real color.
+		bool t_is_empty;
+		MCColor t_color;
+		if (ep . isempty())
+			t_is_empty = true;
+		else if (!MCscreen -> parsecolor(ep . getsvalue(), &t_color, NULL))
+		{
+			MCeerror -> add(EE_CLEAR_NOTACOLOR, line, pos);
+			return ES_ERROR;
+		}
+		
+		// Make sure the 'pixel' value of the color is correct.
+		MCscreen -> alloccolor(t_color);
+
+		// Finally, perform the operation.
+		MColdtool = MCcurtool;
+		static_cast<MCImage *>(t_image) -> selimage();
+		MCactiveimage -> clearsel(t_is_empty ? nil : &t_color);
+		MCcurtool = MColdtool;
+		MCactiveimage -> endsel();
+	}
+	else if (targets != NULL)
 	{
 		MCChunk *tptr = targets;
 		while (tptr != NULL)

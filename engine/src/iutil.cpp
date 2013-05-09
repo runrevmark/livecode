@@ -332,6 +332,16 @@ void MCImage::selimage()
 	}
 }
 
+// MW-2013-05-09: [[ ClearImage ]] Clear the current selection to the given color
+//   or transparent if color is nil.
+void MCImage::clearsel(const MCColor *p_color)
+{
+	if (isediting() || convert_to_mutable())
+	{
+		static_cast<MCMutableImageRep*>(m_rep)->clearsel(p_color);
+	}
+}
+
 void MCImage::flipsel(Boolean p_horizontal)
 {
 	if (isediting() || convert_to_mutable())

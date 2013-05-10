@@ -1597,7 +1597,21 @@ enum Parse_errors
 	
 	// {PE-0523} split/combine: bad form clause
 	PE_ARRAYOP_BADFORM,
-
+	
+	// {PE-0524} map: 'of' expected.
+	PE_MAP_OFEXPECTED,
+	
+	// {PE-0525} map: source container expected
+	PE_MAP_SOURCECHUNKEXPECTED,
+	
+	// {PE-0526} map: 'by' expected.
+	PE_MAP_BYEXPECTED,
+	
+	// {PE-0527} map: mapping expression expected.
+	PE_MAP_MAPEXPREXPECTED,
+	
+	// {PE-0528} map: target container expected.
+	PE_MAP_TARGETCHUNKEXPECTED,
 };
 
 extern const char *MCparsingerrors;

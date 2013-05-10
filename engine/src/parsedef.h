@@ -1806,6 +1806,8 @@ enum Statements {
     S_LOAD,
     S_LOCK,
     S_MARK,
+	// MW-2013-05-10: [[ MapCmd ]] Statement id for the map command
+	S_MAP,
     S_MODAL,
     S_MODELESS,
     S_MOVE,

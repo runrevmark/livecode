@@ -2371,6 +2371,18 @@ enum Exec_errors
 	
 	// {EE-0778} image cache limit: not a number
 	EE_PROPERTY_BADIMAGECACHELIMIT,
+	
+	// {EE-0779} map: error evaluating source container,
+	EE_MAP_BADSOURCE,
+	
+	// {EE-0780} map: error evaluating mapping expression,
+	EE_MAP_MAPEXPRFAILED,
+	
+	// {EE-0781} map: could not store result into target container
+	EE_MAP_COULDNOTSETTARGET,
+	
+	// {EE-0782} map: could not store result into source container
+	EE_MAP_COULDNOTSETSOURCE,
 };
 
 extern const char *MCexecutionerrors;

@@ -3417,3 +3417,203 @@ Exec_stat MCWrite::exec(MCExecPoint &ep)
 	MCresult->clear(False);
 	return ES_NORMAL;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+// MW-2013-05-10: [[ MapCmd ]] Destructor for the map command.
+MCMap::~MCMap(void)
+{
+	delete container;
+	delete map;
+	delete target;
+}
+
+// MW-2013-05-10: [[ MapCmd ]] Parse method for the map command.
+Parse_stat MCMap::parse(MCScriptPoint& sp)
+{
+	// Syntax:
+	//   map [ ( lines | items ) of ] <container> by <expr> [ into <container> ]
+	//
+
+	Parse_errors t_error;
+	t_error = PE_UNDEFINED;
+	
+	initpoint(sp);
+	
+	// Parse the chunk type (if present)
+	if (t_error == PE_UNDEFINED)
+	{
+		// First check for 'lines' or 'items'.
+		if (sp . skip_token(SP_FACTOR, TT_CLASS, CT_LINE) == PS_NORMAL)
+			chunk = CT_LINE;
+		else if (sp . skip_token(SP_FACTOR, TT_CLASS, CT_ITEM) == PS_NORMAL)
+			chunk = CT_ITEM;
+		
+		// If we parsed a chunk then ensure there's an 'of'.
+		if (chunk != CT_UNDEFINED && sp . skip_token(SP_FACTOR, TT_OF) != PS_NORMAL)
+			t_error = PE_MAP_OFEXPECTED;
+	}
+	
+	// If there was no error and no chunk type then default to line.
+	if (t_error == PE_UNDEFINED &&
+		chunk == CT_UNDEFINED)
+		chunk = CT_LINE;
+	
+	// Next parse the (source) container.
+	if (t_error == PE_UNDEFINED)
+	{
+		// Create a (destination) chunk to parse into.
+		container = new MCChunk(True);
+		if (container -> parse(sp, False) != PS_NORMAL)
+			t_error = PE_MAP_SOURCECHUNKEXPECTED;
+	}
+	
+	// Next ensure we have a 'by' token.
+	if (t_error == PE_UNDEFINED &&
+		sp . skip_token(SP_FACTOR, TT_PREP, PT_BY) != PS_NORMAL)
+		t_error = PE_MAP_BYEXPECTED;
+		
+	// Now parse the 'by' expression.
+	if (t_error == PE_UNDEFINED &&
+		sp . parseexp(False, True, &map) != PS_NORMAL)
+		t_error = PE_MAP_MAPEXPREXPECTED;
+		
+	// Finally check for the (optional) 'into' clause.
+	if (t_error == PE_UNDEFINED &&
+		sp . skip_token(SP_FACTOR, TT_PREP, PT_INTO) == PS_NORMAL)
+	{
+		// Create a (destination) container to parse into.
+		target = new MCChunk(True);
+		if (target -> parse(sp, False) != PS_NORMAL)
+			t_error = PE_MAP_TARGETCHUNKEXPECTED;
+	}
+	
+	// If we encountered an error, add it to the parse error stack and fail.
+	if (t_error != PE_UNDEFINED)
+	{
+		MCperror -> add(t_error, sp);
+		return PS_ERROR;
+	}
+	
+	// Success!
+	return PS_NORMAL;
+}
+
+// MW-2013-05-10: [[ MapCmd ]] Exec method for the map command.
+Exec_stat MCMap::exec(MCExecPoint& ep)
+{
+	Exec_errors t_error;
+	t_error = EE_UNDEFINED;
+	
+	// First of all, evaluate the source container.
+	if (t_error == EE_UNDEFINED &&
+		container -> eval(ep) != ES_NORMAL)
+		t_error = EE_MAP_BADSOURCE;
+		
+	// Now work out the delimiter.
+	char t_delim;
+	if (t_error == EE_UNDEFINED)
+		t_delim = (chunk == CT_LINE ? ep . getlinedel() : ep . getitemdel());
+	
+	// Next setup the input and output ep's and fetch the source string.
+	const char *t_source_ptr;
+	MCExecPoint t_out_ep;
+	if (t_error == EE_UNDEFINED)
+	{
+		// Make sure the input ep owns its contents (as the by expression might
+		// mutate it).
+		ep . grabsvalue();
+		
+		// Get the string ptr (for simplicity we ensure its a c-string although
+		// this isn't binary safe).
+		t_source_ptr = ep . getcstring();
+	}
+	
+	// Now we have everything we need to the map processing - but only if the
+	// source string isn't empty.
+	if (t_error == EE_UNDEFINED &&
+		*t_source_ptr != '\0')
+	{
+		// This will be used to evaluate the by expression.
+		MCExecPoint t_by_ep(ep);
+
+		for(;;)
+		{
+			// The current source str is the start of the current chunk.
+			const char *t_chunk_start_ptr;
+			t_chunk_start_ptr = t_source_ptr;
+		
+			// Search for the next delimiter.
+			const char *t_next_ptr;
+			t_next_ptr = strchr(t_source_ptr, t_delim);
+
+			// Compute the end of the current chunk.
+			const char *t_chunk_end_ptr;
+			if (t_next_ptr == nil)
+				t_chunk_end_ptr = t_source_ptr + strlen(t_source_ptr);
+			else
+				t_chunk_end_ptr = t_next_ptr;
+
+			// We now have the chunk to map so put it into 'each'. We're okay to
+			// use 'sets' here because the chunk string is in a private copy in
+			// 'ep'.
+			MCeach -> sets(MCString(t_chunk_start_ptr, t_chunk_end_ptr - t_chunk_start_ptr));
+			
+			// Next evaluate the 'by' expression, using the by ep. The result of
+			// the expression will be placed back into t_by_ep. If the expr fails
+			// to evaluate, then its an error and we are done.
+			if (map -> eval(t_by_ep) != ES_NORMAL)
+			{
+				t_error = EE_MAP_MAPEXPRFAILED;
+				break;
+			}
+			
+			// The 'by_ep' now holds the result of the map, so append that to the out_ep.
+			// Note that 'getsvalue()' ensures the contents of the ep is a string.
+			t_out_ep . appendmcstring(t_by_ep . getsvalue());
+			
+			// If there is next delimiter then append one (map, like filter is delimiter
+			// preserving).
+			if (t_next_ptr != nil)
+				t_out_ep . appendchar(t_delim);
+				
+			// If there is no next ptr, or the next chunk is a final empty one then we
+			// are done.
+			if (t_next_ptr == nil || t_next_ptr[1] == '\0')
+				break;
+			
+			// Advance to the next chunk.
+			t_source_ptr = t_next_ptr + 1;
+		}
+	}
+	
+	// Now the processed result is in 't_out_ep' all we need to do is store in
+	// the appropriate container.
+	if (t_error == EE_UNDEFINED)
+	{
+		if (target != nil)
+		{
+			// There was an 'into' clause, so use the target container.
+			if (target -> set(t_out_ep, PT_INTO) != ES_NORMAL)
+				t_error = EE_MAP_COULDNOTSETTARGET;
+		}
+		else
+		{
+			// There was no 'into' clause so use the source container.
+			if (container -> set(t_out_ep, PT_INTO) != ES_NORMAL)
+				t_error = EE_MAP_COULDNOTSETSOURCE;
+		}
+	}
+	
+	// If an error occured, push it onto the error stack and fail.
+	if (t_error != EE_UNDEFINED)
+	{
+		MCeerror -> add(t_error, line, pos);
+		return ES_ERROR;
+	}
+	
+	// Otherwise success!
+	return ES_NORMAL;
+}
+
+////////////////////////////////////////////////////////////////////////////////

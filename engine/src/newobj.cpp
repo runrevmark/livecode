@@ -156,6 +156,9 @@ MCStatement *MCN_new_statement(int2 which)
 		return new MCLocalVariable;
 	case S_LOCK:
 		return new MCLock;
+	// MW-2013-05-10: [[ MapCmd ]] Instantiation for the map command.
+	case S_MAP:
+		return new MCMap;
 	case S_MARK:
 		return new MCMarkCommand;
 	case S_MODAL:

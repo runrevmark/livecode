@@ -282,6 +282,8 @@ LT command_table[] =
         {"load", TT_STATEMENT, S_LOAD},
         {"local", TT_STATEMENT, S_LOCAL},
         {"lock", TT_STATEMENT, S_LOCK},
+		// MW-2013-05-10: [[ MapCmd ]] Token definition for the map command.
+		{"map", TT_STATEMENT, S_MAP},
         {"mark", TT_STATEMENT, S_MARK},
         {"modal", TT_STATEMENT, S_MODAL},
         {"modeless", TT_STATEMENT, S_MODELESS},

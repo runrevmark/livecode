@@ -1982,4 +1982,26 @@ private:
 	MCString data;
 };
 
+// MW-2013-05-10: [[ MapCmd ]] Syntax class for the map command.
+class MCMap: public MCStatement
+{
+	Chunk_term chunk;
+	MCChunk *container;
+	MCExpression *map;
+	MCChunk *target;
+	
+public:
+	MCMap(void)
+	{
+		chunk = CT_UNDEFINED;
+		container = nil;
+		map = nil;
+		target = nil;
+	}
+	
+	virtual ~MCMap(void);
+	virtual Parse_stat parse(MCScriptPoint& sp);
+	virtual Exec_stat exec(MCExecPoint& ep);
+};
+
 #endif

@@ -39,6 +39,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <openssl/evp.h>
 #include <openssl/x509.h>
 #include <openssl/pkcs7.h>
+#include <openssl/pkcs12.h>
 #include <openssl/asn1t.h>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -430,7 +431,7 @@ template<typename T> static bool i2d(int (*p_i2d)(T *, unsigned char **), T *p_o
 
 // This method loads a X.509v3 certificate stored in an empty PKCS#7 SignedData
 // structure.
-static bool MCDeployCertificateLoad(const char *p_passphrase, const char *p_certificate, PKCS7*& r_chain)
+static bool MCDeployCertificateLoad(const char *p_passphrase, const char *p_certificate, STACK_OF(X509) *& r_chain)
 {
 	BIO *t_file;
 	t_file = BIO_new_file(p_certificate, "rb");
@@ -454,7 +455,11 @@ static bool MCDeployCertificateLoad(const char *p_passphrase, const char *p_cert
 	if (t_cert == nil)
 		return MCDeployThrowOpenSSL(kMCDeployErrorBadCertificate);
 
-	r_chain = t_cert;
+	r_chain = t_cert -> d . sign -> cert;
+	
+	t_cert -> d . sign -> cert = nil;
+	PKCS7_free(t_cert);
+
 	return true;
 }
 
@@ -467,9 +472,80 @@ static bool MCDeployPrivateKeyLoad(const char *p_passphrase, const char *p_priva
 }
 
 // This method loads a PKCS#12 privatekey/certificate pair.
-static bool MCDeployCertStoreLoad(const char *p_passphrase, const char *p_store, PKCS7*& r_certificate, EVP_PKEY*& r_private_key)
+static bool MCDeployCertStoreLoad(const char *p_passphrase, const char *p_store, STACK_OF(X509)*& r_chain, EVP_PKEY*& r_private_key)
 {
-	return false;
+	bool t_success;
+	t_success = true;
+
+	BIO *t_file;
+	t_file = nil;
+	if (t_success)
+	{
+		t_file = BIO_new_file(p_store, "rb");
+		if (t_file == nil)
+			t_success = MCDeployThrowOpenSSL(kMCDeployErrorNoCertificate);
+	}
+		
+	PKCS12 *t_cert_store;
+	t_cert_store = nil;
+	if (t_success)
+	{
+		t_cert_store = d2i_PKCS12_bio(t_file, nil);
+		if (t_cert_store == nil)
+			t_success = MCDeployThrowOpenSSL(kMCDeployErrorBadCertificate);
+	}
+	
+	if (t_success)
+	{
+		if (p_passphrase == nil || p_passphrase[0] == '\0')
+		{
+			if (PKCS12_verify_mac(t_cert_store, "", 0) && !PKCS12_verify_mac(t_cert_store, nil, 0) == 0)
+				t_success = MCDeployThrowOpenSSL(kMCDeployErrorNoPassword);
+		}
+		else
+		{
+			if (PKCS12_verify_mac(t_cert_store, p_passphrase, strlen(p_passphrase)) == 0)
+				t_success = MCDeployThrowOpenSSL(kMCDeployErrorBadPassword);
+		}
+	}
+
+	X509 *t_cert;
+	STACK_OF(X509) *t_chain;
+	EVP_PKEY *t_private_key;
+	t_cert = nil;
+	t_chain = nil;
+	t_private_key = nil;
+	if (t_success &&
+		PKCS12_parse(t_cert_store, p_passphrase, &t_private_key, &t_cert, &t_chain) == 0)
+			t_success = MCDeployThrowOpenSSL(kMCDeployErrorBadCertificate);
+	
+	if (t_success)
+	{
+		if (sk_X509_unshift(t_chain, t_cert) != 0)
+			t_cert = nil;
+		else
+			t_success = MCDeployThrowOpenSSL(kMCDeployErrorNoMemory);
+	}
+	
+	if (t_success)
+	{
+		r_chain = t_chain;
+		r_private_key = t_private_key;
+	}
+	else
+	{
+		if (t_cert != nil)
+			X509_free(t_cert);
+		if (t_chain != nil)
+			sk_X509_free(t_chain);
+		if (t_private_key != nil)
+			EVP_PKEY_free(t_private_key);
+	}
+	
+	if (t_file != nil)
+		BIO_free(t_file);
+		
+	return t_success;
 }
 
 static bool MCDeployBuildSpcString(const char *p_value, bool p_is_ascii, SpcString*& r_string)
@@ -1049,7 +1125,7 @@ bool MCDeploySignWindows(const MCDeploySignParameters& p_params)
 
 	// If a certificate store path has been given, then use that to load the SPC/PK,
 	// otherwise load them separately.
-	PKCS7* t_cert_chain;
+	STACK_OF(X509) *t_cert_chain;
 	EVP_PKEY* t_privatekey;
 	t_cert_chain = nil;
 	t_privatekey = nil;
@@ -1099,8 +1175,8 @@ bool MCDeploySignWindows(const MCDeploySignParameters& p_params)
 	t_certificate = nil;
 	if (t_success)
 	{
-		if (sk_X509_num(t_cert_chain -> d . sign -> cert) >= 1)
-			t_certificate = sk_X509_value(t_cert_chain -> d . sign -> cert, 0);
+		if (sk_X509_num(t_cert_chain) >= 1)
+			t_certificate = sk_X509_value(t_cert_chain, 0);
 		else
 			t_success = MCDeployThrow(kMCDeployErrorEmptyCertificate);
 	}
@@ -1164,8 +1240,8 @@ bool MCDeploySignWindows(const MCDeploySignParameters& p_params)
 	// Next, make sure we store the list of certificates needed to validate the
 	// signature, but in reverse order.
 	if (t_success)
-		for(int32_t i = sk_X509_num(t_cert_chain -> d . sign -> cert) - 1; i >= 0 && t_success; i--)
-			if (!PKCS7_add_certificate(t_signature, sk_X509_value(t_cert_chain -> d . sign -> cert, i)))
+		for(int32_t i = sk_X509_num(t_cert_chain) - 1; i >= 0 && t_success; i--)
+			if (!PKCS7_add_certificate(t_signature, sk_X509_value(t_cert_chain, i)))
 				t_success = MCDeployThrowOpenSSL(kMCDeployErrorBadSignature);
 
 	// Serialize the data first - this creates a byte sequence representing
@@ -1301,7 +1377,7 @@ bool MCDeploySignWindows(const MCDeploySignParameters& p_params)
 	if (t_privatekey != nil)
 		EVP_PKEY_free(t_privatekey);
 	if (t_cert_chain != nil)
-		PKCS7_free(t_cert_chain);
+		sk_X509_free(t_cert_chain);
 	if (t_hash != nil)
 		BIO_free(t_hash);
 	if (t_output != nil)

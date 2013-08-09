@@ -387,10 +387,18 @@ Exec_stat MCWidget::getprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_
 
 	// The property we are looking for is not reserved, so we look for a
 	// 'getProp' handler in the implementation.
-	if (CallGetProp(p_context, p_which, nil))
+	if (CallGetProp(p_context, p_which, nil, nil))
 		return ES_NORMAL;
 	
-	return ES_NOT_HANDLED;
+	return ES_ERROR;
+}
+
+Exec_stat MCWidget::getnamedprop(uint4 p_part_id, MCNameRef p_property, MCExecPoint& p_context, MCNameRef p_key, Boolean p_effective)
+{
+	if (CallGetProp(p_context, P_CUSTOM, p_property, p_key))
+		return ES_NORMAL;
+		
+	return MCControl::getnamedprop(p_part_id, p_property, p_context, p_key, p_effective);
 }
 
 Exec_stat MCWidget::getarrayprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, MCNameRef p_key, Boolean p_effective)
@@ -417,7 +425,7 @@ Exec_stat MCWidget::getarrayprop(uint4 p_part_id, Properties p_which, MCExecPoin
 	
 	// The property we are looking for is not reserved, so we look for a
 	// 'getProp' handler in the implementation.
-	if (CallGetProp(p_context, p_which, p_key))
+	if (CallGetProp(p_context, p_which, nil, p_key))
 		return ES_NORMAL;
 	
 	return ES_NORMAL;
@@ -433,7 +441,22 @@ Exec_stat MCWidget::setprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_
 			break;
 	}
 
+	// The property we are looking for is not reserved, so we look for a
+	// 'getProp' handler in the implementation.
+	if (CallSetProp(p_context, p_which, nil, nil))
+		return ES_NORMAL;
+		
 	return MCControl::setprop(p_part_id, p_which, p_context, p_effective);
+}
+
+Exec_stat MCWidget::setnamedprop(uint4 p_part_id, MCNameRef p_property, MCExecPoint& p_context, MCNameRef p_key, Boolean p_effective)
+{
+	// The property we are looking for is not reserved, so we look for a
+	// 'getProp' handler in the implementation.
+	if (CallSetProp(p_context, P_CUSTOM, p_property, p_key))
+		return ES_NORMAL;
+		
+	return MCControl::setnamedprop(p_part_id, p_property, p_context, p_key, p_effective);
 }
 
 Exec_stat MCWidget::setarrayprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, MCNameRef p_key, Boolean p_effective)
@@ -443,6 +466,9 @@ Exec_stat MCWidget::setarrayprop(uint4 p_part_id, Properties p_which, MCExecPoin
 		default:
 			break;
 	}
+	
+	if (CallSetProp(p_context, p_which, nil, p_key))
+		return ES_NORMAL;
 	
 	return MCControl::setarrayprop(p_part_id, p_which, p_context, p_key, p_effective);
 }
@@ -651,7 +677,7 @@ bool MCWidget::CallEvent(const char *p_name, MCParameter *p_parameters)
 	return true;
 }
 
-bool MCWidget::CallGetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_key)
+bool MCWidget::CallGetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_property, MCNameRef p_key)
 {
 	MCHandler *t_handler;
 	if (p_which != P_CUSTOM)
@@ -661,9 +687,7 @@ bool MCWidget::CallGetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_key)
 	}
 	else
 	{
-		MCAutoNameRef t_name;
-		/* UNCHECKED */ ep . copyasnameref(t_name);
-		if (m_imp_handlers -> findhandler(HT_GETPROP, P_UNDEFINED, t_name, t_handler) != ES_NORMAL)
+		if (m_imp_handlers -> findhandler(HT_GETPROP, P_UNDEFINED, p_property, t_handler) != ES_NORMAL)
 			return false;
 	}
 	
@@ -688,6 +712,61 @@ bool MCWidget::CallGetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_key)
 	t_old_widget_object = MCwidgetobject;
 	MCwidgetobject = this;
 	t_stat = t_handler -> exec(exec_ep, &t_param);
+	if (t_stat == ES_NORMAL)
+	{
+		MCresult -> fetch(ep);
+		if (ep.getformat() == VF_STRING || ep.getformat() == VF_BOTH)
+			ep.grabsvalue();
+		else if (ep.getformat() == VF_ARRAY)
+			ep.grabarray();
+	}
+	MCwidgetobject = t_old_widget_object;
+	
+	MCRedrawUnlockScreen();
+	
+	MCtrace = t_old_trace;
+	//MCnbreakpoints = t_old_breaks;
+	
+	return true;	
+}
+
+bool MCWidget::CallSetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_property, MCNameRef p_key)
+{
+	MCHandler *t_handler;
+	if (p_which != P_CUSTOM)
+	{
+		if (m_imp_handlers -> findhandler(HT_SETPROP, p_which, nil, t_handler) != ES_NORMAL)
+			return false;
+	}
+	else
+	{
+		if (m_imp_handlers -> findhandler(HT_SETPROP, P_UNDEFINED, p_property, t_handler) != ES_NORMAL)
+			return false;
+	}
+	
+	MCParameter t_param_1, t_param_2;
+	t_param_1 . setnameref_unsafe_argument(p_key == nil ? kMCEmptyName : p_key);
+	t_param_2 . set_argument(ep);
+	t_param_1 . setnext(&t_param_2);
+	
+	Boolean t_old_trace;
+	uint2 t_old_breaks;
+	t_old_trace = MCtrace;
+	//t_old_breaks = MCnbreakpoints;
+	
+	MCtrace = False;
+	//MCnbreakpoints = 0;
+	
+	MCRedrawLockScreen();
+	
+	Exec_stat t_stat;
+	MCExecPoint exec_ep(this, m_imp_handlers, t_handler);
+	ep . setscriptobject(this);
+	
+	MCWidget *t_old_widget_object;
+	t_old_widget_object = MCwidgetobject;
+	MCwidgetobject = this;
+	t_stat = t_handler -> exec(exec_ep, &t_param_1);
 	if (t_stat == ES_NORMAL)
 	{
 		MCresult -> fetch(ep);

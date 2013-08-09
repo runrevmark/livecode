@@ -245,6 +245,14 @@ Exec_stat MCObject::getcustomprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameR
 	return t_stat;
 }
 
+Exec_stat MCObject::getnamedprop(uint4 partid, MCNameRef property, MCExecPoint& ep, MCNameRef key, Boolean effective)
+{
+	if (key == nil)
+		return getcustomprop(ep, getdefaultpropsetname(), property);
+		
+	return getcustomprop(ep, property, key);
+}
+
 Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	uint2 num = 0;
@@ -1207,6 +1215,14 @@ Exec_stat MCObject::setcustomprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameR
 	}
 
 	return t_stat;
+}
+
+Exec_stat MCObject::setnamedprop(uint4 parid, MCNameRef property, MCExecPoint& ep, MCNameRef key, Boolean effective)
+{
+	if (key == nil)
+		return setcustomprop(ep, getdefaultpropsetname(), property);
+		
+	return setcustomprop(ep, property, key);
 }
 
 Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)

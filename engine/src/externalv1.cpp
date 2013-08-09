@@ -1779,18 +1779,10 @@ static MCExternalError MCExternalObjectGet(MCExternalObjectRef p_object, unsigne
 	Exec_stat t_stat;
 	if (t_prop == P_CUSTOM)
 	{
-		MCAutoNameRef t_propset_name, t_propset_key;
-		if (p_key == nil)
-		{
-			/* UNCHECKED */ t_propset_name . Clone(t_object -> getdefaultpropsetname());
-			/* UNCHECKED */ t_propset_key . CreateWithCString(p_name);
-		}
-		else
-		{
-			/* UNCHECKED */ t_propset_name . CreateWithCString(p_name);
-			/* UNCHECKED */ t_propset_key . CreateWithCString(p_key);
-		}
-		t_stat = t_object -> getcustomprop(t_ep, t_propset_name, t_propset_key);
+		MCAutoNameRef t_prop_name, t_prop_key;
+		/* UNCHECKED */ t_prop_name . CreateWithCString(p_name);
+		/* UNCHECKED */ t_prop_key . CreateWithCString(p_key);
+		t_stat = t_object -> getnamedprop(0, t_prop_name, t_ep, t_prop_key, False);
 	}
 	else if (t_prop >= P_FIRST_ARRAY_PROP)
 	{

@@ -37,8 +37,10 @@ public:
 	virtual void recompute(void);
 
 	virtual Exec_stat getprop(uint4 part_id, Properties which, MCExecPoint& context, Boolean effective);
+	virtual Exec_stat getnamedprop(uint4 parid, MCNameRef property, MCExecPoint &, MCNameRef key, Boolean effective);
 	virtual Exec_stat getarrayprop(uint4 parid, Properties which, MCExecPoint &, MCNameRef key, Boolean effective);
 	virtual Exec_stat setprop(uint4 part_id, Properties which, MCExecPoint& context, Boolean effective);
+	virtual Exec_stat setnamedprop(uint4 parid, MCNameRef property, MCExecPoint&, MCNameRef key, Boolean effective);
 	virtual Exec_stat setarrayprop(uint4 parid, Properties which, MCExecPoint&, MCNameRef key, Boolean effective);
 	
 	virtual Exec_stat handle(Handler_type, MCNameRef, MCParameter *, MCObject *pass_from);
@@ -77,8 +79,8 @@ private:
 	//////////
 	
 	bool CallEvent(const char *name, MCParameter *parameters);
-	bool CallGetProp(MCExecPoint& ep, Properties p_property, MCNameRef p_key);
-	bool CallSetProp(MCExecPoint& ep, Properties p_property, MCNameRef p_key);
+	bool CallGetProp(MCExecPoint& ep, Properties p_property, MCNameRef p_property_name, MCNameRef p_key);
+	bool CallSetProp(MCExecPoint& ep, Properties p_property, MCNameRef p_property_name, MCNameRef p_key);
 	
 	Exec_stat SetImplementation(const MCString& p_script);
 	

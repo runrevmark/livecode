@@ -20,6 +20,8 @@
 #include "hndlrlst.h"
 #include "debug.h"
 #include "redraw.h"
+#include "font.h"
+#include "chunk.h"
 
 #include "globals.h"
 #include "context.h"
@@ -27,8 +29,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 static MCContext *MCwidgetcontext;
+static MCFontRef MCwidgetcontextfont;
 static MCWidget *MCwidgetobject;
-static uint32_t MCwidgetcontextopacity;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,6 +38,12 @@ MCWidget::MCWidget(void)
 {
 	m_imp_script = nil;
 	m_imp_handlers = nil;
+	
+	m_mouse_over = false;
+	m_mouse_x = INT32_MIN;
+	m_mouse_y = INT32_MAX;
+	m_button_state = 0;
+	m_modifier_state = 0;
 }
 
 MCWidget::MCWidget(const MCWidget& p_other)
@@ -43,6 +51,12 @@ MCWidget::MCWidget(const MCWidget& p_other)
 {
 	m_imp_script = nil;
 	m_imp_handlers = nil;
+	
+	m_mouse_over = false;
+	m_mouse_x = INT32_MIN;
+	m_mouse_y = INT32_MAX;
+	m_button_state = 0;
+	m_modifier_state = 0;
 	
 	SetImplementation(p_other . m_imp_script);
 }
@@ -123,24 +137,30 @@ Boolean MCWidget::kup(const char *p_key_string, KeySym p_key)
 
 Boolean MCWidget::mdown(uint2 p_which)
 {
-	if (getstate(CS_MFOCUSED))
-		return False;
-
-	setstate(True, CS_MFOCUSED);
+	if (state & CS_MENU_ATTACHED)
+		return MCObject::mdown(p_which);
+	
+	if ((m_button_state & (1 << p_which)) != 0)
+		return True;
 
 	switch(getstack() -> gettool(this))
 	{
 	case T_BROWSE:
-		OnMouseDown(p_which, mx, my, 0);
+		setstate(True, CS_MFOCUSED);
+		m_button_state |= 1 << p_which;
+		OnMouseDown(p_which);
 		break;
 
 	case T_POINTER:
+		if (getstate(CS_MFOCUSED))
+			return False;
+		setstate(True, CS_MFOCUSED);
 		if (p_which == Button1)
 			start(True);
 		break;
 
 	default:
-		return False;
+		break;	
 	}
 
 	return True;
@@ -148,24 +168,32 @@ Boolean MCWidget::mdown(uint2 p_which)
 
 Boolean MCWidget::mup(uint2 p_which)
 {
-	if (!getstate(CS_MFOCUSED))
-		return False;
-
-	setstate(False, CS_MFOCUSED);
-
+	if (state & CS_MENU_ATTACHED)
+		return MCObject::mup(p_which);
+	
 	switch(getstack() -> gettool(this))
 	{
 	case T_BROWSE:
-		OnMouseUp(p_which, mx, my, 0);
+		m_button_state &= ~(1 << p_which);
+		if (m_button_state == 0)
+			setstate(False, CS_MFOCUSED);
+		if (maskrect(MCU_make_rect(mx, my, 1, 1)))	
+			OnMouseUp(p_which);
+		else
+			OnMouseRelease(p_which);
 		break;
 
 	case T_POINTER:
+		if (!getstate(CS_MFOCUSED))
+			return False;
+		setstate(False, CS_MFOCUSED);
 		if (p_which == Button1)
 			end();
 		break;
-
+			
 	default:
-		return False;
+		break;	
+
 	}
 
 	return True;
@@ -176,13 +204,67 @@ Boolean MCWidget::mfocus(int2 p_x, int2 p_y)
 	if (!(getflag(F_VISIBLE) || MCshowinvisibles) ||
 		(getflag(F_DISABLED) && (getstack() -> gettool(this) == T_BROWSE)))
 		return False;
-
-	return MCControl::mfocus(p_x, p_y);
+	
+	if (getstack() -> gettool(this) != T_BROWSE)
+		return MCControl::mfocus(p_x, p_y);
+	
+	if (m_button_state == 0 && !maskrect(MCU_make_rect(p_x, p_y, 1, 1)))
+		return False;
+	
+	// Update the mouse loc.
+	mx = p_x;
+	my = p_y;
+	
+	// Get control local coords
+	int32_t t_mouse_x, t_mouse_y;
+	t_mouse_x = p_x - getrect() . x;
+	t_mouse_y = p_y - getrect() . y;
+	
+	// Check to see if pos has changed
+	bool t_pos_changed;
+	t_pos_changed = false;
+	if (t_mouse_x != m_mouse_x || t_mouse_y != m_mouse_y)
+	{
+		m_mouse_x = t_mouse_x;
+		m_mouse_y = t_mouse_y;
+		t_pos_changed = true;
+	}
+		
+	// If we weren't previously under the mouse, we are now.
+	if (!m_mouse_over)
+	{
+		m_mouse_over = true;
+		OnMouseEnter();
+	}
+	
+	// Dispatch a position update if needed.
+	if (t_pos_changed)
+		OnMouseMove(t_mouse_x, t_mouse_y);
+	
+	return True;
 }
 
 void MCWidget::munfocus(void)
 {
-	MCControl::munfocus();
+	if (getstack() -> gettool(this) != T_BROWSE ||
+		(!m_mouse_over && m_button_state == 0))
+	{
+		MCControl::munfocus();
+		return;
+	}
+	
+	if (m_button_state != 0)
+	{
+		for(int32_t i = 0; i < 3; i++)
+			if ((m_button_state & (1 << i)) != 0)
+			{
+				m_button_state &= ~(1 << i);
+				OnMouseRelease(i);
+			}
+	}
+	
+	m_mouse_over = false;
+	OnMouseLeave();
 }
 
 Boolean MCWidget::doubledown(uint2 p_which)
@@ -201,7 +283,12 @@ void MCWidget::timer(MCNameRef p_message, MCParameter *p_parameters)
 
 void MCWidget::setrect(const MCRectangle& p_rectangle)
 {
+	MCRectangle t_old_rect;
+	t_old_rect = rect;
+	
 	rect = p_rectangle;
+	
+	OnReshape(t_old_rect);
 }
 
 void MCWidget::recompute(void)
@@ -210,28 +297,156 @@ void MCWidget::recompute(void)
 
 Exec_stat MCWidget::getprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, Boolean p_effective)
 {
+	// If we are getting any of the reserved properties, then pass directly
+	// to MCControl (and super-classes) to handle. Any changes in these will
+	// be notified to us so we can take action - but widget's have no direct
+	// control over them.
 	switch(p_which)
 	{
-	default:
-		break;
+		case P_ID:
+		case P_SHORT_ID:	
+		case P_LONG_ID:
+		case P_ABBREV_ID:
+		case P_NAME:
+		case P_SHORT_NAME:
+		case P_ABBREV_NAME:
+		case P_LONG_NAME:
+		case P_ALT_ID:
+		case P_LAYER:
+		case P_SCRIPT:
+		case P_PARENT_SCRIPT:
+		case P_NUMBER:
+		case P_FORE_PIXEL:
+		case P_BACK_PIXEL:
+		case P_HILITE_PIXEL:
+		case P_BORDER_PIXEL:
+		case P_TOP_PIXEL:
+		case P_BOTTOM_PIXEL:
+		case P_SHADOW_PIXEL:
+		case P_FOCUS_PIXEL:
+		case P_PEN_COLOR:
+		case P_BRUSH_COLOR:
+		case P_FORE_COLOR:
+		case P_BACK_COLOR:
+		case P_HILITE_COLOR:
+		case P_BORDER_COLOR:
+		case P_TOP_COLOR:
+		case P_BOTTOM_COLOR:
+		case P_SHADOW_COLOR:
+		case P_FOCUS_COLOR:
+		case P_COLORS:
+		case P_FORE_PATTERN:
+		case P_BACK_PATTERN:
+		case P_HILITE_PATTERN:
+		case P_BORDER_PATTERN:
+		case P_TOP_PATTERN:
+		case P_BOTTOM_PATTERN:
+		case P_SHADOW_PATTERN:
+		case P_FOCUS_PATTERN:
+		case P_PATTERNS:
+		case P_LOCK_LOCATION:
+		case P_TEXT_HEIGHT:
+		case P_TEXT_ALIGN:
+		case P_TEXT_FONT:
+		case P_TEXT_SIZE:
+		case P_TEXT_STYLE:
+		case P_VISIBLE:
+		case P_INVISIBLE:
+		case P_SELECTED:
+		case P_TRAVERSAL_ON:
+		case P_OWNER:
+		case P_SHORT_OWNER:
+		case P_ABBREV_OWNER:
+		case P_LONG_OWNER:
+		case P_PROPERTIES:
+		case P_CUSTOM_PROPERTY_SET:
+		case P_CUSTOM_PROPERTY_SETS:
+		case P_INK:
+		case P_CANT_SELECT:
+		case P_BLEND_LEVEL:
+		case P_LOCATION:
+		case P_LEFT:
+		case P_TOP:
+		case P_RIGHT:
+		case P_BOTTOM:
+		case P_TOP_LEFT:
+		case P_TOP_RIGHT:
+		case P_BOTTOM_LEFT:
+		case P_BOTTOM_RIGHT:
+		case P_WIDTH:
+		case P_HEIGHT:
+		case P_RECTANGLE:
+		case P_TOOL_TIP:
+		case P_UNICODE_TOOL_TIP:
+		case P_LAYER_MODE:
+			return MCControl::getprop(p_part_id, p_which, p_context, p_effective);
+			
+		default:
+			break;
 	}
 
-	return MCControl::getprop(p_part_id, p_which, p_context, p_effective);
+	// The property we are looking for is not reserved, so we look for a
+	// 'getProp' handler in the implementation.
+	if (CallGetProp(p_context, p_which, nil))
+		return ES_NORMAL;
+	
+	return ES_NOT_HANDLED;
+}
+
+Exec_stat MCWidget::getarrayprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, MCNameRef p_key, Boolean p_effective)
+{
+	// If we are getting any of the reserved properties, then pass directly
+	// to MCControl (and super-classes) to handle. Any changes in these will
+	// be notified to us so we can take action - but widget's have no direct
+	// control over them.
+	switch(p_which)
+	{
+		case P_TEXT_STYLE:
+		case P_CUSTOM_KEYS:
+		case P_CUSTOM_PROPERTIES:
+		case P_BITMAP_EFFECT_DROP_SHADOW:
+		case P_BITMAP_EFFECT_INNER_SHADOW:
+		case P_BITMAP_EFFECT_OUTER_GLOW:
+		case P_BITMAP_EFFECT_INNER_GLOW:
+		case P_BITMAP_EFFECT_COLOR_OVERLAY:
+			return MCControl::getarrayprop(p_part_id, p_which, p_context, p_key, p_effective);
+			
+		default:
+			break;
+	}
+	
+	// The property we are looking for is not reserved, so we look for a
+	// 'getProp' handler in the implementation.
+	if (CallGetProp(p_context, p_which, p_key))
+		return ES_NORMAL;
+	
+	return ES_NORMAL;
 }
 
 Exec_stat MCWidget::setprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, Boolean p_effective)
 {
 	switch(p_which)
 	{
-	case P_IMPLEMENTATION:
-		return SetImplementation(p_context . getsvalue());
-	default:
-		break;
+		case P_IMPLEMENTATION:
+			return SetImplementation(p_context . getsvalue());
+		default:
+			break;
 	}
 
 	return MCControl::setprop(p_part_id, p_which, p_context, p_effective);
 }
 
+Exec_stat MCWidget::setarrayprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, MCNameRef p_key, Boolean p_effective)
+{
+	switch(p_which)
+	{
+		default:
+			break;
+	}
+	
+	return MCControl::setarrayprop(p_part_id, p_which, p_context, p_key, p_effective);
+}
+	
 Exec_stat MCWidget::handle(Handler_type p_type, MCNameRef p_method, MCParameter *p_parameters, MCObject *p_passing_object)
 {
 	return MCControl::handle(p_type, p_method, p_parameters, p_passing_object);
@@ -280,42 +495,11 @@ void MCWidget::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
 	}
 
 	MCwidgetcontext = dc;
-	MCwidgetobject = this;
-	MCwidgetcontextopacity = 255;
+	MCwidgetcontextfont = nil;
 	OnPaint();
-	MCwidgetobject = nil;
+	MCFontRelease(MCwidgetcontextfont);
 	MCwidgetcontext = nil;
 	
-	/*if (m_self != NULL)
-	{
-		WidgetEnvironment t_env(this);
-
-		MCRectangle t_dirty_bounds;
-		t_dirty_bounds = MCU_intersect_rect(t_bounds, p_dirty);
-
-		MCWidgetRectangle t_dirty;
-		t_dirty . left = t_dirty_bounds . x;
-		t_dirty . top = t_dirty_bounds . y;
-		t_dirty . right = t_dirty_bounds . x + t_dirty_bounds . width;
-		t_dirty . bottom = t_dirty_bounds . y + t_dirty_bounds . height;
-
-		if (p_context -> gettype() == CONTEXT_TYPE_PRINTER)
-		{
-			void *t_pict_dc;
-			MCWidgetContextBeginOffscreen(p_context, t_pict_dc);
-			m_self -> OnPaint(&t_env, t_pict_dc, t_dirty);
-			MCWidgetContextEndOffscreen(p_context, t_pict_dc);
-		}
-		else
-		{
-
-			void *t_native_dc;
-			t_native_dc = MCWidgetContextLockNative(p_context);
-			m_self -> OnPaint(&t_env, t_native_dc, t_dirty);
-			MCWidgetContextUnlockNative(p_context);
-		}
-	}*/
-
 	if (!p_isolated)
 	{
 		dc -> end();
@@ -345,6 +529,17 @@ void MCWidget::OnClose(void)
 {
 }
 
+void MCWidget::OnReshape(const MCRectangle& p_old_rect)
+{
+	MCExecPoint ep;
+	ep . setrectangle(p_old_rect);
+	
+	MCParameter t_param;
+	t_param . set_argument(ep);
+	
+	CallEvent("reshape", &t_param);
+}
+
 void MCWidget::OnFocus(void)
 {
 }
@@ -355,22 +550,51 @@ void MCWidget::OnUnfocus(void)
 
 void MCWidget::OnMouseEnter(void)
 {
+	CallEvent("mouseEnter", nil);
 }
 
-void MCWidget::OnMouseMove(int32_t x, int32_t y, uint32_t modifiers)
+void MCWidget::OnMouseMove(int32_t x, int32_t y)
 {
+	MCExecPoint ep;
+	MCParameter t_param_1, t_param_2;
+	ep . setint(x);
+	t_param_1 . set_argument(ep);
+	ep . setint(y);
+	t_param_2 . set_argument(ep);
+	t_param_1 . setnext(&t_param_2);
+	CallEvent("mouseMove", &t_param_1);
 }
 
 void MCWidget::OnMouseLeave(void)
 {
+	CallEvent("mouseLeave", nil);
 }
 
-void MCWidget::OnMouseDown(uint32_t button, int32_t x, int32_t y, uint32_t modifiers)
+void MCWidget::OnMouseDown(uint32_t p_button)
 {
+	MCExecPoint ep;
+	MCParameter t_param;
+	ep . setint(p_button);
+	t_param . set_argument(ep);
+	CallEvent("mouseDown", &t_param);
 }
 
-void MCWidget::OnMouseUp(uint32_t button, int32_t x, int32_t y, uint32_t modifiers)
+void MCWidget::OnMouseUp(uint32_t p_button)
 {
+	MCExecPoint ep;
+	MCParameter t_param;
+	ep . setint(p_button);
+	t_param . set_argument(ep);
+	CallEvent("mouseUp", &t_param);
+}
+
+void MCWidget::OnMouseRelease(uint32_t p_button)
+{
+	MCExecPoint ep;
+	MCParameter t_param;
+	ep . setint(p_button);
+	t_param . set_argument(ep);
+	CallEvent("mouseRelease", &t_param);
 }
 
 bool MCWidget::OnKeyPress(uint32_t key, uint32_t modifiers)
@@ -385,34 +609,102 @@ bool MCWidget::OnHitTest(const MCRectangle& region)
 
 void MCWidget::OnPaint(void)
 {
+	CallEvent("paint", nil);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCWidget::CallEvent(const char *p_name, MCParameter *p_parameters)
+{
 	MCAutoNameRef t_handler_name;
-	t_handler_name . CreateWithCString("paint");
+	t_handler_name . CreateWithCString(p_name);
 	
 	MCHandler *t_handler;
-	if (m_imp_handlers -> findhandler(HT_MESSAGE, t_handler_name, t_handler) != ES_NORMAL)
-		return;
+	if (m_imp_handlers -> findhandler(HT_MESSAGE, P_UNDEFINED, t_handler_name, t_handler) != ES_NORMAL)
+		return false;
 	
 	Boolean t_old_trace;
 	uint2 t_old_breaks;
 	t_old_trace = MCtrace;
-	t_old_breaks = MCnbreakpoints;
+	//t_old_breaks = MCnbreakpoints;
 	
 	MCtrace = False;
-	MCnbreakpoints = 0;
+	//MCnbreakpoints = 0;
 	
 	MCRedrawLockScreen();
 	
 	Exec_stat t_stat;
 	MCExecPoint ep(this, m_imp_handlers, t_handler);
-	t_stat = t_handler -> exec(ep, nil);
-
+	ep . setscriptobject(this);
+	
+	MCWidget *t_old_widget_object;
+	t_old_widget_object = MCwidgetobject;
+	MCwidgetobject = this;
+	t_stat = t_handler -> exec(ep, p_parameters);
+	MCwidgetobject = t_old_widget_object;
+	
 	MCRedrawUnlockScreen();
 	
 	MCtrace = t_old_trace;
-	MCnbreakpoints = t_old_breaks;
+	//MCnbreakpoints = t_old_breaks;
+	
+	return true;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+bool MCWidget::CallGetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_key)
+{
+	MCHandler *t_handler;
+	if (p_which != P_CUSTOM)
+	{
+		if (m_imp_handlers -> findhandler(HT_GETPROP, p_which, nil, t_handler) != ES_NORMAL)
+			return false;
+	}
+	else
+	{
+		MCAutoNameRef t_name;
+		/* UNCHECKED */ ep . copyasnameref(t_name);
+		if (m_imp_handlers -> findhandler(HT_GETPROP, P_UNDEFINED, t_name, t_handler) != ES_NORMAL)
+			return false;
+	}
+	
+	MCParameter t_param;
+	t_param . setnameref_unsafe_argument(p_key == nil ? kMCEmptyName : p_key);
+	
+	Boolean t_old_trace;
+	uint2 t_old_breaks;
+	t_old_trace = MCtrace;
+	//t_old_breaks = MCnbreakpoints;
+	
+	MCtrace = False;
+	//MCnbreakpoints = 0;
+	
+	MCRedrawLockScreen();
+	
+	Exec_stat t_stat;
+	MCExecPoint exec_ep(this, m_imp_handlers, t_handler);
+	ep . setscriptobject(this);
+	
+	MCWidget *t_old_widget_object;
+	t_old_widget_object = MCwidgetobject;
+	MCwidgetobject = this;
+	t_stat = t_handler -> exec(exec_ep, &t_param);
+	if (t_stat == ES_NORMAL)
+	{
+		MCresult -> fetch(ep);
+		if (ep.getformat() == VF_STRING || ep.getformat() == VF_BOTH)
+			ep.grabsvalue();
+		else if (ep.getformat() == VF_ARRAY)
+			ep.grabarray();
+	}
+	MCwidgetobject = t_old_widget_object;
+	
+	MCRedrawUnlockScreen();
+	
+	MCtrace = t_old_trace;
+	//MCnbreakpoints = t_old_breaks;
+	
+	return true;	
+}
 
 Exec_stat MCWidget::SetImplementation(const MCString& p_script)
 {
@@ -444,6 +736,7 @@ Exec_stat MCWidget::SetImplementation(const MCString& p_script)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+
 Exec_stat MCWidgetCanvasSetColor(MCExecPoint& ep, const MCColor& p_color)
 {
 	if (MCwidgetcontext == nil)
@@ -455,8 +748,30 @@ Exec_stat MCWidgetCanvasSetColor(MCExecPoint& ep, const MCColor& p_color)
 	return ES_NORMAL;
 }
 
-Exec_stat MCWidgetCanvasSetFont(MCExecPoint& ep, MCFontRef p_font)
+Exec_stat MCWidgetCanvasSetFont(MCExecPoint& ep, MCNameRef p_name, int32_t p_size, int32_t p_style)
 {
+	if (MCwidgetcontext == nil)
+		return ES_NORMAL;
+	
+	if (p_name == nil || p_size == -1 || p_style == -1)
+	{
+		MCNameRef t_inh_name;
+		uint2 t_inh_size;
+		uint2 t_inh_style;
+		MCwidgetobject -> getfontattsnew(t_inh_name, t_inh_size, t_inh_style);
+		if (p_name == nil)
+			p_name = t_inh_name;
+		if (p_size == -1)
+			p_size = t_inh_size;
+		if (p_style == -1)
+			p_style = t_inh_style;
+	}
+	
+	if (MCwidgetcontextfont != nil)
+		MCFontRelease(MCwidgetcontextfont);
+	
+	/* UNCHECKED */ MCFontCreate(p_name, MCFontStyleFromTextStyle(p_style), p_size, MCwidgetcontextfont);
+		
 	return ES_NORMAL;
 }
 
@@ -484,6 +799,61 @@ Exec_stat MCWidgetCanvasFillRectangle(MCExecPoint& ep, const MCRectangle& p_rect
 		return ES_NORMAL;
 	
 	MCwidgetcontext -> fillrect(MCU_offset_rect(p_rectangle, MCwidgetobject -> getrect() . x, MCwidgetobject -> getrect() . y));
+	
+	return ES_NORMAL;
+}
+
+Exec_stat MCWidgetCanvasFillText(MCExecPoint& ep, bool p_is_unicode, const char *p_text, uint32_t p_text_length, MCPoint p_location)
+{
+	if (MCwidgetcontext == nil)
+		return ES_NORMAL;
+	
+	MCFontRef t_font;
+	if (MCwidgetcontextfont != nil)
+		t_font = MCwidgetcontextfont;
+	else
+		t_font = MCwidgetobject -> getfontref();
+	
+	MCFontDrawText(t_font, p_text, p_text_length, p_is_unicode, MCwidgetcontext, p_location . x + MCwidgetobject -> getrect() . x, p_location . y + MCwidgetobject -> getrect() . y, False); 
+
+	return ES_NORMAL;
+}
+
+Exec_stat MCWidgetCanvasMeasureText(MCExecPoint& ep, bool p_is_unicode, const char *p_text, uint32_t p_text_length, MCRectangle& r_bounds)
+{
+	if (MCwidgetcontext == nil)
+		return ES_NORMAL;
+	
+	MCFontRef t_font;
+	if (MCwidgetcontextfont != nil)
+		t_font = MCwidgetcontextfont;
+	else
+		t_font = MCwidgetobject -> getfontref();
+	
+	r_bounds . x = 0;
+	r_bounds . width = MCFontMeasureText(t_font, p_text, p_text_length, p_is_unicode);
+	r_bounds . y = -MCFontGetAscent(t_font);
+	r_bounds . height = MCFontGetDescent(t_font) + MCFontGetAscent(t_font);
+	
+	return ES_NORMAL;
+}
+
+Exec_stat MCWidgetRedrawAll(MCExecPoint& ep)
+{
+	if (MCwidgetobject == nil)
+		return ES_NORMAL;
+	
+	MCwidgetobject -> layer_redrawall();
+	
+	return ES_NORMAL;
+}
+
+Exec_stat MCWidgetRedrawRectangle(MCExecPoint& ep, const MCRectangle& p_rectangle)
+{
+	if (MCwidgetobject == nil)
+		return ES_NORMAL;
+	
+	MCwidgetobject -> layer_redrawrect(MCU_offset_rect(p_rectangle, MCwidgetobject -> getrect() . x, MCwidgetobject -> getrect() . y));
 	
 	return ES_NORMAL;
 }
@@ -571,7 +941,41 @@ class MCWidgetCanvasSetFontCmd: public MCWidgetCanvasSetCmd
 public:
 	Exec_stat exec(MCExecPoint& ep)
 	{
-		return ES_NORMAL;
+		Exec_stat t_stat;
+		t_stat = ES_NORMAL;
+		
+		if (t_stat == ES_NORMAL)
+			t_stat = m_value -> eval(ep);
+		
+		if (t_stat == ES_NORMAL && ep . getformat() != VF_ARRAY)
+			t_stat = ES_ERROR;
+		
+		if (t_stat == ES_NORMAL)
+		{
+			MCExecPoint ep2(ep);
+			
+			MCAutoNameRef t_name;
+			if (ep . getarray() -> fetch_element_if_exists(ep2, "name"))
+				ep2 . copyasnameref(t_name);
+			int32_t t_size;
+			if (ep . getarray() -> fetch_element_if_exists(ep2, "size") && ep2 . ston())
+				t_size = ep . getint4();
+			else
+				t_size = -1;
+			uint4 t_flags;
+			uint2 t_fheight, t_fsize, t_fstyle;
+			char *t_fname;
+			int32_t t_style;
+			if (ep . getarray() -> fetch_element_if_exists(ep2, "style") &&
+				MCF_parsetextatts(P_TEXT_STYLE, ep2 . getsvalue(), t_flags, t_fname, t_fheight, t_fsize, t_fstyle) == ES_NORMAL)
+				t_style = t_fstyle;
+			else
+				t_style = -1;
+		
+			t_stat = MCWidgetCanvasSetFont(ep, t_name, t_size, t_style);
+		}
+		
+		return t_stat;
 	}
 };
 
@@ -621,11 +1025,9 @@ public:
 		MCU_set_rect(t_rect, t_left, t_top, t_right - t_left, t_bottom - t_top);
 		
 		if (m_is_draw)
-			MCWidgetCanvasDrawRectangle(ep, t_rect);
-		else
-			MCWidgetCanvasFillRectangle(ep, t_rect);
+			return MCWidgetCanvasDrawRectangle(ep, t_rect);
 		
-		return ES_NORMAL;
+		return MCWidgetCanvasFillRectangle(ep, t_rect);
 	}
 	
 private:
@@ -651,10 +1053,225 @@ public:
 	}
 };
 
+class MCWidgetCanvasFillUnicodeOrNativeTextCmd: public MCStatement
+{
+public:
+	MCWidgetCanvasFillUnicodeOrNativeTextCmd(bool p_is_unicode)
+	{
+		m_is_unicode = p_is_unicode;
+		m_text = nil;
+		m_location = nil;
+	}
+	
+	~MCWidgetCanvasFillUnicodeOrNativeTextCmd(void)
+	{
+		delete m_text;
+		delete m_location;
+	}
+	
+	Parse_stat parse(MCScriptPoint& sp)
+	{
+		if (sp . parseexp(False, True, &m_text) != PS_NORMAL)
+			return PS_ERROR;
+		
+		if (sp . skip_token(SP_FACTOR, TT_PREP, PT_AT) != PS_NORMAL)
+			return PS_ERROR;
+		
+		if (sp . parseexp(False, True, &m_location) != PS_NORMAL)
+			return PS_ERROR;
+		
+		return PS_NORMAL;
+	}
+	
+	Exec_stat exec(MCExecPoint& ep)
+	{
+		if (m_text -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+		
+		MCAutoPointer<char> t_buffer;
+		uint32_t t_size;
+		if (!ep . copyasdata(&t_buffer, t_size))
+			return ES_ERROR;
+		
+		if (m_location -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+		
+		MCPoint t_location;
+		if (!ep . copyaspoint(t_location))
+			return ES_ERROR;
+		
+		return MCWidgetCanvasFillText(ep, m_is_unicode, *t_buffer, t_size, t_location);
+	}
+	
+private:
+	bool m_is_unicode;
+	MCExpression *m_text;
+	MCExpression *m_location;
+};
+
+class MCWidgetCanvasFillNativeTextCmd: public MCWidgetCanvasFillUnicodeOrNativeTextCmd
+{
+public:
+	MCWidgetCanvasFillNativeTextCmd(void)
+		: MCWidgetCanvasFillUnicodeOrNativeTextCmd(false)
+	{
+	}
+};
+
+class MCWidgetCanvasFillUnicodeTextCmd: public MCWidgetCanvasFillUnicodeOrNativeTextCmd
+{
+public:
+	MCWidgetCanvasFillUnicodeTextCmd(void)
+		: MCWidgetCanvasFillUnicodeOrNativeTextCmd(true)
+	{
+	}
+};
+
+class MCWidgetCanvasMeasureUnicodeOrNativeTextCmd: public MCStatement
+{
+public:
+	MCWidgetCanvasMeasureUnicodeOrNativeTextCmd(bool p_is_unicode)
+	{
+		m_is_unicode = p_is_unicode;
+		m_text = nil;
+		m_target = nil;
+		m_it = nil;
+	}
+	
+	~MCWidgetCanvasMeasureUnicodeOrNativeTextCmd(void)
+	{
+		delete m_text;
+		delete m_target;
+		delete m_it;
+	}
+	
+	Parse_stat parse(MCScriptPoint& sp)
+	{
+		if (sp . parseexp(False, True, &m_text) != PS_NORMAL)
+			return PS_ERROR;
+		
+		if (sp . skip_token(SP_FACTOR, TT_PREP, PT_INTO) == PS_NORMAL)
+		{
+			m_target = new MCChunk(True);
+			if (m_target -> parse(sp, False) != PS_NORMAL)
+				return PS_ERROR;
+		}
+		else
+			getit(sp, m_it);
+		
+		return PS_NORMAL;
+	}
+	
+	Exec_stat exec(MCExecPoint& ep)
+	{
+		if (m_text -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+		
+		MCAutoPointer<char> t_buffer;
+		uint32_t t_size;
+		if (!ep . copyasdata(&t_buffer, t_size))
+			return ES_ERROR;
+		
+		MCRectangle t_bounds;
+		if (MCWidgetCanvasMeasureText(ep, m_is_unicode, *t_buffer, t_size, t_bounds) != ES_NORMAL)
+			return ES_ERROR;
+		
+		ep . setrectangle(t_bounds);
+		if (m_target != nil)
+			return m_target -> set(ep, PT_INTO);
+		
+		return m_it -> set(ep, False);
+	}
+	
+private:
+	bool m_is_unicode;
+	MCExpression *m_text;
+	MCChunk *m_target;
+	MCVarref *m_it;
+};
+
+class MCWidgetCanvasMeasureNativeTextCmd: public MCWidgetCanvasMeasureUnicodeOrNativeTextCmd
+{
+public:
+	MCWidgetCanvasMeasureNativeTextCmd(void)
+	: MCWidgetCanvasMeasureUnicodeOrNativeTextCmd(false)
+	{
+	}
+};
+
+class MCWidgetCanvasMeasureUnicodeTextCmd: public MCWidgetCanvasMeasureUnicodeOrNativeTextCmd
+{
+public:
+	MCWidgetCanvasMeasureUnicodeTextCmd(void)
+	: MCWidgetCanvasMeasureUnicodeOrNativeTextCmd(true)
+	{
+	}
+};
+
 // widget canvas ( draw | fill ) polygon tPoints
 // widget canvas ( draw | fill ) path tPath [ with transform tTransform ]
 // widget canvas fill [ unicode ] text tText at <point>
 // widget canvas measure [ unicode ] text tText [ into <var> ]
+
+class MCWidgetRedrawAllCmd: public MCStatement
+{
+public:
+	MCWidgetRedrawAllCmd(void)
+	{
+	}
+	
+	~MCWidgetRedrawAllCmd(void)
+	{
+	}
+	
+	Parse_stat parse(MCScriptPoint& sp)
+	{
+		initpoint(sp);
+		return PS_NORMAL;
+	}
+	
+	Exec_stat exec(MCExecPoint& ep)
+	{
+		return MCWidgetRedrawAll(ep);
+	}
+};
+
+class MCWidgetRedrawRectangleCmd: public MCStatement
+{
+public:
+	MCWidgetRedrawRectangleCmd(void)
+	{
+		m_rectangle = nil;
+	}
+	
+	~MCWidgetRedrawRectangleCmd(void)
+	{
+		delete m_rectangle;
+	}
+	
+	Parse_stat parse(MCScriptPoint& sp)
+	{
+		if (sp . parseexp(False, True, &m_rectangle) != PS_NORMAL)
+			return PS_ERROR;
+		
+		return PS_NORMAL;
+	}
+	
+	Exec_stat exec(MCExecPoint& ep)
+	{
+		if (m_rectangle -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+		
+		MCRectangle t_rect;
+		if (!ep . copyasrect(t_rect))
+			return ES_ERROR;
+		
+		return MCWidgetRedrawRectangle(ep, t_rect);
+	}
+	
+private:
+	MCExpression *m_rectangle;
+};
 
 struct MCWidgetVerb
 {
@@ -675,10 +1292,12 @@ static MCWidgetVerb s_widget_verbs[] =
 	{ "canvas fill polygon", nil },
 	{ "canvas draw path", nil },
 	{ "canvas fill path", nil },
-	{ "canvas fill text", nil },
-	{ "canvas fill unicode text", nil },
-	{ "canvas measure text", nil },
-	{ "canvas measure unicode text", nil },
+	{ "canvas fill text", class_factory<MCWidgetCanvasFillNativeTextCmd> },
+	{ "canvas fill unicode text", class_factory<MCWidgetCanvasFillUnicodeTextCmd> },
+	{ "canvas measure text", class_factory<MCWidgetCanvasMeasureNativeTextCmd> },
+	{ "canvas measure unicode text", class_factory<MCWidgetCanvasMeasureUnicodeTextCmd> },
+	{ "redraw all", class_factory<MCWidgetRedrawAllCmd> },
+	{ "redraw rectangle", class_factory<MCWidgetRedrawRectangleCmd> },
 };
 
 MCWidgetCmd::MCWidgetCmd(void)
@@ -752,3 +1371,4 @@ Exec_stat MCWidgetCmd::exec(MCExecPoint& ep)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+

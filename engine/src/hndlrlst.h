@@ -39,7 +39,7 @@ public:
 	void sort(void);
 
 	// Find the handler with the given name.
-	MCHandler *find(MCNameRef name);
+	MCHandler *find(Properties property, MCNameRef name);
 
 	// Return the list of handler pointers.
 	MCHandler **get(void)
@@ -122,7 +122,7 @@ public:
 	void newglobal(MCNameRef name);
 	Parse_stat parse(MCObject *, const char *);
 
-	Exec_stat findhandler(Handler_type, MCNameRef name, MCHandler *&);
+	Exec_stat findhandler(Handler_type, Properties p_property, MCNameRef name, MCHandler *&);
 	bool hashandler(Handler_type type, MCNameRef name);
 	void addhandler(Handler_type type, MCHandler *handler);
 

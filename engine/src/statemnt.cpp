@@ -385,7 +385,21 @@ Exec_stat MCComref::exec(MCExecPoint &ep)
 		MCeerror->add(EE_HANDLER_ABORT, line, pos);
 		return ES_ERROR;
 	}
-
+	
+	if (ep . getscriptobject() != nil)
+	{
+		if (!resolved)
+		{
+			MCHandler *t_resolved_handler;
+			if (ep . gethlist() -> findhandler(HT_MESSAGE, P_UNDEFINED, name, t_resolved_handler))
+				handler = t_resolved_handler;
+			resolved = true;
+		}
+		
+		if (handler == nil)
+			return ES_ERROR;
+	}
+	
 	if (!resolved)
 	{
 		// MW-2008-01-28: [[ Inherited parentScripts ]]

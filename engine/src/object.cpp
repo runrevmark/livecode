@@ -964,7 +964,7 @@ Exec_stat MCObject::handleparent(Handler_type p_handler_type, MCNameRef p_messag
 		{
 			// Search for the handler in the parent object's handler list.
 			MCHandler *t_parent_handler;
-			if (t_parent_object -> hlist -> findhandler(p_handler_type, p_message, t_parent_handler) == ES_NORMAL)
+			if (t_parent_object -> hlist -> findhandler(p_handler_type, P_UNDEFINED, p_message, t_parent_handler) == ES_NORMAL)
 			{
 				// If the handler is not private then execute it.
 				if (!t_parent_handler -> isprivate())
@@ -1020,7 +1020,7 @@ Exec_stat MCObject::handleself(Handler_type p_handler_type, MCNameRef p_message,
 	{
 		// Search for the handler in this object's handler list.
 		MCHandler *t_handler;
-		if (hlist -> findhandler(p_handler_type, p_message, t_handler) == ES_NORMAL)
+		if (hlist -> findhandler(p_handler_type, P_UNDEFINED, p_message, t_handler) == ES_NORMAL)
 		{
 			// If the handler is not private, then execute it
 			if (!t_handler -> isprivate())
@@ -2139,13 +2139,13 @@ static bool should_send_message(MCHandlerlist *p_hlist, MCNameRef p_message)
 {
 	MCHandler *hptr;
 
-	if (p_hlist -> findhandler(HT_MESSAGE, p_message, hptr) == ES_NORMAL && !hptr -> isprivate())
+	if (p_hlist -> findhandler(HT_MESSAGE, P_UNDEFINED, p_message, hptr) == ES_NORMAL && !hptr -> isprivate())
 		return true;
 		
-	if (p_hlist -> findhandler(HT_BEFORE, p_message, hptr) == ES_NORMAL)
+	if (p_hlist -> findhandler(HT_BEFORE, P_UNDEFINED, p_message, hptr) == ES_NORMAL)
 		return true;
 		
-	if (p_hlist -> findhandler(HT_AFTER, p_message, hptr) == ES_NORMAL)
+	if (p_hlist -> findhandler(HT_AFTER, P_UNDEFINED, p_message, hptr) == ES_NORMAL)
 		return true;
 		
 	return false;
@@ -2225,7 +2225,7 @@ MCHandler *MCObject::findhandler(Handler_type p_type, MCNameRef p_message)
 	if (hlist != NULL || parsescript(False, False) && hlist != NULL)
 	{
 		MCHandler *t_handler;
-		if (hlist -> findhandler(p_type, p_message, t_handler) == ES_NORMAL)
+		if (hlist -> findhandler(p_type, P_UNDEFINED, p_message, t_handler) == ES_NORMAL)
 			return t_handler;
 	}
 
@@ -2459,7 +2459,7 @@ Exec_stat MCObject::domess(const char *sptr)
 	MCObject *oldtargetptr = MCtargetptr;
 	MCtargetptr = this;
 	MCHandler *hptr;
-	handlist->findhandler(HT_MESSAGE, MCM_message, hptr);
+	handlist->findhandler(HT_MESSAGE, P_UNDEFINED, MCM_message, hptr);
 	MCExecPoint ep(this, handlist, hptr);
 	Boolean oldlock = MClockerrors;
 	MClockerrors = True;
@@ -2495,7 +2495,7 @@ Exec_stat MCObject::eval(const char *sptr, MCExecPoint &ep)
 	MCHandler *hptr;
 	MCHandler *oldhandler = ep.gethandler();
 	MCHandlerlist *oldhlist = ep.gethlist();
-	handlist->findhandler(HT_MESSAGE, MCM_eval, hptr);
+	handlist->findhandler(HT_MESSAGE, P_UNDEFINED, MCM_eval, hptr);
 	ep.sethlist(handlist);
 	ep.sethandler(hptr);
 	Boolean oldlock = MClockerrors;

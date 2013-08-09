@@ -32,6 +32,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "handler.h"
 #include "parentscript.h"
 #include "osspec.h"
+#include "hndlrlst.h"
 
 #include "globals.h"
 
@@ -628,7 +629,21 @@ Exec_stat MCFuncref::eval(MCExecPoint &ep)
 		MCeerror->add(EE_HANDLER_ABORT, line, pos);
 		return ES_ERROR;
 	}
-
+	
+	if (ep . getscriptobject() != nil)
+	{
+		if (!resolved)
+		{
+			MCHandler *t_resolved_handler;
+			if (ep . gethlist() -> findhandler(HT_FUNCTION, P_UNDEFINED, name, t_resolved_handler))
+				handler = t_resolved_handler;
+			resolved = true;
+		}
+		
+		if (handler == nil)
+			return ES_ERROR;
+	}
+	
 	if (!resolved)
 	{
 		// MW-2008-01-28: [[ Inherited parentScripts ]]
@@ -650,9 +665,9 @@ Exec_stat MCFuncref::eval(MCExecPoint &ep)
 		t_resolved_handler = t_object -> findhandler(HT_FUNCTION, name);
 		if (t_resolved_handler != NULL && t_resolved_handler -> isprivate())
 			handler = t_resolved_handler;
-
+		
 		resolved = true;
-		}
+	}
 
 	// Go through all the parameters to the function, if they are not variables, clear their current value. Each parameter stores an expression
 	// which allows its value to be re-evaluated in a given context. Re-evaluate each in the context of ep and set it to the new value.

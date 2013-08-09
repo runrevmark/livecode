@@ -4049,17 +4049,28 @@ Exec_stat MCProperty::eval(MCExecPoint &ep)
 				MCObject *t_object;
 				uint4 t_parid;
 				t_stat = target -> getobjforprop(ep, t_object, t_parid);
-
+				
 				// MW-2011-09-02: Moved handling of customprop != nil case into resolveprop,
 				//   so t_prop_name is always non-nil if t_prop == P_CUSTOM.
 				// MW-2011-11-23: [[ Array Chunk Props ]] Moved handling of arrayprops into
 				//   MCChunk::setprop.
 				if (t_stat == ES_NORMAL)
 				{
-					if (t_index_name == nil)
-						t_stat = t_object -> getcustomprop(ep, t_object -> getdefaultpropsetname(), t_prop_name);
+					if (t_object -> gettype() == CT_WIDGET)
+					{
+						ep . setnameref_unsafe(t_prop_name);
+						t_stat = t_object -> getprop(t_parid, P_CUSTOM, ep, False);
+					}
 					else
-						t_stat = t_object -> getcustomprop(ep, t_prop_name, t_index_name);
+						t_stat = ES_NOT_HANDLED;
+						
+					if (t_stat == ES_NOT_HANDLED)
+					{
+						if (t_index_name == nil)
+							t_stat = t_object -> getcustomprop(ep, t_object -> getdefaultpropsetname(), t_prop_name);
+						else
+							t_stat = t_object -> getcustomprop(ep, t_prop_name, t_index_name);
+					}
 				}
 			}
 			else

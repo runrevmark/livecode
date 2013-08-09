@@ -78,7 +78,7 @@ void MCHandlerArray::sort(void)
 	qsort(m_handlers, m_count, sizeof(MCHandler *), compare_handler);
 }
 
-MCHandler *MCHandlerArray::find(MCNameRef p_name)
+MCHandler *MCHandlerArray::find(Properties p_property, MCNameRef p_name)
 {
 	uint32_t t_low, t_high;
 	t_low = 0;
@@ -89,7 +89,14 @@ MCHandler *MCHandlerArray::find(MCNameRef p_name)
 		t_mid = t_low + (t_high - t_low) / 2;
 
 		compare_t d;
-		d = MCCompare(MCNameGetCaselessSearchKey(p_name), MCNameGetCaselessSearchKey(m_handlers[t_mid] -> getname()));
+		if (p_property == P_UNDEFINED && !m_handlers[t_mid] -> hasproperty())
+			d = MCCompare(MCNameGetCaselessSearchKey(p_name), MCNameGetCaselessSearchKey(m_handlers[t_mid] -> getname()));
+		else if (p_property == P_UNDEFINED)
+			d = 1;
+		else if (!m_handlers[t_mid] -> hasproperty())
+			d = -1;
+		else
+			d = MCCompare(p_property, m_handlers[t_mid] -> getproperty());
 
 		if (d < 0)
 			t_high = t_mid;
@@ -119,7 +126,20 @@ int MCHandlerArray::compare_handler(const void *a, const void *b)
 	ha = *(MCHandler **)a;
 	hb = *(MCHandler **)b;
 
-	return MCCompare(MCNameGetCaselessSearchKey(ha -> getname()), MCNameGetCaselessSearchKey(hb -> getname()));
+	bool t_ha_is_prop, t_hb_is_prop;
+	t_ha_is_prop = ha -> hasproperty();
+	t_hb_is_prop = hb -> hasproperty();
+	
+	if (t_ha_is_prop && t_hb_is_prop)
+		return MCCompare(ha -> getproperty(), hb -> getproperty());
+	
+	if (!t_ha_is_prop && !t_hb_is_prop)
+		return MCCompare(MCNameGetCaselessSearchKey(ha -> getname()), MCNameGetCaselessSearchKey(hb -> getname()));
+
+	if (t_ha_is_prop)
+		return -1;
+	
+	return 1;
 }
 
 ////
@@ -582,11 +602,11 @@ Parse_stat MCHandlerlist::parse(MCObject *objptr, const char *script)
 	return status;
 }
 
-Exec_stat MCHandlerlist::findhandler(Handler_type type, MCNameRef name, MCHandler *&handret)
+Exec_stat MCHandlerlist::findhandler(Handler_type type, Properties property, MCNameRef name, MCHandler *&handret)
 {
 	assert(type > 0 && type <= 6);
 
-	handret = handlers[type - 1] . find(name);
+	handret = handlers[type - 1] . find(property, name);
 	if (handret != NULL)
 		return ES_NORMAL;
 

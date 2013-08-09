@@ -786,7 +786,7 @@ Exec_stat MCObject::mode_getprop(uint4 parid, Properties which, MCExecPoint &ep,
 
 		// The handler list class allows us to locate the handler, just return empty if it can't be found.
 		MCHandler *t_handler;
-		t_status = hlist -> findhandler(t_handler_type, t_handler_name, t_handler);
+		t_status = hlist -> findhandler(t_handler_type, P_UNDEFINED, t_handler_name, t_handler);
 		if (t_status != ES_NORMAL)
 		{
 			free(t_key);

@@ -61,10 +61,11 @@ class MCHandler
 	//   handler came from, it was loaded in server-script mode.
 	uint2 fileindex;
 	MCNameRef name;
-	Boolean prop;
-	Boolean array;
-	Boolean is_private;
+	Properties property;
 	uint1 type;
+	Boolean array : 1;
+	Boolean is_private : 1;
+	
 	static Boolean gotpass;
 public:
 	MCHandler(uint1 htype, bool p_is_private = false);
@@ -173,6 +174,16 @@ public:
 	MCVariable *getglobal(uint2 p_index) const
 	{
 		return globals[p_index];
+	}
+	
+	bool hasproperty(void)
+	{
+		return property != P_CUSTOM && property != P_UNDEFINED;
+	}
+	
+	Properties getproperty(void)
+	{
+		return property;
 	}
 
 private:

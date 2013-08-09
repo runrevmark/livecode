@@ -52,7 +52,7 @@ MCHandler::MCHandler(uint1 htype, bool p_is_private)
 	nglobals = nparams = nvnames = npnames = nconstants = executing = 0;
 	globals = NULL;
 	nglobals = 0;
-	prop = False;
+	property = P_UNDEFINED;
 	array = False;
 	type = htype;
 	fileindex = 0;
@@ -140,7 +140,8 @@ Parse_stat MCHandler::parse(MCScriptPoint &sp, Boolean isprop)
 
 	firstline = sp.getline();
 	hlist = sp.gethlist();
-	prop = isprop;
+	if (!isprop)
+		property = P_UNDEFINED;
 
 	if (sp.next(type) != PS_NORMAL)
 	{
@@ -160,8 +161,12 @@ Parse_stat MCHandler::parse(MCScriptPoint &sp, Boolean isprop)
 		MCperror->add(PE_HANDLER_BADNAME, sp);
 		return PS_ERROR;
 	}
-	if (prop)
+	if (isprop)
 	{
+		if (sp.lookup(SP_FACTOR, te) == PS_NORMAL && te -> type == TT_PROPERTY)
+			property = (Properties)te -> which;
+		else
+			property = P_CUSTOM;
 		if (sp.next(type) == PS_NORMAL)
 		{
 			if (type == ST_LB)
@@ -291,7 +296,7 @@ Exec_stat MCHandler::exec(MCExecPoint &ep, MCParameter *plist)
 {
 	uint2 i;
 	MCParameter *tptr = plist;
-	if (prop && !array && plist != NULL)
+	if (property != P_UNDEFINED && !array && plist != NULL)
 		plist = plist->getnext();
 	for (npassedparams = 0 ; tptr != NULL ; npassedparams++)
 		tptr = tptr->getnext();

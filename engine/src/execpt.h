@@ -30,6 +30,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 class MCExecPoint
 {
 	MCObject *curobj;
+	MCObject *scriptobj;
 
 	// MW-2009-01-30: [[ Inherited parentScripts ]]
 	// We store a reference to the parentScript use which is the current context
@@ -417,6 +418,16 @@ public:
 	{
 		parentscript = obj;
 	}
+	
+	MCObject *getscriptobject(void) const
+	{
+		return scriptobj;
+	}
+	
+	void setscriptobject(MCObject *obj)
+	{
+		scriptobj = obj;
+	}
 
 	void setnumberformat();
 	void insert(const MCString &, uint4 s, uint4 e);
@@ -502,6 +513,15 @@ public:
 	void concatnameref(MCNameRef name, Exec_concat sep, bool first);
 
 	bool copyasnameref(MCNameRef& name);
+	bool copyasbool(bool& r_value);
+	bool copyasint(int32_t& r_value);
+	bool copyasuint(uint32_t& r_value);
+	bool copyasdouble(double& r_value);
+	bool copyaschar(char& r_value);
+	bool copyasdata(char*& r_buffer, uint32_t& r_size);
+	bool copyaspoint(MCPoint& r_value);
+	bool copyasrect(MCRectangle& r_value);
+	bool copyascstring(char*& r_value);
     
 	// Attempts to convert the contents of the ep from UTF-16 to native,
 	// returning true if successful and replacing the contents.

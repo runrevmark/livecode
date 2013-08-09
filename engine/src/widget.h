@@ -36,8 +36,11 @@ public:
 	virtual void setrect(const MCRectangle& p_rectangle);
 	virtual void recompute(void);
 
-	virtual Exec_stat getprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, Boolean p_effective);
-	virtual Exec_stat setprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_context, Boolean p_effective);
+	virtual Exec_stat getprop(uint4 part_id, Properties which, MCExecPoint& context, Boolean effective);
+	virtual Exec_stat getarrayprop(uint4 parid, Properties which, MCExecPoint &, MCNameRef key, Boolean effective);
+	virtual Exec_stat setprop(uint4 part_id, Properties which, MCExecPoint& context, Boolean effective);
+	virtual Exec_stat setarrayprop(uint4 parid, Properties which, MCExecPoint&, MCNameRef key, Boolean effective);
+	
 	virtual Exec_stat handle(Handler_type, MCNameRef, MCParameter *, MCObject *pass_from);
 
 	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext);
@@ -47,31 +50,49 @@ public:
 
 	virtual void draw(MCDC *p_dc, const MCRectangle& p_dirty, bool p_isolated, bool p_sprite);
 	virtual Boolean maskrect(const MCRectangle& p_rect);
-
-protected:
+	
+private:
 	void OnOpen(void);
 	void OnClose(void);
+	
+	void OnReshape(const MCRectangle& old_rect);
 	
 	void OnFocus(void);
 	void OnUnfocus(void);
 	
 	void OnMouseEnter(void);
-	void OnMouseMove(int32_t x, int32_t y, uint32_t modifiers);
+	void OnMouseMove(int32_t x, int32_t y);
 	void OnMouseLeave(void);
 	
-	void OnMouseDown(uint32_t button, int32_t x, int32_t y, uint32_t modifiers);
-	void OnMouseUp(uint32_t button, int32_t x, int32_t y, uint32_t modifiers);
+	void OnMouseDown(uint32_t button);
+	void OnMouseUp(uint32_t button);
+	void OnMouseRelease(uint32_t button);
 	
 	bool OnKeyPress(uint32_t key, uint32_t modifiers);
 	
 	bool OnHitTest(const MCRectangle& region);
+	
 	void OnPaint(void);
 
-private:
+	//////////
+	
+	bool CallEvent(const char *name, MCParameter *parameters);
+	bool CallGetProp(MCExecPoint& ep, Properties p_property, MCNameRef p_key);
+	bool CallSetProp(MCExecPoint& ep, Properties p_property, MCNameRef p_key);
+	
 	Exec_stat SetImplementation(const MCString& p_script);
+	
+	//////////
 	
 	char *m_imp_script;
 	MCHandlerlist *m_imp_handlers;
+	
+	//////////
+	
+	int32_t m_modifier_state;
+	int32_t m_button_state;
+	bool m_mouse_over;
+	int32_t m_mouse_x, m_mouse_y;
 };
 
 #endif

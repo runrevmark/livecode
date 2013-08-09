@@ -1104,13 +1104,13 @@ public:
 
 	T*& operator & (void)
 	{
-		MCAssert(m_ptr == nil);
+		assert(m_ptr == nil);
 		return m_ptr;
 	}
 
 	T* operator -> (void)
 	{
-		MCAssert(m_ptr != nil);
+		assert(m_ptr != nil);
 		return m_ptr;
 	}
 

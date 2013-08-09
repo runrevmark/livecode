@@ -982,6 +982,66 @@ bool MCExecPoint::copyasnameref(MCNameRef& r_name)
 	return MCNameCreateWithOldString(getsvalue(), r_name);
 }
 
+bool MCExecPoint::copyasbool(bool& r_value)
+{
+	Boolean t_value;
+	if (format == VF_UNDEFINED || format == VF_NUMBER || !MCU_stob(svalue, t_value))
+		return false;
+	r_value = (t_value == True);
+	return true;
+}
+
+bool MCExecPoint::copyasint(int32_t& r_value)
+{
+	if (format == VF_STRING && ston() != ES_NORMAL)
+		return false;
+	
+	if (nvalue < 0.0)
+		r_value = (int4)(nvalue - 0.5);
+	else
+		r_value = (int4)(nvalue + 0.5);
+	
+	return true;
+}
+
+bool MCExecPoint::copyasdata(char*& r_value, uint32_t& r_size)
+{
+	if (format != VF_STRING && tos() != ES_NORMAL)
+		return false;
+	
+	r_value = (char *)memdup(svalue . getstring(), svalue . getlength());
+	r_size = svalue . getlength();
+	
+	return true;
+}
+
+bool MCExecPoint::copyaspoint(MCPoint& r_point)
+{
+	if (format != VF_STRING && tos() != ES_NORMAL)
+		return false;
+	
+	return MCU_stoi2x2(svalue, r_point . x, r_point . y) == True;
+}
+
+bool MCExecPoint::copyasrect(MCRectangle& r_rectangle)
+{
+	if (format != VF_STRING && tos() != ES_NORMAL)
+		return false;
+	
+	int16_t t_left, t_top, t_right, t_bottom;
+	if (!MCU_stoi2x4(svalue, t_left, t_top, t_right, t_bottom))
+		return false;
+	
+	r_rectangle . x = t_left;
+	r_rectangle . y = t_top;
+	r_rectangle . width = MCU_max(t_right - t_left, 1);
+	r_rectangle . height = MCU_max(t_bottom - t_top, 1);
+	
+	return true;
+}
+
+//////////
+
 // Assumes the contents of the ep is UTF-16 and attempts conversion to native. If
 // successful, the new contents is native and the method returns true, otherwise
 // false and the contents remains unchanged.

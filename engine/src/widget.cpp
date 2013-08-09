@@ -316,7 +316,7 @@ Exec_stat MCWidget::getprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_
 		case P_SCRIPT:
 		case P_PARENT_SCRIPT:
 		case P_NUMBER:
-		case P_FORE_PIXEL:
+/*		case P_FORE_PIXEL:
 		case P_BACK_PIXEL:
 		case P_HILITE_PIXEL:
 		case P_BORDER_PIXEL:
@@ -344,12 +344,12 @@ Exec_stat MCWidget::getprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_
 		case P_SHADOW_PATTERN:
 		case P_FOCUS_PATTERN:
 		case P_PATTERNS:
-		case P_LOCK_LOCATION:
 		case P_TEXT_HEIGHT:
 		case P_TEXT_ALIGN:
 		case P_TEXT_FONT:
 		case P_TEXT_SIZE:
-		case P_TEXT_STYLE:
+		case P_TEXT_STYLE:*/
+		case P_LOCK_LOCATION:
 		case P_VISIBLE:
 		case P_INVISIBLE:
 		case P_SELECTED:
@@ -401,7 +401,7 @@ Exec_stat MCWidget::getarrayprop(uint4 p_part_id, Properties p_which, MCExecPoin
 	// control over them.
 	switch(p_which)
 	{
-		case P_TEXT_STYLE:
+		//case P_TEXT_STYLE:
 		case P_CUSTOM_KEYS:
 		case P_CUSTOM_PROPERTIES:
 		case P_BITMAP_EFFECT_DROP_SHADOW:

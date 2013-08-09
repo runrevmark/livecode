@@ -1984,4 +1984,16 @@ private:
 	MCString data;
 };
 
+class MCWidgetCmd: public MCStatement
+{
+	MCStatement *m_statement;
+	
+public:
+	MCWidgetCmd(void);
+	virtual ~MCWidgetCmd(void);
+	
+	virtual Parse_stat parse(MCScriptPoint& sp);
+	virtual Exec_stat exec(MCExecPoint& ep);
+};
+
 #endif

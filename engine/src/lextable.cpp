@@ -355,6 +355,7 @@ LT command_table[] =
         {"unmark", TT_STATEMENT, S_UNMARK},
         {"visual", TT_STATEMENT, S_VISUAL},
         {"wait", TT_STATEMENT, S_WAIT},
+		{"widget", TT_STATEMENT, S_WIDGET},
         {"write", TT_STATEMENT, S_WRITE}
     };
 extern const uint4 command_table_size = ELEMENTS(command_table);
@@ -951,6 +952,7 @@ LT factor_table[] =
         {"imagesource", TT_PROPERTY, P_IMAGE_SOURCE},
         {"img", TT_CHUNK, CT_IMAGE},
         {"imgs", TT_CLASS, CT_IMAGE},
+		{"implementation", TT_PROPERTY, P_IMPLEMENTATION},
         {"in", TT_IN, PT_IN},
         {"ink", TT_PROPERTY, P_INK},
 		{"innerglow", TT_PROPERTY, P_BITMAP_EFFECT_INNER_GLOW},
@@ -1527,6 +1529,7 @@ LT factor_table[] =
         {"templatescrollbar", TT_FUNCTION, F_TEMPLATE_SCROLLBAR},
         {"templatestack", TT_FUNCTION, F_TEMPLATE_STACK},
         {"templatevideoclip", TT_FUNCTION, F_TEMPLATE_VIDEO_CLIP},
+		{"templatewidget", TT_FUNCTION, F_TEMPLATE_WIDGET},
         {"tempname", TT_FUNCTION, F_TEMP_NAME},
 		// MW-2011-11-24: [[ Nice Folders ]] The adjective for 'the temporary folder'.
 		{"temporary", TT_PROPERTY, P_TEMPORARY_FOLDER},
@@ -1645,6 +1648,8 @@ LT factor_table[] =
         {"weekdaynames", TT_FUNCTION, F_WEEK_DAY_NAMES},
         {"wholematches", TT_PROPERTY, P_WHOLE_MATCHES},
         {"widemargins", TT_PROPERTY, P_WIDE_MARGINS},
+		{"widget", TT_CHUNK, CT_WIDGET},
+		{"widgets", TT_CLASS, CT_WIDGET},
         {"width", TT_PROPERTY, P_WIDTH},
         {"window", TT_CHUNK, CT_STACK},
         {"windowboundingrect", TT_PROPERTY, P_WINDOW_BOUNDING_RECT},
@@ -1851,7 +1856,8 @@ static LT reset_table[] =
         {"templateplayer", TT_UNDEFINED, RT_TEMPLATE_PLAYER},
         {"templatescrollbar", TT_UNDEFINED, RT_TEMPLATE_SCROLLBAR},
         {"templatestack", TT_UNDEFINED, RT_TEMPLATE_STACK},
-        {"templatevideoclip", TT_UNDEFINED, RT_TEMPLATE_VIDEO_CLIP}
+        {"templatevideoclip", TT_UNDEFINED, RT_TEMPLATE_VIDEO_CLIP},
+		{"templatewidget", TT_UNDEFINED, RT_TEMPLATE_WIDGET},
     };
 
 static LT show_table[] =

@@ -43,6 +43,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "aclip.h"
 #include "vclip.h"
 #include "stack.h"
+#include "widget.h"
 #include "dispatch.h"
 #include "stacklst.h"
 #include "sellst.h"
@@ -1307,6 +1308,10 @@ Exec_stat MCReset::exec(MCExecPoint &ep)
 	case RT_TEMPLATE_VIDEO_CLIP:
 		delete MCtemplatevideo;
 		MCtemplatevideo = new MCVideoClip;
+		break;
+	case RT_TEMPLATE_WIDGET:
+		delete MCtemplatewidget;
+		MCtemplatewidget = new MCWidget;
 		break;
 	default:
 		break;

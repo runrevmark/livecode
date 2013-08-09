@@ -145,6 +145,7 @@ enum Chunk_term {
     CT_MAGNIFY,
     CT_COLOR_PALETTE,
     CT_FIELD,
+	CT_WIDGET,
 	CT_ELEMENT,
     CT_LINE,
     CT_ITEM,
@@ -212,6 +213,7 @@ enum Dest_type {
     DT_VIDEO_CLIP,
     DT_PLAYER,
     DT_STACK,
+	DT_WIDGET,
     DT_SELECTED,
     DT_ERROR,
     DT_TOP_STACK,
@@ -591,6 +593,7 @@ enum Functions {
     F_TEMPLATE_VIDEO_CLIP,
     F_TEMPLATE_PLAYER,
     F_TEMPLATE_STACK,
+	F_TEMPLATE_WIDGET,
     F_TEXT_HEIGHT_SUM,
     F_TICKS,
     F_TIME,
@@ -1580,6 +1583,8 @@ enum Properties {
 	P_CHILD_CONTROL_IDS,
     P_CHILD_CONTROL_NAMES,
 	
+	P_IMPLEMENTATION,
+	
 	// ARRAY STYLE PROPERTIES
 	P_FIRST_ARRAY_PROP,
     P_CUSTOM_KEYS = P_FIRST_ARRAY_PROP,
@@ -1635,6 +1640,7 @@ enum Reset_type {
     RT_TEMPLATE_SCROLLBAR,
     RT_TEMPLATE_STACK,
     RT_TEMPLATE_VIDEO_CLIP,
+	RT_TEMPLATE_WIDGET,
 };
 
 
@@ -1904,6 +1910,7 @@ enum Statements {
     S_UNMARK,
     S_VISUAL,
     S_WAIT,
+	S_WIDGET,
     S_WRITE
 };
 

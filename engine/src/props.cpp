@@ -761,6 +761,9 @@ Exec_stat MCObject::getproparray(MCExecPoint &ep, uint4 parid, bool effective)
 		table = videoclipprops;
 		tablesize = ELEMENTS(videoclipprops);
 		break;
+	case CT_WIDGET:
+		// WIDGET TO DO
+		return ES_NORMAL;
 	default:
 		return ES_NORMAL;
 	}

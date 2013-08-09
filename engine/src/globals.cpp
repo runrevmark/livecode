@@ -45,6 +45,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "player.h"
 #include "image.h"
 #include "field.h"
+#include "widget.h"
 #include "mcerror.h"
 #include "util.h"
 #include "date.h"
@@ -279,6 +280,7 @@ MCScrollbar *MCtemplatescrollbar;
 MCPlayer *MCtemplateplayer;
 MCImage *MCtemplateimage;
 MCField *MCtemplatefield;
+MCWidget *MCtemplatewidget;
 
 MCImage *MCmagimage;
 MCMagnify *MCmagnifier;
@@ -663,6 +665,7 @@ void X_clear_globals(void)
 	MCtemplatescrollbar = nil;
 	MCtemplateplayer = nil;
 	MCtemplateimage = nil;
+	MCtemplatewidget = nil;
 	MCmagimage = nil;
 	MCmagnifier = nil;
 	MCdragsource = nil;
@@ -895,6 +898,7 @@ bool X_open(int argc, char *argv[], char *envp[])
 	MCtemplateplayer = new MCPlayer;
 	MCtemplateimage = new MCImage;
 	MCtemplatefield = new MCField;
+	MCtemplatewidget = new MCWidget;
 	
 	MCtooltip = new MCTooltip;
 
@@ -1053,6 +1057,7 @@ int X_close(void)
 	delete MCtemplateeps;
 	delete MCtemplatescrollbar;
 	delete MCtemplateplayer;
+	delete MCtemplatewidget;
 
 	MCImage::shutdown();
 

@@ -286,6 +286,8 @@ MCStatement *MCN_new_statement(int2 which)
 		return new MCVisualEffect;
 	case S_WAIT:
 		return new MCWait;
+	case S_WIDGET:
+		return new MCWidgetCmd;	
 	case S_WRITE:
 		return new MCWrite;
 	default:

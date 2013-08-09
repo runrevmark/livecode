@@ -156,6 +156,7 @@ const char *MCimagestring = "image";
 const char *MCfieldstring = "field";
 const char *MCcolorstring = "colorPalette";
 const char *MCmagnifierstring = "magnifier";
+const char *MCwidgetstring = "widget";
 
 const char *MCnotfoundstring = "not found";
 const char *MCplatformstring = PLATFORM_STRING;

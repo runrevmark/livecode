@@ -269,6 +269,8 @@
 		4D407C0C15F8D15600AA3ABC /* osxscriptold.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D407C0B15F8D15600AA3ABC /* osxscriptold.cpp */; };
 		4D432F1F141A2DFE001164F9 /* tilecachesw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D432F1E141A2DFE001164F9 /* tilecachesw.cpp */; };
 		4D433504141BC5FC001164F9 /* tilecachecg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D433503141BC5FC001164F9 /* tilecachecg.cpp */; };
+		4D4F920A17B3D0710064949F /* widget.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F920917B3D0710064949F /* widget.cpp */; };
+		4D4F920B17B3D0710064949F /* widget.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F920917B3D0710064949F /* widget.cpp */; };
 		4D4F9E3B13CDF24A00B9B15D /* osximage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F9E3913CDF24A00B9B15D /* osximage.cpp */; };
 		4D4F9E3C13CDF24A00B9B15D /* osxmisc.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F9E3A13CDF24A00B9B15D /* osxmisc.cpp */; };
 		4D4F9E6713CDFB8100B9B15D /* osxfield.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F9E6613CDFB8100B9B15D /* osxfield.cpp */; };
@@ -862,6 +864,8 @@
 		4D432F1E141A2DFE001164F9 /* tilecachesw.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = tilecachesw.cpp; path = src/tilecachesw.cpp; sourceTree = "<group>"; };
 		4D433503141BC5FC001164F9 /* tilecachecg.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = tilecachecg.cpp; path = src/tilecachecg.cpp; sourceTree = "<group>"; };
 		4D46ABC210159FF800A1321A /* deploy_sign.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = deploy_sign.cpp; path = src/deploy_sign.cpp; sourceTree = "<group>"; };
+		4D4F920817B3D0710064949F /* widget.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = widget.h; path = src/widget.h; sourceTree = "<group>"; };
+		4D4F920917B3D0710064949F /* widget.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = widget.cpp; path = src/widget.cpp; sourceTree = "<group>"; };
 		4D4F9DE313CDE10A00B9B15D /* sysdefs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = sysdefs.h; path = src/sysdefs.h; sourceTree = "<group>"; };
 		4D4F9DFA13CDE63000B9B15D /* surface.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = surface.cpp; path = src/surface.cpp; sourceTree = "<group>"; };
 		4D4F9E1113CDEC5600B9B15D /* osxprefix.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = osxprefix.h; path = src/osxprefix.h; sourceTree = "<group>"; };
@@ -2241,6 +2245,8 @@
 		E8A49109170F192000769C7A /* Core - Objects */ = {
 			isa = PBXGroup;
 			children = (
+				4D4F920817B3D0710064949F /* widget.h */,
+				4D4F920917B3D0710064949F /* widget.cpp */,
 				4D587E870B8096FD00200116 /* aclip.cpp */,
 				4D587DDB0B8096E600200116 /* aclip.h */,
 				4D587E6B0B8096FD00200116 /* block.cpp */,
@@ -3122,6 +3128,7 @@
 				4D1F9DB4171C682E0091C6CB /* stacksecurity.cpp in Sources */,
 				4DB32401174BEE1400046FFE /* sysunxrandom.cpp in Sources */,
 				4DB32402174BEE1900046FFE /* uuid.cpp in Sources */,
+				4D4F920B17B3D0710064949F /* widget.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3367,6 +3374,7 @@
 				E8DDE5E016C2B1A7007367E4 /* image_rep.cpp in Sources */,
 				4D8589F9173AAA0900B20951 /* uuid.cpp in Sources */,
 				4DB32404174BEE3300046FFE /* sysosxrandom.cpp in Sources */,
+				4D4F920A17B3D0710064949F /* widget.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

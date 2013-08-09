@@ -47,6 +47,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "player.h"
 #include "image.h"
 #include "field.h"
+#include "widget.h"
 #include "util.h"
 #include "globals.h"
 #include "license.h"
@@ -171,6 +172,7 @@ Exec_stat MCClone::exec(MCExecPoint &ep)
 	case CT_EPS:
 	case CT_COLOR_PALETTE:
 	case CT_MAGNIFY:
+	case CT_WIDGET:
 		if (optr -> getstack() -> islocked())
 		{
 			MCeerror -> add
@@ -472,6 +474,7 @@ Exec_errors MCClipboardCmd::processtocontainer(MCObjectRef *p_objects, uint4 p_o
 		case CT_EPS:
 		case CT_COLOR_PALETTE:
 		case CT_FIELD:
+		case CT_WIDGET:
 		{
 			if (p_dst -> gettype() == CT_STACK)
 				p_dst = static_cast<MCStack *>(p_dst) -> getcurcard();
@@ -729,6 +732,7 @@ Parse_stat MCCreate::parse(MCScriptPoint &sp)
 		case CT_PLAYER:
 		case CT_GRAPHIC:
 		case CT_EPS:
+		case CT_WIDGET:
 			otype = (Chunk_term)te->which;
 			break;
 		case CT_ALIAS:
@@ -814,6 +818,8 @@ MCControl *MCCreate::getobject(MCObject *&parent)
 		return MCtemplateeps;
 	case CT_FIELD:
 		return MCtemplatefield;
+	case CT_WIDGET:
+		return MCtemplatewidget;
 	default:
 		return NULL;
 	}

@@ -29,6 +29,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 static MCContext *MCwidgetcontext;
+static MCRectangle MCwidgetcontextclip;
 static MCFontRef MCwidgetcontextfont;
 static MCWidget *MCwidgetobject;
 
@@ -424,7 +425,7 @@ Exec_stat MCWidget::getarrayprop(uint4 p_part_id, Properties p_which, MCExecPoin
 	}
 	
 	// The property we are looking for is not reserved, so we look for a
-	// 'getProp' handler in the implementation.
+	// 'setProp' handler in the implementation.
 	if (CallGetProp(p_context, p_which, nil, p_key))
 		return ES_NORMAL;
 	
@@ -442,7 +443,7 @@ Exec_stat MCWidget::setprop(uint4 p_part_id, Properties p_which, MCExecPoint& p_
 	}
 
 	// The property we are looking for is not reserved, so we look for a
-	// 'getProp' handler in the implementation.
+	// 'setProp' handler in the implementation.
 	if (CallSetProp(p_context, p_which, nil, nil))
 		return ES_NORMAL;
 		
@@ -522,6 +523,7 @@ void MCWidget::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
 
 	MCwidgetcontext = dc;
 	MCwidgetcontextfont = nil;
+	MCwidgetcontextclip = p_dirty;
 	OnPaint();
 	MCFontRelease(MCwidgetcontextfont);
 	MCwidgetcontext = nil;
@@ -706,7 +708,7 @@ bool MCWidget::CallGetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_prop
 	
 	Exec_stat t_stat;
 	MCExecPoint exec_ep(this, m_imp_handlers, t_handler);
-	ep . setscriptobject(this);
+	exec_ep . setscriptobject(this);
 	
 	MCWidget *t_old_widget_object;
 	t_old_widget_object = MCwidgetobject;
@@ -761,7 +763,7 @@ bool MCWidget::CallSetProp(MCExecPoint& ep, Properties p_which, MCNameRef p_prop
 	
 	Exec_stat t_stat;
 	MCExecPoint exec_ep(this, m_imp_handlers, t_handler);
-	ep . setscriptobject(this);
+	exec_ep . setscriptobject(this);
 	
 	MCWidget *t_old_widget_object;
 	t_old_widget_object = MCwidgetobject;
@@ -815,7 +817,6 @@ Exec_stat MCWidget::SetImplementation(const MCString& p_script)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 Exec_stat MCWidgetCanvasSetColor(MCExecPoint& ep, const MCColor& p_color)
 {
 	if (MCwidgetcontext == nil)
@@ -862,6 +863,19 @@ Exec_stat MCWidgetCanvasSetOpacity(MCExecPoint& ep, uint32_t p_opacity)
 	return ES_NORMAL;
 }
 
+Exec_stat MCWidgetCanvasSetClip(MCExecPoint& ep, const MCRectangle& p_rectangle)
+{
+	if (MCwidgetcontext == nil)
+		return ES_NORMAL;
+
+	MCRectangle t_clip;
+	t_clip = MCU_intersect_rect(MCwidgetcontextclip, MCU_offset_rect(p_rectangle, MCwidgetobject -> getrect() . x, MCwidgetobject -> getrect() . y));
+	
+	MCwidgetcontext -> setclip(t_clip);
+
+	return ES_NORMAL;
+}
+
 Exec_stat MCWidgetCanvasDrawRectangle(MCExecPoint& ep, const MCRectangle& p_rectangle)
 {
 	if (MCwidgetcontext == nil)
@@ -882,7 +896,7 @@ Exec_stat MCWidgetCanvasFillRectangle(MCExecPoint& ep, const MCRectangle& p_rect
 	return ES_NORMAL;
 }
 
-Exec_stat MCWidgetCanvasFillText(MCExecPoint& ep, bool p_is_unicode, const char *p_text, uint32_t p_text_length, MCPoint p_location)
+Exec_stat MCWidgetCanvasFillTextAt(MCExecPoint& ep, bool p_is_unicode, const char *p_text, uint32_t p_text_length, MCPoint p_location)
 {
 	if (MCwidgetcontext == nil)
 		return ES_NORMAL;
@@ -895,6 +909,59 @@ Exec_stat MCWidgetCanvasFillText(MCExecPoint& ep, bool p_is_unicode, const char 
 	
 	MCFontDrawText(t_font, p_text, p_text_length, p_is_unicode, MCwidgetcontext, p_location . x + MCwidgetobject -> getrect() . x, p_location . y + MCwidgetobject -> getrect() . y, False); 
 
+	return ES_NORMAL;
+}
+
+Exec_stat MCWidgetCanvasFillTextAligned(MCExecPoint& ep, bool p_is_unicode, const char *p_text, uint32_t p_text_length, int p_halign, int p_valign, MCRectangle p_rect)
+{
+	if (MCwidgetcontext == nil)
+		return ES_NORMAL;
+	
+	MCFontRef t_font;
+	if (MCwidgetcontextfont != nil)
+		t_font = MCwidgetcontextfont;
+	else
+		t_font = MCwidgetobject -> getfontref();
+	
+	int32_t t_text_width;
+	t_text_width = MCFontMeasureText(t_font, p_text, p_text_length, p_is_unicode);
+	
+	int32_t t_x;
+	switch(p_halign)
+	{
+	case -1:
+		t_x = 0;
+		break;
+	case 0:
+		t_x = (p_rect . width - t_text_width) / 2;
+		break;
+	case 1:
+		t_x = p_rect . width - t_text_width;
+		break;
+	default:
+		assert(false);
+		break;
+	}
+	
+	int32_t t_y;
+	switch(p_valign)
+	{
+	case -1:
+		t_y = MCFontGetAscent(t_font);
+		break;
+	case 0:
+		t_y = (p_rect . height - (MCFontGetAscent(t_font) + MCFontGetDescent(t_font))) / 2 + MCFontGetAscent(t_font);
+		break;
+	case 1:
+		t_y = p_rect . height - MCFontGetDescent(t_font);
+		break;
+	default:
+		assert(false);
+		break;
+	}
+	
+	MCFontDrawText(t_font, p_text, p_text_length, p_is_unicode, MCwidgetcontext, p_rect . x + t_x + MCwidgetobject -> getrect() . x, p_rect . y + t_y + MCwidgetobject -> getrect() . y, False);
+	
 	return ES_NORMAL;
 }
 
@@ -1068,6 +1135,23 @@ public:
 	}
 };
 
+// widget canvas set clip tRectangle
+class MCWidgetCanvasSetClipCmd: public MCWidgetCanvasSetCmd
+{
+public:
+	Exec_stat exec(MCExecPoint& ep)
+	{
+		if (m_value -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+		
+		MCRectangle t_rect;
+		if (!ep . copyasrect(t_rect))
+			return ES_ERROR;
+		
+		return MCWidgetCanvasSetClip(ep, t_rect);
+	}
+};
+
 // widget canvas ( draw | fill ) rectangle <rectangle>
 class MCWidgetCanvasDrawOrFillRectangleCmd: public MCStatement
 {
@@ -1132,6 +1216,8 @@ public:
 	}
 };
 
+// widget canvas fill [ unicode ] text <text> at <point>
+// widget canvas fill [ unicode ] text <text> aligned <alignment> in <rect>
 class MCWidgetCanvasFillUnicodeOrNativeTextCmd: public MCStatement
 {
 public:
@@ -1140,12 +1226,16 @@ public:
 		m_is_unicode = p_is_unicode;
 		m_text = nil;
 		m_location = nil;
+		m_alignment = nil;
+		m_rectangle = nil;
 	}
 	
 	~MCWidgetCanvasFillUnicodeOrNativeTextCmd(void)
 	{
 		delete m_text;
 		delete m_location;
+		delete m_alignment;
+		delete m_rectangle;
 	}
 	
 	Parse_stat parse(MCScriptPoint& sp)
@@ -1153,11 +1243,22 @@ public:
 		if (sp . parseexp(False, True, &m_text) != PS_NORMAL)
 			return PS_ERROR;
 		
-		if (sp . skip_token(SP_FACTOR, TT_PREP, PT_AT) != PS_NORMAL)
-			return PS_ERROR;
-		
-		if (sp . parseexp(False, True, &m_location) != PS_NORMAL)
-			return PS_ERROR;
+		if (sp . skip_token(SP_FACTOR, TT_PREP, PT_AT) == PS_NORMAL)
+		{
+			if (sp . parseexp(False, True, &m_location) != PS_NORMAL)
+				return PS_ERROR;
+		}
+		else if (sp . skip_token(SP_FACTOR, TT_PREP, PT_ALIGNED) == PS_NORMAL)
+		{
+			 if (sp . parseexp(False, True, &m_alignment) != PS_NORMAL)
+				return PS_ERROR;
+				
+			if (sp . skip_token(SP_FACTOR, TT_IN, PT_IN) != PS_NORMAL)
+				return PS_ERROR;
+				
+			if (sp . parseexp(False, True, &m_rectangle) != PS_NORMAL)
+				return PS_ERROR;
+		}
 		
 		return PS_NORMAL;
 	}
@@ -1172,20 +1273,75 @@ public:
 		if (!ep . copyasdata(&t_buffer, t_size))
 			return ES_ERROR;
 		
-		if (m_location -> eval(ep) != ES_NORMAL)
-			return ES_ERROR;
+		if (m_location != nil)
+		{
+			if (m_location -> eval(ep) != ES_NORMAL)
+				return ES_ERROR;
 		
-		MCPoint t_location;
-		if (!ep . copyaspoint(t_location))
-			return ES_ERROR;
+			MCPoint t_location;
+			if (!ep . copyaspoint(t_location))
+				return ES_ERROR;
 		
-		return MCWidgetCanvasFillText(ep, m_is_unicode, *t_buffer, t_size, t_location);
+			return MCWidgetCanvasFillTextAt(ep, m_is_unicode, *t_buffer, t_size, t_location);
+		}
+		
+		if (m_alignment -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+			
+		if (ep . tos() != ES_NORMAL)
+			return ES_ERROR;
+			
+		const char *t_align_str;
+		t_align_str = ep . getcstring();
+		
+		MCString t_halign_str, t_valign_str;
+		const char *t_align_comma_str;
+		t_align_comma_str = strchr(t_align_str, ',');
+		if (t_align_comma_str != nil)
+		{
+			t_halign_str . set(t_align_comma_str, strchr(t_align_comma_str, ',') - t_align_comma_str);
+			t_valign_str . set(t_align_comma_str + 1, t_align_str + strlen(t_align_str) - t_align_comma_str - 1);
+		}
+		else
+			t_halign_str = t_align_str;
+			
+		int t_halign;
+		t_halign = 0;
+		if (t_halign_str == "left")
+			t_halign = -1;
+		else if (t_halign_str == "center")
+			t_halign = 0;
+		else if (t_halign_str == "right")
+			t_halign = 1;
+			
+		int t_valign;
+		t_valign = 0;
+		if (t_valign_str != nil)
+		{
+			if (t_valign_str == "top")
+				t_valign = -1;
+			else if (t_valign_str == "middle")
+				t_valign = 0;
+			else if (t_valign_str == "bottom")
+				t_valign = 1;
+		}
+		
+		if (m_rectangle -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+
+		MCRectangle t_rect;
+		if (ep . copyasrect(t_rect) != ES_NORMAL)
+			return ES_ERROR;
+
+		return MCWidgetCanvasFillTextAligned(ep, m_is_unicode, *t_buffer, t_size, t_halign, t_valign, t_rect);
 	}
 	
 private:
 	bool m_is_unicode;
 	MCExpression *m_text;
 	MCExpression *m_location;
+	MCExpression *m_alignment;
+	MCExpression *m_rectangle;
 };
 
 class MCWidgetCanvasFillNativeTextCmd: public MCWidgetCanvasFillUnicodeOrNativeTextCmd
@@ -1365,6 +1521,7 @@ static MCWidgetVerb s_widget_verbs[] =
 	{ "canvas set opacity", class_factory<MCWidgetCanvasSetOpacityCmd> },
 	{ "canvas set font", class_factory<MCWidgetCanvasSetFontCmd> },
 	{ "canvas set stroke", class_factory<MCWidgetCanvasSetStrokeCmd> },
+	{ "canvas set clip", class_factory<MCWidgetCanvasSetClipCmd> },
 	{ "canvas draw rectangle", class_factory<MCWidgetCanvasDrawRectangleCmd> },
 	{ "canvas fill rectangle", class_factory<MCWidgetCanvasFillRectangleCmd> },
 	{ "canvas draw polygon", nil },

@@ -719,9 +719,9 @@ Exec_stat MCFuncref::eval(MCExecPoint &ep)
 		// MW-2009-01-28: [[ Inherited parentScripts ]]
 		// If we are in parentScript context, then pass the parentScript in use to execparenthandler.
 		if (ep . getparentscript() == NULL)
-			stat = parent -> exechandler(handler, params);
+			stat = p -> exechandler(handler, params);
 		else
-			stat = ep.getobj() -> execparenthandler(handler, params, ep . getparentscript());
+			stat = p -> execparenthandler(handler, params, ep . getparentscript());
 
 		switch(stat)
 		{

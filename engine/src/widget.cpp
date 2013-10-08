@@ -1713,27 +1713,58 @@ enum MCDialectSyntaxError
 typedef struct MCDialectState *MCDialectStateRef;
 typedef struct MCDialectIdentifier *MCDialectIdentifierRef;
 
-class MCAutoDialectStateRef
+static void MCDialectObjectRelease(void *)
+{
+}
+
+static void MCDialectObjectRetain(void *)
+{
+}
+
+template<typename T> class MCAutoDialectBaseRef
 {
 public:
-
-	MCDialectStateRef Take(void);
+	MCAutoDialectBaseRef(void)
+	{
+		m_ref = nil;
+	}
 	
-	MCDialectStateRef operator = (MCDialectStateRef other);
-	MCDialectStateRef operator * (void);
-	MCDialectStateRef& operator & (void);
+	~MCAutoDialectBaseRef(void)
+	{
+		MCDialectObjectRelease(m_ref);
+	}
+	
+	T operator * (void)
+	{
+		return m_ref;
+	}
+	
+	T& operator & (void)
+	{
+		assert(m_ref == nil);
+		return m_ref;
+	}
+	
+	void Give(T p_ref)
+	{
+		assert(m_ref == nil);
+		m_ref = p_ref;
+	}
+	
+	T Take(void)
+	{
+		T t_ref;
+		t_ref = m_ref;
+		m_ref = nil;
+		return t_ref;
+	}
+	
+private:
+	T m_ref;
 };
 
-class MCAutoDialectIdentifierRef
-{
-public:
-
-	MCDialectIdentifierRef Take(void);
-	
-	MCDialectIdentifierRef operator = (MCDialectIdentifierRef other);
-	MCDialectStateRef operator * (void);
-	MCDialectIdentifierRef& operator & (void);
-};
+typedef MCAutoDialectBaseRef<MCDialectStateRef> MCAutoDialectStateRef;
+typedef MCAutoDialectBaseRef<MCDialectIdentifierRef> MCAutoDialectIdentifierRef;
 
 // alt_expr:
 //   { concat_expr , '|' }
@@ -2072,7 +2103,7 @@ static bool MCDialectSyntaxParseConcatenation(const char *& x_syntax, MCDialectS
 			return false;
 		
 		if (*t_state == nil)
-			t_state = t_new_state . Take();
+			t_state . Give(t_new_state . Take());
 		else
 		{
 			// Build concatenation node
@@ -2100,7 +2131,7 @@ static bool MCDialectSyntaxParseAlternation(const char *& x_syntax, MCDialectSta
 			return false;
 		
 		if (*t_state == nil)
-			t_state = t_new_state . Take();
+			t_state . Give(t_new_state . Take());
 		else
 		{
 			// Build alternation node
@@ -2156,6 +2187,18 @@ bool MCDialectIsValid(MCDialectRef self)
 
 void MCDialectAddRule(MCDialectRef self, const char *p_syntax, uindex_t p_action_id)
 {
+	MCDialectSyntaxError t_error;
+	MCAutoDialectIdentifierRef t_scope;
+	MCAutoDialectStateRef t_state;
+	const char *t_syntax_ptr;
+	t_syntax_ptr = p_syntax;
+	if (!MCDialectSyntaxParse(t_syntax_ptr, &t_scope, &t_state, t_error))
+	{
+		// Generate error
+		return;
+	}
+	
+	// Add rule
 }
 
 ////////////////////////////////////////////////////////////////////////////////

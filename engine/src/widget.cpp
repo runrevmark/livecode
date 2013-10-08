@@ -821,7 +821,7 @@ Exec_stat MCWidgetCanvasSetColor(MCExecPoint& ep, const MCColor& p_color)
 	if (MCwidgetcontext == nil)
 		return ES_NORMAL;
 	
-	MCwidgetcontext -> setfillstyle(FillSolid, DNULL, 0, 0);
+	MCwidgetcontext -> setfillstyle(FillSolid, NULL, 0, 0);
 	MCwidgetcontext -> setforeground(p_color);
 	
 	return ES_NORMAL;
@@ -1451,3 +1451,271 @@ Exec_stat MCWidgetCmd::exec(MCExecPoint& ep)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// A babel parser consists of a collection of (named) rules and phrases.
+// A rule is a collection of phrases that can appear wherever '<name>' is
+// present in a phrase.
+// A phrase is a single piece of syntax.
+// A phrase can be added to any number of rules.
+
+void MCDialectCreate(MCDialectRef& r_babel);
+void MCDialectDestroy(MCDialectRef babel);
+void MCDialectAddRule(MCDialectRef babal, const char *syntax, uindex_t action_id);
+bool MCDialectIsValid(MCDialectRef babel);
+
+enum MCWidgetDialectActionType
+{
+	kMCWidgetDialectActionNone,
+	
+	kMCWidgetDialectActionWidgetDefinition,
+	kMCWidgetDialectActionVariableDefinition,
+	kMCWidgetDialectActionPropertyDefinition,
+	kMCWidgetDialectActionMethodDefinition,
+	kMCWidgetDialectActionParameterDefinition,
+	
+	kMCWidgetDialectActionBooleanType,
+	kMCWidgetDialectActionIntegerType,
+	kMCWidgetDialectActionUnsignedIntegerType,
+	kMCWidgetDialectActionRealType,
+	kMCWidgetDialectActionCharacterType,
+	kMCWidgetDialectActionStringType,
+	kMCWidgetDialectActionBinaryStringType,
+};
+
+static struct { const char *syntax; MCWidgetDialectActionType action;} kMCWidgetDialectPhrases[] =
+{
+	{ "root: widget NAME [ based on NAME ] ; { <definition> , ; } ; end widget", kMCWidgetDialectActionWidgetDefinition },
+
+	{ "definition: variable NAME [ is <type> ]", kMCWidgetDialectActionVariableDefinition },
+	{ "definition: property NAME [ is <type> ] [ getter ID ] [ setter ID ]", kMCWidgetDialectActionPropertyDefinition },
+	{ "definition: method ID { <parameter> , ',' } [ returns <type> ] ; { <command> } ; end method", kMCWidgetDialectActionMethodDefinition },
+	
+	{ "parameter: [ @in | @out | @inout ] NAME [ is <type> ]", kMCWidgetDialectActionParameterDefinition },
+	
+	{ "type: boolean", kMCWidgetDialectActionBooleanType },
+	{ "type: integer [ between INTEGER and INTEGER ]", kMCWidgetDialectActionIntegerType },
+	{ "type: unsigned integer [ between INTEGER and INTEGER ]", kMCWidgetDialectActionUnsignedIntegerType },
+	{ "type: real [ between INTEGER and INTEGER ]", kMCWidgetDialectActionRealType },
+	{ "type: character", kMCWidgetDialectActionCharacterType },
+	{ "type: string", kMCWidgetDialectActionStringType },
+	{ "type: binary string", kMCWidgetDialectActionBinaryStringType },
+};
+
+bool MCWidgetCreateDialect(MCDialectRef& r_dialect)
+{
+	MCDialectRef t_dialect;
+	
+	MCDialectCreate(t_dialect);
+	for(uindex_t i = 0; i < sizeof(kMCWidgetDialectPhrases) / sizeof(kMCWidgetDialectPhrases[0]); i++)
+		MCDialectAddRule(t_dialect, kMCWidgetDialectPhrases[i] . syntax, kMCWidgetDialectPhrases[i] . action);
+	
+	if (MCDialectIsValid(t_dialect))
+	{
+		r_dialect = t_dialect;
+		return true;
+	}
+	
+	MCDialectDestroy(t_dialect);
+	
+	return false;					  
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum MCDialectSyntaxTokenType
+{
+	kMCDialectSyntaxTokenTypeNone,
+
+	kMCDialectSyntaxTokenTypeIdentifier,
+	kMCDialectSyntaxTokenTypeQuotedIdentifier,
+	kMCDialectSyntaxTokenTypeAngledIdentifier,
+	kMCDialectSyntaxTokenTypeColon,
+	kMCDialectSyntaxTokenTypeComma,
+	kMCDialectSyntaxTokenTypeSemicolon,
+	kMCDialectSyntaxTokenTypeAt,
+	kMCDialectSyntaxTokenTypeBar,
+	kMCDialectSyntaxTokenTypeLeftBracket,
+	kMCDialectSyntaxTokenTypeRightBracket,
+	kMCDialectSyntaxTokenTypeLeftBrace,
+	kMCDialectSyntaxTokenTypeRightBrace,
+	kMCDialectSyntaxTokenTypeLeftParanthesis,
+	kMCDialectSyntaxTokenTypeRightParanthesis,
+	kMCDialectSyntaxTokenTypeEnd,
+	
+	kMCDialectSyntaxTokenTypeError,
+};
+
+// alt_expr:
+//   { concat_expr , '|' }
+// concat_expr:
+//   { factor_expr }
+// factor_expr
+//   : '[' alt_expr ']'
+//   | '(' alt_expr ')'
+//   | '{' alt_expr ',' alt_expr '}'
+//   | id
+//   | quot-id
+//   | angle-id
+//   | '@' id
+//   | ';'
+
+static bool MCDialectSyntaxParseOptional(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+}
+
+static bool MCDialectSyntaxParseGroup(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+}
+
+static bool MCDialectSyntaxParseRepetition(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+}
+
+static bool MCDialectSyntaxParseGroup(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+}
+
+static bool MCDialectSyntaxParseMarked(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+	MCAutoDialectIdentifierRef t_identifier;
+	if (!MCDialectSyntaxMatchIdentifier(x_syntax, t_identifier, r_error))
+		return false;
+	
+	// Build @ node
+	
+	return true;
+}
+
+static bool MCDialectSyntaxParseSeparator(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+}
+
+static bool MCDialectSyntaxParseFactor(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+	bool t_skipped;
+	
+	if (!MCDialectSyntaxSkipLeftBracket(x_syntax, t_skipped, r_error))
+		return false;
+	if (t_skipped)
+		return MCDialectSyntaxParseOptional(x_syntax, r_state, r_error);
+	
+	if (!MCDialectSyntaxSkipLeftParanthesis(x_syntax, t_skipped, r_error))
+		return false;
+	if (t_skipped)
+		return MCDialectSyntaxParseGroup(x_syntax, r_state, r_error);
+	
+	if (!MCDialectSyntaxSkipLeftBrace(x_syntax, t_skipped, r_error))
+		return false;
+	if (t_skipped)
+		return MCDialectSyntaxParseRepetition(x_syntax, r_state, r_error);
+	
+	if (!MCDialectSyntaxSkipAt(x_syntax, t_skipped, r_error))
+		return false;
+	if (t_skipped)
+		return MCDialectSyntaxParseMarked(x_syntax, r_state, r_error);
+	
+	if (!MCDialectSyntaxSkipSemicolon(x_syntax, t_skipped, r_error))
+		return false;
+	if (t_skipped)
+		return MCDialectSyntaxParseSeparator(x_syntax, r_state, r_error);
+	
+	if (!MCDialectSyntaxSkipAnyIdentifier(x_syntax, t_id_type, &t_id, r_error))
+		return false;
+	if (t_id_type != kMCDialectSyntaxTokenTypeNone)
+	{
+		// Build id node
+		
+		return true;
+	}
+	
+	// Build epsilon node
+	
+	return true;
+}
+
+static bool MCDialectSyntaxParseConcatenation(const char *& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+	MCAutoDialectStateRef t_state;
+	for(;;)
+	{
+		if (!MCDialectSyntaxParseFactor(x_syntax, &t_state, r_error))
+			return false;
+		
+		if (*t_state == nil)
+			t_state = t_new_state . Take();
+		else
+		{
+			// Build concatenation node
+		}
+		
+		bool t_will_match;
+		if (!MCDialectSyntaxWillMatchConcatEnd(x_syntax, t_will_match, r_error))
+			return false;
+		if (t_will_match)
+			break;
+	}
+	
+	r_state = t_state . Take();
+	
+	return true;
+}
+
+static bool MCDialectSyntaxParseAlternation(const char *& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+{
+	MCAutoDialectStateRef t_state;
+	for(;;)
+	{
+		MCAutoDialectStateRef t_new_state;
+		if (!MCDialectSyntaxParseConcatenation(x_syntax, &t_state, r_error))
+			return false;
+		
+		if (*t_state == nil)
+			t_state = t_new_state . Take();
+		else
+		{
+			// Build alternation node
+		}
+		
+		bool t_skipped;
+		if (!MCDialectSyntaxSkipBar(x_syntax, t_skipped, r_error))
+			return false;
+		
+		if (!t_skipped)
+			break;
+	}
+	
+	r_state = t_state . Take();
+	
+	return true;
+}
+
+static bool MCDialectSyntaxParse(const char*& x_syntax, MCDialectIdentifierRef& r_scope, MCDialectStateRef& r_node, MCDialectSyntaxError& r_error)
+{
+	MCAutoDialectIdentifierRef t_scope;
+	if (!MCDialectSyntaxMatchIdentifier(x_syntax, &t_scope, r_error))
+		return false;
+	
+	if (!MCDialectSyntaxMatchColon(x_syntax, r_error))
+		return false;
+	
+	MCAutoDialectStateRef t_state;
+	if (!MCDialectSyntaxParseAlternation(x_syntax, &t_state, r_error))
+		return false;
+	
+	if (!MCDialectSyntaxParseEnd(x_syntax, r_error))
+		return false;
+	
+	r_scope = t_scope . Take();
+	r_state = t_state . Take();
+	
+	return true;
+}
+
+void MCDialectCreate(MCDialectRef& r_dialect)
+{
+}
+
+void MCDialectAddRule(MCDialectRef self, const char *p_syntax, uindex_t p_action_id)
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////

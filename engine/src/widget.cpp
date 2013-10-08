@@ -1608,12 +1608,7 @@ Exec_stat MCWidgetCmd::exec(MCExecPoint& ep)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// A babel parser consists of a collection of (named) rules and phrases.
-// A rule is a collection of phrases that can appear wherever '<name>' is
-// present in a phrase.
-// A phrase is a single piece of syntax.
-// A phrase can be added to any number of rules.
-
+typedef struct MCDialect *MCDialectRef;
 void MCDialectCreate(MCDialectRef& r_babel);
 void MCDialectDestroy(MCDialectRef babel);
 void MCDialectAddRule(MCDialectRef babal, const char *syntax, uindex_t action_id);
@@ -1701,6 +1696,35 @@ enum MCDialectSyntaxTokenType
 	kMCDialectSyntaxTokenTypeError,
 };
 
+enum MCDialectSyntaxError
+{
+};
+
+typedef struct MCDialectState *MCDialectStateRef;
+typedef struct MCDialectIdentifier *MCDialectIdentifierRef;
+
+class MCAutoDialectStateRef
+{
+public:
+
+	MCDialectStateRef Take(void);
+	
+	MCDialectStateRef operator = (MCDialectStateRef other);
+	MCDialectStateRef operator * (void);
+	MCDialectStateRef& operator & (void);
+};
+
+class MCAutoDialectIdentifierRef
+{
+public:
+
+	MCDialectIdentifierRef Take(void);
+	
+	MCDialectIdentifierRef operator = (MCDialectIdentifierRef other);
+	MCDialectStateRef operator * (void);
+	MCDialectIdentifierRef& operator & (void);
+};
+
 // alt_expr:
 //   { concat_expr , '|' }
 // concat_expr:
@@ -1715,26 +1739,87 @@ enum MCDialectSyntaxTokenType
 //   | '@' id
 //   | ';'
 
+static bool MCDialectSyntaxParseOptional(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseGroup(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseRepetition(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseMarked(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseSeparator(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseFactor(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseConcatenation(const char *& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParseAlternation(const char *& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+
+static bool MCDialectSyntaxMatchRightBracket(const char *& x_syntax, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxMatchRightParanthesis(const char *& x_syntax, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxMatchRightBrace(const char *& x_syntax, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxMatchColon(const char *& x_syntax, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxMatchEnd(const char *& x_syntax, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxMatchIdentifier(const char *& x_syntax, MCDialectIdentifierRef& r_id, MCDialectSyntaxError& r_error);
+
+static bool MCDialectSyntaxSkipComma(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipLeftBracket(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipLeftParanthesis(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipLeftBrace(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipAt(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipSemicolon(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipBar(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipAnyIdentifier(const char*& x_syntax, MCDialectSyntaxTokenType& r_type, MCDialectIdentifierRef& r_id, MCDialectSyntaxError& r_error);
+
+static bool MCDialectSyntaxWillMatchConcatEnd(const char*& x_syntax, bool& r_will_match, MCDialectSyntaxError& r_error);
+
 static bool MCDialectSyntaxParseOptional(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
+	MCAutoDialectStateRef t_state;
+	if (!MCDialectSyntaxParseAlternation(x_syntax, &t_state, r_error))
+		return false;
+		
+	if (!MCDialectSyntaxMatchRightBracket(x_syntax, r_error))
+		return false;
+		
+	// Add epsilon to alternation
+		
+	r_state = t_state . Take();
+	
+	return true;
 }
 
 static bool MCDialectSyntaxParseGroup(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
+	MCAutoDialectStateRef t_state;
+	if (!MCDialectSyntaxParseAlternation(x_syntax, &t_state, r_error))
+		return false;
+		
+	if (!MCDialectSyntaxMatchRightParanthesis(x_syntax, r_error))
+		return false;
+		
+	r_state = t_state . Take();
+	
+	return true;
 }
 
 static bool MCDialectSyntaxParseRepetition(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
-}
-
-static bool MCDialectSyntaxParseGroup(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
-{
+	MCAutoDialectStateRef t_pattern;
+	if (!MCDialectSyntaxParseAlternation(x_syntax, &t_pattern, r_error))
+		return false;
+	
+	MCAutoDialectStateRef t_separator;
+	bool t_skipped;
+	if (!MCDialectSyntaxSkipComma(x_syntax, t_skipped, r_error))
+		if (!MCDialectSyntaxParseAlternation(x_syntax, &t_separator, r_error))
+			return false;
+	
+	if (!MCDialectSyntaxMatchRightBrace(x_syntax, r_error))
+		return false;
+			
+	// Build repetition node
+	
+	return true;
 }
 
 static bool MCDialectSyntaxParseMarked(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
 	MCAutoDialectIdentifierRef t_identifier;
-	if (!MCDialectSyntaxMatchIdentifier(x_syntax, t_identifier, r_error))
+	if (!MCDialectSyntaxMatchIdentifier(x_syntax, &t_identifier, r_error))
 		return false;
 	
 	// Build @ node
@@ -1744,6 +1829,9 @@ static bool MCDialectSyntaxParseMarked(const char*& x_syntax, MCDialectStateRef&
 
 static bool MCDialectSyntaxParseSeparator(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
+	// Build separator node
+	
+	return true;
 }
 
 static bool MCDialectSyntaxParseFactor(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
@@ -1775,6 +1863,8 @@ static bool MCDialectSyntaxParseFactor(const char*& x_syntax, MCDialectStateRef&
 	if (t_skipped)
 		return MCDialectSyntaxParseSeparator(x_syntax, r_state, r_error);
 	
+	MCDialectSyntaxTokenType t_id_type;
+	MCAutoDialectIdentifierRef t_id;
 	if (!MCDialectSyntaxSkipAnyIdentifier(x_syntax, t_id_type, &t_id, r_error))
 		return false;
 	if (t_id_type != kMCDialectSyntaxTokenTypeNone)
@@ -1794,7 +1884,8 @@ static bool MCDialectSyntaxParseConcatenation(const char *& x_syntax, MCDialectS
 	MCAutoDialectStateRef t_state;
 	for(;;)
 	{
-		if (!MCDialectSyntaxParseFactor(x_syntax, &t_state, r_error))
+		MCAutoDialectStateRef t_new_state;
+		if (!MCDialectSyntaxParseFactor(x_syntax, &t_new_state, r_error))
 			return false;
 		
 		if (*t_state == nil)
@@ -1845,7 +1936,7 @@ static bool MCDialectSyntaxParseAlternation(const char *& x_syntax, MCDialectSta
 	return true;
 }
 
-static bool MCDialectSyntaxParse(const char*& x_syntax, MCDialectIdentifierRef& r_scope, MCDialectStateRef& r_node, MCDialectSyntaxError& r_error)
+static bool MCDialectSyntaxParse(const char*& x_syntax, MCDialectIdentifierRef& r_scope, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
 	MCAutoDialectIdentifierRef t_scope;
 	if (!MCDialectSyntaxMatchIdentifier(x_syntax, &t_scope, r_error))
@@ -1858,7 +1949,7 @@ static bool MCDialectSyntaxParse(const char*& x_syntax, MCDialectIdentifierRef& 
 	if (!MCDialectSyntaxParseAlternation(x_syntax, &t_state, r_error))
 		return false;
 	
-	if (!MCDialectSyntaxParseEnd(x_syntax, r_error))
+	if (!MCDialectSyntaxMatchEnd(x_syntax, r_error))
 		return false;
 	
 	r_scope = t_scope . Take();
@@ -1869,6 +1960,15 @@ static bool MCDialectSyntaxParse(const char*& x_syntax, MCDialectIdentifierRef& 
 
 void MCDialectCreate(MCDialectRef& r_dialect)
 {
+}
+
+void MCDialectDestroy(MCDialectRef self)
+{
+}
+
+bool MCDialectIsValid(MCDialectRef self)
+{
+	return false;
 }
 
 void MCDialectAddRule(MCDialectRef self, const char *p_syntax, uindex_t p_action_id)

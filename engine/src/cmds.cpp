@@ -48,7 +48,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stacklst.h"
 #include "sellst.h"
 #include "undolst.h"
-#include "pxmaplst.h"
 #include "util.h"
 #include "date.h"
 #include "printer.h"
@@ -108,6 +107,7 @@ Parse_stat MCChoose::parse(MCScriptPoint &sp)
 
 Exec_stat MCChoose::exec(MCExecPoint &ep)
 {
+#ifdef /* MCChoose */ LEGACY_EXEC
 	if (etool != NULL)
 		if (etool->eval(ep) != ES_NORMAL)
 		{
@@ -116,6 +116,7 @@ Exec_stat MCChoose::exec(MCExecPoint &ep)
 			return ES_ERROR;
 		}
 	return MCU_choose_tool(ep, littool, line, pos);
+#endif /* MCChoose */
 }
 
 MCConvert::~MCConvert()
@@ -260,6 +261,7 @@ Parse_stat MCConvert::parsedtformat(MCScriptPoint &sp, Convert_form &firstform,
 
 Exec_stat MCConvert::exec(MCExecPoint &ep)
 {
+#ifdef /* MCConvert */ LEGACY_EXEC
 	MCresult->clear(False);
 	if (container != NULL)
 	{
@@ -296,6 +298,7 @@ Exec_stat MCConvert::exec(MCExecPoint &ep)
 		return ES_ERROR;
 	}
 	return ES_NORMAL;
+#endif /* MCConvert */
 }
 
 MCDo::~MCDo()
@@ -342,6 +345,7 @@ Parse_stat MCDo::parse(MCScriptPoint &sp)
 
 Exec_stat MCDo::exec(MCExecPoint &ep)
 {
+#ifdef /* MCDo */ LEGACY_EXEC
 	MCExecPoint *epptr;
 	if (browser)
 	{
@@ -419,6 +423,7 @@ Exec_stat MCDo::exec(MCExecPoint &ep)
 	if (added)
 		MCnexecutioncontexts--;
 	return stat;
+#endif /* MCDo */
 }
 
 typedef struct
@@ -522,6 +527,7 @@ Parse_stat MCDoMenu::parse(MCScriptPoint &sp)
 
 Exec_stat MCDoMenu::exec(MCExecPoint &ep)
 {
+#ifdef /* MCDoMenu */ LEGACY_EXEC
 	if (source->eval(ep) != ES_NORMAL)
 	{
 		MCeerror->add
@@ -542,11 +548,13 @@ Exec_stat MCDoMenu::exec(MCExecPoint &ep)
 		ep.getobj()->domess(dstring);
 	}
 	return ES_NORMAL;
+#endif /* MCDoMenu */
 }
 
 MCEdit::~MCEdit()
 {
 	delete target;
+    delete m_at;
 }
 
 Parse_stat MCEdit::parse(MCScriptPoint &sp)
@@ -569,11 +577,21 @@ Parse_stat MCEdit::parse(MCScriptPoint &sp)
 		MCperror->add(PE_EDIT_NOTARGET, sp);
 		return PS_ERROR;
 	}
+    // MERG 2013-9-13: [[ EditScriptChunk ]] Added line and column
+    if (sp.skip_token(SP_FACTOR, TT_PREP, PT_AT) == PS_NORMAL)
+	{
+		if (sp.parseexp(False, True, &m_at) != PS_NORMAL)
+        {
+            MCperror->add(PE_EDIT_NOAT, sp);
+            return PS_ERROR;
+        }
+	}
 	return PS_NORMAL;
 }
 
 Exec_stat MCEdit::exec(MCExecPoint &ep)
 {
+#ifdef /* MCEdit */ LEGACY_EXEC
 	MCObject *optr;
 	uint4 parid;
 	if (target->getobj(ep, optr, parid, True) != ES_NORMAL)
@@ -582,15 +600,31 @@ Exec_stat MCEdit::exec(MCExecPoint &ep)
 		return ES_ERROR;
 	}
 
-	// MW-2010-10-13: [[ Bug 7476 ]] Make sure we temporarily turn off lock messages
+    // MERG 2013-9-13: [[ EditScriptChunk ]] Added at expression that's passed through as a second parameter to editScript
+    MCString t_at;
+    t_at = NULL;
+    
+    if (m_at != NULL)
+    {
+        if (m_at->eval(ep) != ES_NORMAL)
+        {
+            MCeerror->add
+            (EE_EDIT_BADAT, line, pos);
+            return ES_ERROR;
+        }
+        t_at = ep.getsvalue();
+    }
+    
+    // MW-2010-10-13: [[ Bug 7476 ]] Make sure we temporarily turn off lock messages
 	//   before invoking the method - since it requires message sending to work!
 	Boolean t_old_lock;
 	t_old_lock = MClockmessages;
 	MClockmessages = False;
-	optr->editscript();
+	optr->editscript(t_at);
 	MClockmessages = t_old_lock;
 
 	return ES_NORMAL;
+#endif /* MCEdit */
 }
 
 MCFind::~MCFind()
@@ -637,6 +671,7 @@ Parse_stat MCFind::parse(MCScriptPoint &sp)
 
 Exec_stat MCFind::exec(MCExecPoint &ep)
 {
+#ifdef /* MCFind */ LEGACY_EXEC
 	if (tofind->eval(ep) != ES_NORMAL)
 	{
 		MCeerror->add
@@ -652,6 +687,7 @@ Exec_stat MCFind::exec(MCExecPoint &ep)
 	}
 	MCdefaultstackptr->find(ep, mode, ep.getsvalue(), field);
 	return ES_NORMAL;
+#endif /* MCFind */
 }
 
 MCGet::~MCGet()
@@ -675,6 +711,7 @@ Parse_stat MCGet::parse(MCScriptPoint &sp)
 
 Exec_stat MCGet::exec(MCExecPoint &ep)
 {
+#ifdef /* MCGet */ LEGACY_EXEC
 	if (value->eval(ep) != ES_NORMAL)
 	{
 		MCeerror->add
@@ -689,6 +726,7 @@ Exec_stat MCGet::exec(MCExecPoint &ep)
 		return ES_ERROR;
 	}
 	return ES_NORMAL;
+#endif /* MCGet */
 }
 
 MCMarking::~MCMarking()
@@ -740,7 +778,7 @@ Parse_stat MCMarking::parse(MCScriptPoint &sp)
 		(PE_MARK_NOCARDS, sp);
 		return PS_ERROR;
 	}
-	if (sp.next(type) != PS_NORMAL)
+if (sp.next(type) != PS_NORMAL)
 	{
 		MCperror->add
 		(PE_MARK_NOBYORWHERE, sp);
@@ -800,6 +838,7 @@ Parse_stat MCMarking::parse(MCScriptPoint &sp)
 
 Exec_stat MCMarking::exec(MCExecPoint &ep)
 {
+#ifdef /* MCMarking */ LEGACY_EXEC
 	if (card != NULL)
 	{
 		MCObject *optr;
@@ -827,6 +866,7 @@ Exec_stat MCMarking::exec(MCExecPoint &ep)
 		MCdefaultstackptr->markfind(ep, mode, ep.getsvalue(), field, mark);
 	}
 	return ES_NORMAL;
+#endif /* MCMarking */
 }
 
 MCPut::~MCPut()
@@ -940,7 +980,7 @@ Parse_stat MCPut::parse(MCScriptPoint &sp)
 	if (sp.next(type) == PS_NORMAL)
 	{
 		if (sp.lookup(SP_SERVER, te) == PS_NORMAL && te -> type == TT_PREP)
-		{
+	{
 			prep = (Preposition_type)te -> which;
 			if (is_unicode && (prep == PT_HEADER || prep == PT_BINARY))
 			{
@@ -1002,6 +1042,7 @@ Parse_stat MCPut::parse(MCScriptPoint &sp)
 
 Exec_stat MCPut::exec(MCExecPoint &ep)
 {
+#ifdef /* MCPut */ LEGACY_EXEC
 	if (source->eval(ep) != ES_NORMAL)
 	{
 		MCeerror->add(EE_PUT_BADEXP, line, pos);
@@ -1074,8 +1115,9 @@ Exec_stat MCPut::exec(MCExecPoint &ep)
 
 		return ES_NORMAL;
 	}
+#endif /* MCPut */
 }
-
+#ifdef /* MCPut::exec_cookie */ LEGACY_EXEC
 #if defined(_SERVER)
 bool MCServerSetCookie(const MCString &p_name, const MCString &p_value, uint32_t p_expires, const MCString &p_path, const MCString &p_domain, bool p_secure, bool p_http_only);
 Exec_stat MCPut::exec_cookie(MCExecPoint &ep)
@@ -1153,6 +1195,7 @@ Exec_stat MCPut::exec_cookie(MCExecPoint &ep)
 	return ES_ERROR;
 }
 #endif
+#endif /* MCPut::exec_cookie */
 
 MCQuit::~MCQuit()
 {
@@ -1170,6 +1213,7 @@ Parse_stat MCQuit::parse(MCScriptPoint &sp)
 
 Exec_stat MCQuit::exec(MCExecPoint &ep)
 {
+#ifdef /* MCQuit */ LEGACY_EXEC
 // MW-2011-06-22: [[ SERVER ]] Don't send messages in server-mode.
 #ifndef _SERVER
 	switch(MCdefaultstackptr->getcard()->message(MCM_shut_down_request))
@@ -1194,6 +1238,7 @@ Exec_stat MCQuit::exec(MCExecPoint &ep)
 	MCtraceabort = True;
 	MCtracereturn = True;
 	return ES_NORMAL;
+#endif /* MCQuit */
 }
 
 Parse_stat MCReset::parse(MCScriptPoint &sp)
@@ -1221,6 +1266,7 @@ Parse_stat MCReset::parse(MCScriptPoint &sp)
 
 Exec_stat MCReset::exec(MCExecPoint &ep)
 {
+#ifdef /* MCReset */ LEGACY_EXEC
 	switch (which)
 	{
 	case RT_CURSORS:
@@ -1245,11 +1291,11 @@ Exec_stat MCReset::exec(MCExecPoint &ep)
 		MCslices = 16;
 		MCmagnification = 8;
 
-		MCpatterns->freepat(MCpenpm);
+		MCpatternlist->freepat(MCpenpattern);
 		MCpencolor.red = MCpencolor.green = MCpencolor.blue = 0x0;
 		MCscreen->alloccolor(MCpencolor);
 
-		MCpatterns->freepat(MCbrushpm);
+		MCpatternlist->freepat(MCbrushpattern);
 		MCbrushcolor.red = MCbrushcolor.green = MCbrushcolor.blue = 0xFFFF;
 		MCscreen->alloccolor(MCbrushcolor);
 		break;
@@ -1317,6 +1363,7 @@ Exec_stat MCReset::exec(MCExecPoint &ep)
 		break;
 	}
 	return ES_NORMAL;
+#endif /* MCReset */
 }
 
 MCReturn::~MCReturn()
@@ -1367,6 +1414,7 @@ Parse_stat MCReturn::parse(MCScriptPoint &sp)
 //   clear the result in this case. (see MCHandler::exec).
 Exec_stat MCReturn::exec(MCExecPoint &ep)
 {
+#ifdef /* MCReturn */ LEGACY_EXEC
 	if (source->eval(ep) != ES_NORMAL)
 	{
 		MCeerror->add(EE_RETURN_BADEXP, line, pos);
@@ -1395,6 +1443,7 @@ Exec_stat MCReturn::exec(MCExecPoint &ep)
 		}
 
 	return ES_RETURN_HANDLER;
+#endif /* MCReturn */
 }
 
 uint4 MCReturn::linecount()
@@ -1442,6 +1491,7 @@ Parse_stat MCSet::parse(MCScriptPoint &sp)
 
 Exec_stat MCSet::exec(MCExecPoint &ep)
 {
+#ifdef /* MCSet */ LEGACY_EXEC
 	if (value->eval(ep) != ES_NORMAL)
 	{
 		MCeerror->add
@@ -1458,6 +1508,7 @@ Exec_stat MCSet::exec(MCExecPoint &ep)
 		return ES_ERROR;
 	}
 	return ES_NORMAL;
+#endif /* MCSet */
 }
 
 MCSort::~MCSort()
@@ -1557,7 +1608,7 @@ Parse_stat MCSort::parse(MCScriptPoint &sp)
 	}
 	return PS_NORMAL;
 }
-
+#ifdef /* MCSort::sort_container */ LEGACY_EXEC
 Exec_stat MCSort::sort_container(MCExecPoint &p_exec_point, Chunk_term p_type, Sort_type p_direction, Sort_type p_form, MCExpression *p_by)
 {
 	MCSortnode *t_items;
@@ -1667,6 +1718,7 @@ Exec_stat MCSort::sort_container(MCExecPoint &p_exec_point, Chunk_term p_type, S
 	delete t_items;
 	return ES_NORMAL;
 }
+#endif /* MCSort::sort_container */
 
 void MCSort::additem(MCExecPoint &ep, MCSortnode *&items, uint4 &nitems, Sort_type form, MCString &s, MCExpression *by)
 {
@@ -1746,6 +1798,7 @@ void MCSort::additem(MCExecPoint &ep, MCSortnode *&items, uint4 &nitems, Sort_ty
 
 Exec_stat MCSort::exec(MCExecPoint &ep)
 {
+#ifdef /* MCSort */ LEGACY_EXEC
 	if (of == NULL && chunktype == CT_FIELD)
 	{
 		MCeerror->add
@@ -1812,6 +1865,7 @@ Exec_stat MCSort::exec(MCExecPoint &ep)
 		}
 	}
 	return ES_NORMAL;
+#endif /* MCSort */
 }
 
 
@@ -1875,6 +1929,7 @@ Parse_stat MCWait::parse(MCScriptPoint &sp)
 
 Exec_stat MCWait::exec(MCExecPoint &ep)
 {
+#ifdef /* MCWait */ LEGACY_EXEC
 	while (True)
 	{
 		MCU_play();
@@ -1941,6 +1996,7 @@ Exec_stat MCWait::exec(MCExecPoint &ep)
 		}
 	}
 	return ES_NORMAL;
+#endif /* MCWait */
 }
 
 MCInclude::~MCInclude(void)
@@ -1963,6 +2019,7 @@ Parse_stat MCInclude::parse(MCScriptPoint& sp)
 
 Exec_stat MCInclude::exec(MCExecPoint& ep)
 {	
+#ifdef /* MCInclude */ LEGACY_EXEC
 	if (filename -> eval(ep) != ES_NORMAL)
 	{
 		MCeerror -> add(EE_INCLUDE_BADFILENAME, line, pos);
@@ -1990,6 +2047,7 @@ Exec_stat MCInclude::exec(MCExecPoint& ep)
 	MCeerror -> add(is_require ? EE_REQUIRE_BADCONTEXT : EE_INCLUDE_BADCONTEXT, line, pos);
 	return ES_ERROR;
 #endif
+#endif /* MCInclude */
 }
 
 MCEcho::~MCEcho(void)
@@ -2005,8 +2063,108 @@ Parse_stat MCEcho::parse(MCScriptPoint& sp)
 
 Exec_stat MCEcho::exec(MCExecPoint& ep)
 {
+#ifdef /* MCEcho */ LEGACY_EXEC
 	if (!MCS_put(ep, kMCSPutBinaryOutput, data) != IO_NORMAL)
 		MCexitall = True;
 
 	return ES_NORMAL;
+#endif /* MCEcho */
 }
+
+MCResolveImage::~MCResolveImage(void)
+{
+    delete m_relative_object;
+    delete m_id_or_name;
+    delete m_it;
+}
+
+Parse_stat MCResolveImage::parse(MCScriptPoint &p_sp)
+{
+    Parse_stat t_stat;
+    t_stat = PS_NORMAL;
+    
+    // Fetch a reference to 'it'
+    getit(p_sp, m_it);
+    
+    if (t_stat == PS_NORMAL)
+        t_stat =  p_sp.skip_token(SP_FACTOR, TT_CHUNK, CT_IMAGE);
+        
+        // Parse the optional 'id' token
+    m_is_id = (PS_NORMAL == p_sp . skip_token(SP_FACTOR, TT_PROPERTY, P_ID));
+    
+    // Parse the id_or_name expression
+    if (t_stat == PS_NORMAL)
+        t_stat = p_sp . parseexp(False, True, &m_id_or_name);
+    
+    if (t_stat != PS_NORMAL)
+    {
+        MCperror->add
+        (PE_RESOLVE_BADIMAGE, p_sp);
+        return PS_ERROR;
+    }
+    
+    // Parse the 'relative to' tokens
+    if (t_stat == PS_NORMAL)
+        t_stat = p_sp . skip_token(SP_FACTOR, TT_TO, PT_RELATIVE);
+    
+    if (t_stat == PS_NORMAL)
+        t_stat = p_sp . skip_token(SP_FACTOR, TT_TO, PT_TO);
+    
+    // Parse the target object clause
+    if (t_stat == PS_NORMAL)
+    {
+        m_relative_object = new MCChunk(false);
+        t_stat = m_relative_object -> parse(p_sp, False);
+    }
+    else
+    {
+        MCperror->add
+        (PE_RESOLVE_BADOBJECT, p_sp);
+        return PS_ERROR;
+    }
+    return t_stat;
+}
+
+Exec_stat MCResolveImage::exec(MCExecPoint &p_ep)
+{
+    Exec_stat t_stat;
+    t_stat = ES_NORMAL;
+    
+    uint4 t_part_id;
+    MCObject *t_relative_object;
+    if (t_stat == ES_NORMAL)
+        t_stat = m_relative_object -> getobj(p_ep, t_relative_object, t_part_id, True);
+    
+    if (t_stat == ES_NORMAL)
+        t_stat = m_id_or_name -> eval(p_ep);
+    
+    MCImage *t_found_image;
+    t_found_image = nil;
+    if (t_stat == ES_NORMAL)
+    {
+        if (m_is_id)
+        {
+            if (p_ep . ton() == ES_ERROR)
+            {
+                MCeerror -> add(EE_VARIABLE_NAN, line, pos);
+                return ES_ERROR;
+            }
+            
+            t_found_image = t_relative_object -> resolveimageid(p_ep . getuint4());
+        }
+        else
+            t_found_image = t_relative_object -> resolveimagename(p_ep . getsvalue());
+        
+        if (t_found_image != nil)
+            t_stat = t_found_image -> getprop(0, P_LONG_ID, p_ep, False);
+        else
+            p_ep . clear();
+    }
+    
+    if (t_stat == ES_NORMAL)
+        t_stat = m_it -> set(p_ep);
+    
+    return t_stat;
+    
+}
+

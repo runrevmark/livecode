@@ -33,7 +33,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stacklst.h"
 #include "sellst.h"
 #include "undolst.h"
-#include "pxmaplst.h"
 #include "hndlrlst.h"
 #include "handler.h"
 #include "scriptpt.h"
@@ -118,6 +117,7 @@ static const char *ink_names[] =
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef /* MCObject::getrectprop */ LEGACY_EXEC
 Exec_stat MCObject::getrectprop(Properties p_which, MCExecPoint& ep, Boolean p_effective)
 {
 	MCRectangle t_rect;
@@ -168,6 +168,7 @@ Exec_stat MCObject::getrectprop(Properties p_which, MCExecPoint& ep, Boolean p_e
 
 	return ES_NORMAL;
 }
+#endif /* MCObject::getrectprop */
 
 Exec_stat MCObject::sendgetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
 {
@@ -182,7 +183,9 @@ Exec_stat MCObject::sendgetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef
 		t_getprop_name = p_set_name, t_param_name = p_prop_name;
 
 	Exec_stat t_stat = ES_NOT_HANDLED;
-	if (!MClockmessages && (ep.getobj() != this || !ep.gethandler()->hasname(t_getprop_name)))
+    // SN-2013-07-26: [[ Bug 11020 ]] ep.gethandler() result was not checked
+    // before calling hasname and caused a crash with undefined properties
+	if (!MClockmessages && (ep.getobj() != this || (ep.gethandler() != nil && !ep.gethandler()->hasname(t_getprop_name))))
 	{
 		MCParameter p1;
 		p1.setnameref_unsafe_argument(t_param_name);
@@ -255,6 +258,7 @@ Exec_stat MCObject::getnamedprop(uint4 partid, MCNameRef property, MCExecPoint& 
 
 Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
+#ifdef /* MCObject::getprop */ LEGACY_EXEC
 	uint2 num = 0;
 
 	switch (which)
@@ -424,11 +428,11 @@ Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 	{
 		uint2 i;
 		if (getpindex(which - P_FORE_PATTERN, i))
-			if (pixmapids[i] < PI_END && pixmapids[i] > PI_PATTERNS)
-				ep.setint(pixmapids[i] - PI_PATTERNS);
+			if (patterns[i].id < PI_END && patterns[i].id > PI_PATTERNS)
+				ep.setint(patterns[i].id - PI_PATTERNS);
 
 			else
-				ep.setint(pixmapids[i]);
+				ep.setint(patterns[i].id);
 		else
 			if (effective && parent != NULL)
 				return parent->getprop(parid, which, ep, effective);
@@ -599,6 +603,7 @@ Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 	}
 
 	return ES_NORMAL;
+#endif /* MCObject::getprop */
 }
 
 static bool string_contains_item(const char *p_string, const char *p_item)
@@ -621,6 +626,7 @@ static bool string_contains_item(const char *p_string, const char *p_item)
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
 Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
+#ifdef /* MCObject::getarrayprop */ LEGACY_EXEC
 	switch(which)
 	{
 	// MW-2011-11-23: [[ Array TextStyle ]] We now treat textStyle as (potentially) an
@@ -672,10 +678,12 @@ Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep,
 		}
 	}
 	return ES_NORMAL;
+#endif /* MCObject::getarrayprop */
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef /* MCObject::setrectprop */ LEGACY_EXEC
 Exec_stat MCObject::setrectprop(Properties p_which, MCExecPoint& ep, Boolean p_effective)
 {
 	MCString t_data;
@@ -834,7 +842,9 @@ Exec_stat MCObject::setrectprop(Properties p_which, MCExecPoint& ep, Boolean p_e
 	
 	return ES_NORMAL;
 }
+#endif /* MCObject::setrectprop */
 
+#ifdef /* MCObject::setscriptprop */ LEGACY_EXEC
 Exec_stat MCObject::setscriptprop(MCExecPoint& ep)
 {
 	if (!MCdispatcher->cut(True))
@@ -915,7 +925,9 @@ Exec_stat MCObject::setscriptprop(MCExecPoint& ep)
 
 	return ES_NORMAL;
 }
+#endif /* MCObject::setscriptprop */
 
+#ifdef /* MCObject::setparentscriptprop */ LEGACY_EXEC
 Exec_stat MCObject::setparentscriptprop(MCExecPoint& ep)
 {
 	// MW-2008-10-25: Add the setting logic for parent scripts. This code is a
@@ -967,11 +979,34 @@ Exec_stat MCObject::setparentscriptprop(MCExecPoint& ep)
 	// Check that the object is a button
 	if (t_stat == ES_NORMAL && t_object -> gettype() != CT_BUTTON)
 		t_stat = ES_ERROR;
-
-	// MW-2009-01-28: [[ Bug ]] Make sure we aren't setting the parentScript of
-	//   an object to itself.
-	if (t_stat == ES_NORMAL && t_object == this)
-		t_stat = ES_ERROR;
+	
+	// MW-2013-07-18: [[ Bug 11037 ]] Make sure the object isn't in the hierarchy
+	//   of the parentScript.
+	bool t_is_cyclic;
+	t_is_cyclic = false;
+	if (t_stat == ES_NORMAL)
+	{
+		MCObject *t_parent_object;
+		t_parent_object = t_object;
+		while(t_parent_object != nil)
+		{
+			if (t_parent_object == this)
+			{
+				t_is_cyclic = true;
+				break;
+			}
+			
+			MCParentScript *t_super_parent_script;
+			t_super_parent_script = t_parent_object -> getparentscript();
+			if (t_super_parent_script != nil)
+				t_parent_object = t_super_parent_script -> GetObject();
+			else
+				t_parent_object = nil;
+		}
+		
+		if (t_is_cyclic)
+			t_stat = ES_ERROR;
+	}
 
 	if (t_stat == ES_NORMAL)
 	{
@@ -1031,14 +1066,23 @@ Exec_stat MCObject::setparentscriptprop(MCExecPoint& ep)
 		}
 	}
 	else
-		MCeerror -> add(EE_PARENTSCRIPT_BADOBJECT, 0, 0, data);
+	{
+		// MW-2013-07-18: [[ Bug 11037 ]] Report an appropriate error if the hierarchy
+		//   is cyclic.
+		if (!t_is_cyclic)
+			MCeerror -> add(EE_PARENTSCRIPT_BADOBJECT, 0, 0, data);
+		else
+			MCeerror -> add(EE_PARENTSCRIPT_CYCLICOBJECT, 0, 0, data);
+	}
 
 	// Delete our temporary chunk object.
 	delete t_chunk;
 
 	return t_stat;
 }
+#endif /* MCObject::setparentscriptprop */
 
+#ifdef /* MCObject::setshowfocusborderprop */ LEGACY_EXEC
 Exec_stat MCObject::setshowfocusborderprop(MCExecPoint& ep)
 {
 	MCString data;
@@ -1070,7 +1114,9 @@ Exec_stat MCObject::setshowfocusborderprop(MCExecPoint& ep)
 
 	return ES_NORMAL;
 }
+#endif /* MCObject::setshowfocusborderprop */
 
+#ifdef /* MCObject::setvisibleprop */ LEGACY_EXEC
 Exec_stat MCObject::setvisibleprop(uint4 parid, Properties which, MCExecPoint& ep)
 {
 	Boolean dirty;
@@ -1152,6 +1198,7 @@ Exec_stat MCObject::setvisibleprop(uint4 parid, Properties which, MCExecPoint& e
 
 	return ES_NORMAL;
 }
+#endif /* MCObject::setvisibleprop */
 
 Exec_stat MCObject::sendsetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
 {
@@ -1169,8 +1216,10 @@ Exec_stat MCObject::sendsetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef
 	//   setProp pPropName, pValue
 	// The parameter list is auto-adjusted if it is of array type in MCHandler::exec.
 
-	Exec_stat t_stat = ES_NOT_HANDLED;
-	if (!MClockmessages && (ep.getobj() != this || !ep.gethandler()->hasname(t_setprop_name)))
+	Exec_stat t_stat = ES_NOT_HANDLED;    
+    // SN-2013-07-26: [[ Bug 11020 ]] ep.gethandler() result was not checked
+    // before calling hasname and caused a crash with undefined properties
+	if (!MClockmessages && (ep.getobj() != this || (ep.gethandler() != nil && !ep.gethandler()->hasname(t_setprop_name))))
 	{
 		MCParameter p1, p2;
 		p1.setnext(&p2);
@@ -1227,6 +1276,7 @@ Exec_stat MCObject::setnamedprop(uint4 parid, MCNameRef property, MCExecPoint& e
 
 Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
+#ifdef /* MCObject::setprop */ LEGACY_EXEC
 	Boolean dirty = True;
 	Boolean newstate;
 	int2 i1;
@@ -1676,12 +1726,14 @@ Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 		if (gettype() >= CT_GROUP)
 			static_cast<MCControl *>(this) -> layer_redrawall();
 	}
-	return ES_NORMAL; 
+	return ES_NORMAL;
+#endif /* MCObject::setprop */
 }
 
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
 Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
+#ifdef /* MCObject::setarrayprop */ LEGACY_EXEC
 	MCString data;
 	data = ep . getsvalue();
 	switch(which)
@@ -1783,6 +1835,7 @@ Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep,
 		}
 	}
 	return ES_NORMAL;
+#endif /* MCObject::setarrayprop */
 }
 
 ////////////////////////////////////////////////////////////////////////////////

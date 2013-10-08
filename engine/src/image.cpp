@@ -39,9 +39,14 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "globals.h"
 
+#include "resolution.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
-#define IMAGE_EXTRA_CONTROLCOLORS (1 << 0)
+#define IMAGE_EXTRA_CONTROLCOLORS_DEAD (1 << 0) // Due to a bug, this cannot be used.
+#define IMAGE_EXTRA_CONTROLPIXMAPS_DEAD (1 << 1) // Due to a bug, this cannot be used.
+
+#define IMAGE_EXTRA_CONTROLCOLORS (1 << 2)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -50,13 +55,21 @@ int2 MCImage::magmy;
 MCRectangle MCImage::magrect;
 MCObject *MCImage::magtoredraw;
 Boolean MCImage::filledborder;
-MCbrushmask MCImage::brush;
-MCbrushmask MCImage::spray;
-MCbrushmask MCImage::eraser;
+MCBrush MCImage::brush;
+MCBrush MCImage::spray;
+MCBrush MCImage::eraser;
 MCCursorRef MCImage::cursor;
 MCCursorRef MCImage::defaultcursor;
 uint2 MCImage::cmasks[MAX_CMASK + 1] = {0x00, 0x01, 0x03, 0x07,
                                         0x0F, 0x1F, 0x3F, 0x7F};
+
+bool MCImage::s_have_control_colors;
+uint16_t MCImage::s_control_color_count;
+MCColor *MCImage::s_control_colors;
+char **MCImage::s_control_color_names;
+uint16_t MCImage::s_control_pixmap_count;
+MCPatternInfo *MCImage::s_control_pixmapids;
+uint16_t MCImage::s_control_color_flags;
 
 MCImage::MCImage()
 {
@@ -64,14 +77,12 @@ MCImage::MCImage()
 	flags &= ~(F_SHOW_BORDER | F_TRAVERSAL_ON);
 
 	m_rep = nil;
-	m_transformed = nil;
+	m_transformed_bitmap = nil;
 	m_image_opened = false;
+	m_has_transform = false;
+	m_scale_factor = 1.0;
 
-	m_have_control_colors = false;
-	m_control_colors = nil;
-	m_control_color_names = nil;
-	m_control_color_count = 0;
-
+	m_locked_frame = nil;
 	m_needs = nil;
 
 	filename = nil;
@@ -85,14 +96,12 @@ MCImage::MCImage()
 MCImage::MCImage(const MCImage &iref) : MCControl(iref)
 {
 	m_rep = nil;
-	m_transformed = nil;
+	m_transformed_bitmap = nil;
 	m_image_opened = false;
+	m_has_transform = false;
+	m_scale_factor = 1.0;
 
-	m_have_control_colors = false;
-	m_control_colors = nil;
-	m_control_color_names = nil;
-	m_control_color_count = 0;
-
+	m_locked_frame = nil;
 	m_needs = nil;
 
 	filename = nil;
@@ -101,7 +110,7 @@ MCImage::MCImage(const MCImage &iref) : MCControl(iref)
 	{
 		MCImageBitmap *t_bitmap = nil;
 		/* UNCHECKED */static_cast<MCMutableImageRep*>(iref.m_rep)->copy_selection(t_bitmap);
-		setbitmap(t_bitmap);
+		setbitmap(t_bitmap, 1.0);
 		MCImageFreeBitmap(t_bitmap);
 		if (static_cast<MCMutableImageRep*>(iref.m_rep)->has_selection())
 		{
@@ -114,7 +123,10 @@ MCImage::MCImage(const MCImage &iref) : MCControl(iref)
 		xhot = iref.xhot;
 		yhot = iref.yhot;
 		if (iref . m_rep != nil)
+		{
 			m_rep = iref . m_rep->Retain();
+			m_scale_factor = iref.m_scale_factor;
+		}
 	}
 
 	if (iref.flags & F_HAS_FILENAME)
@@ -138,12 +150,6 @@ MCImage::~MCImage()
 	{
 		m_rep->Release();
 		m_rep = nil;
-	}
-
-	if (m_transformed != nil)
-	{
-		m_transformed->Release();
-		m_transformed = nil;
 	}
 
 	if (filename != nil)
@@ -286,6 +292,8 @@ Boolean MCImage::mdown(uint2 which)
 					if (MCmodifierstate & MS_CONTROL)
 					{ //cropping
 						state |= CS_EDITED;
+						m_current_width = rect.width;
+						m_current_height = rect.height;
 					}
 					if (state & CS_IMAGE_PM)
 					{
@@ -461,7 +469,7 @@ void MCImage::timer(MCNameRef mptr, MCParameter *params)
 				if (irepeatcount)
 				{
 					MCImageFrame *t_frame = nil;
-					if (m_rep->LockImageFrame(currentframe, t_frame))
+					if (m_rep->LockImageFrame(currentframe, true, t_frame))
 					{
 						MCscreen->addtimer(this, MCM_internal, t_frame->duration);
 						m_rep->UnlockImageFrame(currentframe, t_frame);
@@ -551,12 +559,15 @@ void MCImageSetMask(MCImageBitmap *p_bitmap, uint8_t *p_mask_data, uindex_t p_ma
 		uint32_t *t_dst_row = (uint32_t*)t_dst_ptr;
 		for (uindex_t x = 0; x < t_width; x++)
 		{
-			uint32_t t_alpha = *t_src_row++;
+			uint8_t t_r, t_g, t_b, t_alpha;
+			MCGPixelUnpackNative(*t_dst_row, t_r, t_g, t_b, t_alpha);
+			
+			t_alpha = *t_src_row++;
+			
 			// with maskdata, nonzero is fully opaque
 			if (!p_is_alpha && t_alpha > 0)
 				t_alpha = 0xFF;
-			uint32_t t_pixel = (*t_dst_row & 0x00FFFFFF) | (t_alpha << 24);
-			*t_dst_row++ = t_pixel;
+			*t_dst_row++ = MCGPixelPackNative(t_r, t_g, t_b, t_alpha);
 		}
 		t_src_ptr += t_mask_stride;
 		t_dst_ptr += p_bitmap->stride;
@@ -572,6 +583,7 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 
 	switch (which)
 	{
+#ifdef /* MCImage::getprop */ LEGACY_EXEC
 	case P_XHOT:
 		ep.setint(xhot);
 		break;
@@ -651,8 +663,7 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 	case P_FORMATTED_HEIGHT:
 		{
 			uindex_t t_width = 0, t_height = 0;
-			if (m_rep != nil)
-				m_rep->GetGeometry(t_width, t_height);
+			/* UNCHECKED */ getsourcegeometry(t_width, t_height);
 
 			ep.setint(t_height);
 		}
@@ -660,8 +671,7 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 	case P_FORMATTED_WIDTH:
 		{
 			uindex_t t_width = 0, t_height = 0;
-			if (m_rep != nil)
-				m_rep->GetGeometry(t_width, t_height);
+			/* UNCHECKED */ getsourcegeometry(t_width, t_height);
 
 			ep.setint(t_width);
 		}
@@ -718,14 +728,20 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 					
 					MCImageBitmap *t_bitmap = nil;
 					
-					t_success = lockbitmap(t_bitmap);
+					t_success = copybitmap(1.0, false, t_bitmap);
 					if (t_success)
 					{
 						MCMemoryCopy(t_data_ptr, t_bitmap->data, t_data_size);
+#if (kMCGPixelFormatNative != kMCGPixelFormatBGRA)
 						while (t_pixel_count--)
-							swap_uint4(t_data_ptr++);
+						{
+							uint8_t t_r, t_g, t_b, t_a;
+							MCGPixelUnpackNative(*t_data_ptr, t_r, t_g, t_b, t_a);
+							*t_data_ptr++ = MCGPixelPack(kMCGPixelFormatBGRA, t_r, t_g, t_b, t_a);
+						}
+#endif
 					}
-					unlockbitmap(t_bitmap);
+					MCImageFreeBitmap(t_bitmap);
 					
 					closeimage();
 				}
@@ -755,7 +771,7 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 					
 					MCImageBitmap *t_bitmap = nil;
 					
-					t_success = lockbitmap(t_bitmap);
+					t_success = copybitmap(1.0, true, t_bitmap);
 					if (t_success)
 					{
 						uint8_t *t_src_ptr = (uint8_t*)t_bitmap->data;
@@ -773,7 +789,7 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 							t_src_ptr += t_bitmap->stride;
 						}
 					}
-					unlockbitmap(t_bitmap);
+					MCImageFreeBitmap(t_bitmap);
 					
 					closeimage();
 				}
@@ -813,6 +829,7 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 	case P_ANGLE:
 		ep.setint(angle);
 		break;
+#endif /* MCImage::getprop */
 	default:
 		return MCControl::getprop(parid, which, ep, effective);
 	}
@@ -828,6 +845,7 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 
 	switch (p)
 	{
+#ifdef /* MCImage::setprop */ LEGACY_EXEC
 	case P_INVISIBLE:
 	case P_VISIBLE:
 		{
@@ -844,7 +862,7 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 			if (isvisible() && !wasvisible && m_rep != nil && m_rep->GetFrameCount() > 1)
 			{
 				MCImageFrame *t_frame = nil;
-				if (m_rep->LockImageFrame(currentframe, t_frame))
+				if (m_rep->LockImageFrame(currentframe, true, t_frame))
 				{
 					MCscreen->addtimer(this, MCM_internal, t_frame->duration);
 					m_rep->UnlockImageFrame(currentframe, t_frame);
@@ -890,13 +908,9 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 		}
 		break;
 	case P_FILE_NAME:
-		/* {for next release}
 		// MW-2013-06-24: [[ Bug 10977 ]] If we are setting the filename to
 		//   empty, and the filename is already empty, do nothing.
 		if ((m_rep != nil && m_rep -> GetType() == kMCImageRepReferenced && data == MCnullmcstring) ||
-			data != filename)
-		*/
-		if (m_rep == nil || m_rep->GetType() != kMCImageRepReferenced ||
 			data != filename)
 		{
 			char *t_filename = nil;
@@ -909,7 +923,9 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 
 			resetimage();
 
-			if (m_rep != nil)
+			// MW-2013-06-25: [[ Bug 10980 ]] Only set the result to an error if we were
+			//   attempting to set a non-empty filename.
+			if (m_rep != nil || data == MCnullmcstring)
 				MCresult->clear(False);
 			else
 				MCresult->sets("could not open image");
@@ -995,7 +1011,7 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 			{
 				setframe(currentframe == m_rep->GetFrameCount() - 1 ? 0 : currentframe + 1);
 				MCImageFrame *t_frame = nil;
-				if (m_rep->LockImageFrame(currentframe, t_frame))
+				if (m_rep->LockImageFrame(currentframe, true, t_frame))
 				{
 					MCscreen->addtimer(this, MCM_internal, t_frame->duration);
 					m_rep->UnlockImageFrame(currentframe, t_frame);
@@ -1015,7 +1031,6 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 
 			if (data.getlength() == 0)
 			{
-				/* {for next release}
 				// MERG-2013-06-24: [[ Bug 10977 ]] If we have a filename then setting the
 				//   text to empty shouldn't have an effect; otherwise we are unsetting the
 				//   current text.
@@ -1025,10 +1040,6 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
                     flags &= ~(F_COMPRESSION | F_TRUE_COLOR | F_HAS_FILENAME);
                     setrep(nil);
                 }
-				*/
-				// empty text - unset flags & set rep to nil;
-				flags &= ~(F_COMPRESSION | F_TRUE_COLOR | F_HAS_FILENAME);
-				setrep(nil);
 			}
 			else
 			{
@@ -1041,7 +1052,7 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 					if (t_compressed != nil)
 						t_success = setcompressedbitmap(t_compressed);
 					else if (t_bitmap != nil)
-						t_success = setbitmap(t_bitmap);
+						t_success = setbitmap(t_bitmap, 1.0);
 				}
 
 				MCImageFreeBitmap(t_bitmap);
@@ -1066,17 +1077,13 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 			MCImageBitmap *t_copy = nil;
 			if (m_rep != nil)
 			{
-				MCImageBitmap *t_bitmap = nil;
-				t_success = lockbitmap(t_bitmap);
-				if (t_success)
-					t_success = MCImageCopyBitmap(t_bitmap, t_copy);
-				unlockbitmap(t_bitmap);
+				t_success = copybitmap(1.0, false, t_copy);
 			}
 			else
 			{
 				t_success = MCImageBitmapCreate(rect.width, rect.height, t_copy);
 				if (t_success)
-					MCImageBitmapSet(t_copy, 0xFF000000); // set to opaque black
+					MCImageBitmapSet(t_copy, MCGPixelPackNative(0, 0, 0, 255)); // set to opaque black
 			}
 
 			if (t_success)
@@ -1098,14 +1105,13 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 						g = *t_src_row++;
 						b = *t_src_row++;
 
-						uint32_t t_pixel = (*t_dst_row & 0xFF000000) | (r << 16) | (g << 8) | b;
-						*t_dst_row++ = t_pixel;
+						*t_dst_row++ = MCGPixelPackNative(r, g, b, 255);
 					}
 					t_src_ptr += t_stride;
 					t_dst_ptr += t_copy->stride;
 				}
 
-				setbitmap(t_copy);
+				setbitmap(t_copy, 1.0);
 			}
 
 			MCImageFreeBitmap(t_copy);
@@ -1122,23 +1128,19 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 			MCImageBitmap *t_copy = nil;
 			if (m_rep != nil)
 			{
-				MCImageBitmap *t_bitmap = nil;
-				t_success = lockbitmap(t_bitmap);
-				if (t_success)
-					t_success = MCImageCopyBitmap(t_bitmap, t_copy);
-				unlockbitmap(t_bitmap);
+				t_success = copybitmap(1.0, false, t_copy);
 			}
 			else
 			{
 				t_success = MCImageBitmapCreate(rect.width, rect.height, t_copy);
 				if (t_success)
-					MCImageBitmapSet(t_copy, 0xFF000000); // set to opaque black
+					MCImageBitmapSet(t_copy, MCGPixelPackNative(0, 0, 0, 255)); // set to opaque black
 			}
 
 			if (t_success)
 			{
 				MCImageSetMask(t_copy, (uint8_t*)data.getstring(), data.getlength(), false);
-				setbitmap(t_copy);
+				setbitmap(t_copy, 1.0);
 			}
 
 			MCImageFreeBitmap(t_copy);
@@ -1155,23 +1157,19 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 			MCImageBitmap *t_copy = nil;
 			if (m_rep != nil)
 			{
-				MCImageBitmap *t_bitmap = nil;
-				t_success = lockbitmap(t_bitmap);
-				if (t_success)
-					t_success = MCImageCopyBitmap(t_bitmap, t_copy);
-				unlockbitmap(t_bitmap);
+				t_success = copybitmap(1.0, false, t_copy);
 			}
 			else
 			{
 				t_success = MCImageBitmapCreate(rect.width, rect.height, t_copy);
 				if (t_success)
-					MCImageBitmapSet(t_copy, 0xFF000000); // set to opaque black
+					MCImageBitmapSet(t_copy, MCGPixelPackNative(0, 0, 0, 255)); // set to opaque black
 			}
 
 			if (t_success)
 			{
 				MCImageSetMask(t_copy, (uint8_t*)data.getstring(), data.getlength(), true);
-				setbitmap(t_copy);
+				setbitmap(t_copy, 1.0);
 			}
 
 			MCImageFreeBitmap(t_copy);
@@ -1205,8 +1203,7 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 				// MW-2010-11-25: [[ Bug 9195 ]] Make sure we have some image data to rotate, otherwise
 				//   odd things happen with the rect.
 				MCRectangle oldrect = rect;
-				if (m_rep != nil)
-					rotate(i1);
+				rotate_transform(i1);
 
 				angle = i1;
 
@@ -1232,6 +1229,7 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 			return t_stat;
 		}
 		break;
+#endif /* MCImage::setprop */
 	default:
 		return MCControl::setprop(parid, p, ep, effective);
 	}
@@ -1305,11 +1303,23 @@ Boolean MCImage::maskrect(const MCRectangle &srect)
 		return True;
 
 	// MW-2007-09-11: [[ Bug 5177 ]] If the object is currently selected, make its mask the whole rectangle
-	MCImageBitmap *t_bitmap = nil;
-	if (!getstate(CS_SELECTED) && lockbitmap(t_bitmap))
+	MCImageFrame *t_frame = nil;
+	if (!getstate(CS_SELECTED) && m_rep != nil && m_rep->LockImageFrame(currentframe, true, t_frame))
 	{
-		uint32_t t_pixel = MCImageBitmapGetPixel(t_bitmap, srect.x - rect.x, srect.y - rect.y);
-		unlockbitmap(t_bitmap);
+		int32_t t_x = srect.x - rect.x;
+		int32_t t_y = srect.y - rect.y;
+		if (m_has_transform)
+		{
+			MCGAffineTransform t_inverted = MCGAffineTransformInvert(m_transform);
+			MCGPoint t_src_point = MCGPointApplyAffineTransform(MCGPointMake(t_x, t_y), t_inverted);
+			t_x = t_src_point.x;
+			t_y = t_src_point.y;
+		}
+		uint32_t t_pixel = 0;
+		if (t_x >= 0 && t_y >= 0 && t_x <t_frame->image->width && t_y < t_frame->image->height)
+			t_pixel = MCImageBitmapGetPixel(t_frame->image, t_x, t_y);
+
+		m_rep->UnlockImageFrame(currentframe, t_frame);
 		return (t_pixel >> 24) != 0;
 	}
 	else
@@ -1331,7 +1341,7 @@ bool MCImage::lockshape(MCObjectShape& r_shape)
 	bool t_mask, t_alpha;
 	MCImageBitmap *t_bitmap = nil;
 
-	/* UNCHECKED */ lockbitmap(t_bitmap);
+	/* UNCHECKED */ lockbitmap(t_bitmap, true);
 	t_mask = MCImageBitmapHasTransparency(t_bitmap, t_alpha);
 
 	// If the image has no mask, then it is a solid rectangle.
@@ -1341,6 +1351,14 @@ bool MCImage::lockshape(MCObjectShape& r_shape)
 		r_shape . bounds = getrect();
 		r_shape . rectangle = r_shape . bounds;
 		unlockbitmap(t_bitmap);
+		return true;
+	}
+	
+	// IM-2013-08-15: [[ ResIndependence ]] soft-mask doesn't work with scaled images so for now use the complex mask type
+	if (m_scale_factor != 1.0)
+	{
+		r_shape . type = kMCObjectShapeComplex;
+		r_shape . bounds = getrect();
 		return true;
 	}
 	else
@@ -1477,28 +1495,40 @@ IO_stat MCImage::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part)
 	uint4 t_length;
 	t_length = 0;
 
-	if (m_have_control_colors)
+	// MW-2013-09-05: [[ Bug 11127 ]] If we have control colors then write them out
+	//   in two sections (first the colors, if any, then the patterns, if any).
+	if (s_have_control_colors)
 	{
 		t_flags |= IMAGE_EXTRA_CONTROLCOLORS;
 		t_length += sizeof(uint16_t) + sizeof(uint16_t);
-		t_length += m_control_color_count * 3 * sizeof(uint16_t);
-		for (uint16_t i = 0; i < m_control_color_count; i++)
-			t_length += MCCStringLength(m_control_color_names[i]) + 1;
+		t_length += s_control_color_count * 3 * sizeof(uint16_t);
+		for (uint16_t i = 0; i < s_control_color_count; i++)
+			t_length += MCCStringLength(s_control_color_names[i]) + 1;
+	
+		t_length += sizeof(uint16_t);
+		t_length += s_control_pixmap_count * sizeof(uint4);
 	}
 
 	if (t_stat == IO_NORMAL)
 		t_stat = p_stream . WriteTag(t_flags, t_length);
 	
-	if (t_stat == IO_NORMAL && m_have_control_colors)
+	if (t_stat == IO_NORMAL && (t_flags & IMAGE_EXTRA_CONTROLCOLORS) != 0)
 	{
-		t_stat = p_stream . WriteU16(m_control_color_count);
+		t_stat = p_stream . WriteU16(s_control_color_count);
 		if (t_stat == IO_NORMAL)
-			t_stat = p_stream . WriteU16(m_control_color_flags);
+			t_stat = p_stream . WriteU16(s_control_color_flags);
 
-		for (uint16_t i = 0; t_stat == IO_NORMAL && i < m_control_color_count; i++)
-			t_stat = p_stream . WriteColor(m_control_colors[i]);
-		for (uint16_t i = 0; t_stat == IO_NORMAL && i < m_control_color_count; i++)
-			t_stat = p_stream . WriteCString(m_control_color_names[i]);
+		for (uint16_t i = 0; t_stat == IO_NORMAL && i < s_control_color_count; i++)
+			t_stat = p_stream . WriteColor(s_control_colors[i]);
+		for (uint16_t i = 0; t_stat == IO_NORMAL && i < s_control_color_count; i++)
+			t_stat = p_stream . WriteCString(s_control_color_names[i]);
+		
+		if (t_stat == IO_NORMAL)
+			t_stat = p_stream . WriteU16(s_control_pixmap_count);
+		
+		if (t_stat == IO_NORMAL)
+			for(int i = 0; t_stat == IO_NORMAL && i < s_control_pixmap_count; i++)
+				t_stat = p_stream . WriteU32(s_control_pixmapids[i] . id);
 	}
 
 	if (t_stat == IO_NORMAL)
@@ -1527,23 +1557,36 @@ IO_stat MCImage::extendedload(MCObjectInputStream& p_stream, const char *p_versi
 
 		if (t_stat == IO_NORMAL)
 			t_stat = p_stream . Mark();
-
-		if (t_stat == IO_NORMAL && (t_flags & IMAGE_EXTRA_CONTROLCOLORS))
+		
+		// MW-2013-09-05: [[ Bug 11127 ]] If we have control colors then read them in
+		//   (first do colors, then pixmapids - if any).
+		if (t_stat == IO_NORMAL && (t_flags & IMAGE_EXTRA_CONTROLCOLORS) != 0)
 		{
-			m_have_control_colors = true;
-			t_stat = p_stream . ReadU16(m_control_color_count);
-			t_stat = p_stream . ReadU16(m_control_color_flags);
+			s_have_control_colors = true;
+			t_stat = p_stream . ReadU16(s_control_color_count);
+			t_stat = p_stream . ReadU16(s_control_color_flags);
 
+			if (t_stat == IO_NORMAL &&
+				!MCMemoryNewArray(s_control_color_count, s_control_colors))
+				t_stat = IO_ERROR;
+			
+			if (t_stat == IO_NORMAL &&
+				!MCMemoryNewArray(s_control_color_count, s_control_color_names))
+				t_stat = IO_ERROR;
+
+			for (uint32_t i = 0; t_stat == IO_NORMAL && i < s_control_color_count; i++)
+				t_stat = p_stream . ReadColor(s_control_colors[i]);
+			for (uint32_t i = 0; t_stat == IO_NORMAL && i < s_control_color_count; i++)
+				t_stat = p_stream . ReadCString(s_control_color_names[i]);
+			
 			if (t_stat == IO_NORMAL)
-			{
-				/* UNCHECKED */ MCMemoryNewArray(m_control_color_count, m_control_colors);
-				/* UNCHECKED */ MCMemoryNewArray(m_control_color_count, m_control_color_names);
-			}
-
-			for (uint32_t i = 0; t_stat == IO_NORMAL && i < m_control_color_count; i++)
-				t_stat = p_stream . ReadColor(m_control_colors[i]);
-			for (uint32_t i = 0; t_stat == IO_NORMAL && i < m_control_color_count; i++)
-				t_stat = p_stream . ReadCString(m_control_color_names[i]);
+				t_stat = p_stream . ReadU16(s_control_pixmap_count);
+			
+			if (t_stat == IO_NORMAL && 
+				!MCMemoryNewArray(s_control_pixmap_count, s_control_pixmapids))
+				t_stat = IO_ERROR;
+			for(uint32_t i = 0; t_stat == IO_NORMAL && i < s_control_pixmap_count; i++)
+				t_stat = p_stream . ReadU32(s_control_pixmapids[i] . id);
 		}
 
 		if (t_stat == IO_NORMAL)
@@ -1566,30 +1609,48 @@ IO_stat MCImage::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 	recompress();
 	if ((stat = IO_write_uint1(OT_IMAGE, stream)) != IO_NORMAL)
 		return stat;
-
-	m_have_control_colors = false;
-	if (m_rep != nil)
+	
+	// MW-2013-09-05: [[ Bug 11127 ]] The object colors/pixmaps pertain to an RLE
+	//   compressed image (if this is one); whereas the control colors are stored
+	//   in an extended record. When in memory the object stores the control colors
+	//   in colors/pixmapids so we temporarily switch these here. So the object
+	//   writes out the image colors; and the image does an extended record with the
+	//   control colors.
+	s_have_control_colors = false;
+	if (ncolors != 0 || npatterns != 0 ||
+		(m_rep != nil && m_rep -> GetType() == kMCImageRepCompressed))
 	{
-		if (m_rep->GetType() == kMCImageRepCompressed)
+		s_have_control_colors = true;
+		s_control_color_count = ncolors;
+		s_control_colors = colors;
+		s_control_color_names = colornames;
+		s_control_color_flags = dflags;
+		s_control_pixmap_count = npatterns;
+		s_control_pixmapids = patterns;
+
+		if (m_rep != nil && m_rep -> GetType() == kMCImageRepCompressed)
 		{
 			MCImageCompressedBitmap *t_compressed;
 			t_compressed = static_cast<MCCompressedImageRep*>(m_rep)->GetCompressed();
-			if (t_compressed->colors != nil)
-			{
-				m_have_control_colors = true;
-
-				m_control_color_count = ncolors;
-				m_control_colors = colors;
-				m_control_color_names = colornames;
-				m_control_color_flags = dflags;
-
-				ncolors = t_compressed->color_count;
-				colors = t_compressed->colors;
-				dflags = MCImage::cmasks[MCMin(ncolors, MAX_CMASK)];
-				/* UNCHECKED */ MCMemoryNewArray(ncolors, colornames);
-			}
+			
+			ncolors = t_compressed->color_count;
+			colors = t_compressed->colors;
+			dflags = MCImage::cmasks[MCMin(ncolors, MAX_CMASK)];
+			if (!MCMemoryNewArray(ncolors, colornames))
+				return IO_ERROR;
 		}
+		else
+		{
+			ncolors = 0;
+			colors = nil;
+			colornames = nil;
+			dflags = 0;
+		}
+		
+		npatterns = 0;
+		patterns = 0;
 	}
+	
 	uint32_t t_pixwidth, t_pixheight;
 	getgeometry(t_pixwidth, t_pixheight);
 
@@ -1613,7 +1674,7 @@ IO_stat MCImage::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 	bool t_has_extension = false;
 	if (resizequality != INTERPOLATION_BOX)
 		t_has_extension = true;
-	if (m_have_control_colors)
+	if (s_have_control_colors)
 		t_has_extension = true;
 
 	uint4 oldflags = flags;
@@ -1624,21 +1685,27 @@ IO_stat MCImage::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 	flags = oldflags;
 
 	ink = t_old_ink;
-
-	if (m_have_control_colors)
+	
+	// MW-2013-09-05: [[ Bug 11127 ]] Now we've written out the control colors and
+	//   object colors, reset the in-memory references to the control colors.
+	if (s_have_control_colors)
 	{
 		MCMemoryDeleteArray(colornames);
 
-		ncolors = m_control_color_count;
-		colors = m_control_colors;
-		colornames = m_control_color_names;
-		dflags = m_control_color_flags;
+		ncolors = s_control_color_count;
+		colors = s_control_colors;
+		colornames = s_control_color_names;
+		npatterns = s_control_pixmap_count;
+		patterns = s_control_pixmapids;
+		dflags = s_control_color_flags;
 
-		m_control_colors = nil;
-		m_control_color_names = nil;
-		m_control_color_count = 0;
+		s_control_colors = nil;
+		s_control_color_names = nil;
+		s_control_color_count = 0;
+		s_control_pixmap_count = 0;
+		s_control_pixmapids = nil;
 
-		m_have_control_colors = false;
+		s_have_control_colors = false;
 	}
 
 	if (stat != IO_NORMAL)
@@ -1696,7 +1763,10 @@ IO_stat MCImage::save(IO_handle stream, uint4 p_part, bool p_force_ext)
 					                     t_compressed->plane_sizes[i], stream)) != IO_NORMAL)
 						return stat;
 				}
-
+			}
+			// IM-2013-07-29: [[ Bugfix 11073 ]] If compressed data has a mask make sure we write it out
+			if (t_compressed != nil)
+			{
 				t_mask_data = t_compressed->mask;
 				t_mask_size = t_compressed->mask_size;
 			}
@@ -1730,7 +1800,19 @@ IO_stat MCImage::load(IO_handle stream, const char *version)
 	IO_stat stat;
 
 	resizequality = INTERPOLATION_BOX;
-
+	
+	// MW-2013-09-05: [[ Bug 11127 ]] Make sure the control color statics are reset.
+	MCMemoryDeleteArray(s_control_colors);
+	s_control_colors = nil;
+	MCMemoryDeleteArray(s_control_color_names);
+	s_control_color_names = nil;
+	s_control_color_count = 0;
+	s_control_pixmap_count = 0;
+	MCMemoryDeleteArray(s_control_pixmapids);
+	s_control_pixmapids = nil;
+	s_control_color_flags = 0;
+	s_have_control_colors = false;
+	
 	if ((stat = MCObject::load(stream, version)) != IO_NORMAL)
 		return stat;
 
@@ -1740,7 +1822,7 @@ IO_stat MCImage::load(IO_handle stream, const char *version)
 		blendlevel = 100 - (ink & 0x7F);
 		ink = GXblendSrcOver;
 	}
-
+	
 	if (flags & F_HAS_FILENAME)
 	{
 		char *t_filename = nil;
@@ -1781,8 +1863,12 @@ IO_stat MCImage::load(IO_handle stream, const char *version)
 			else
 			{
 				t_compressed->color_count = ncolors;
-				/* UNCHECKED */ MCMemoryNewArray(ncolors, t_compressed->planes);
-				/* UNCHECKED */ MCMemoryNewArray(ncolors, t_compressed->plane_sizes);
+				if (!MCMemoryNewArray(ncolors, t_compressed->planes) ||
+					!MCMemoryNewArray(ncolors, t_compressed->plane_sizes))
+				{
+					MCImageFreeCompressedBitmap(t_compressed);
+					return IO_ERROR;
+				}
 
 				uint2 i;
 				for (i = 0 ; i < ncolors ; i++)
@@ -1794,9 +1880,8 @@ IO_stat MCImage::load(IO_handle stream, const char *version)
 					}
 					if (t_compressed->plane_sizes[i] != 0)
 					{
-						/* UNCHECKED */ MCMemoryAllocate(t_compressed->plane_sizes[i], t_compressed->planes[i]);
-						if (IO_read(t_compressed->planes[i], sizeof(uint1),
-						            t_compressed->plane_sizes[i], stream) != IO_NORMAL)
+						if (!MCMemoryAllocate(t_compressed->plane_sizes[i], t_compressed->planes[i]) ||
+							IO_read(t_compressed->planes[i], sizeof(uint1), t_compressed->plane_sizes[i], stream) != IO_NORMAL)
 						{
 							MCImageFreeCompressedBitmap(t_compressed);
 							return IO_ERROR;
@@ -1807,16 +1892,23 @@ IO_stat MCImage::load(IO_handle stream, const char *version)
 			if (t_compressed->compression == F_RLE && ncolors != 0 && (flags & F_TRUE_COLOR) == 0)
 			{
 				t_compressed->color_count = ncolors;
-				/* UNCHECKED */ MCMemoryAllocateCopy(colors, sizeof(MCColor) * ncolors, t_compressed->colors);
+				if (!MCMemoryAllocateCopy(colors, sizeof(MCColor) * ncolors, t_compressed->colors))
+				{
+					MCImageFreeCompressedBitmap(t_compressed);
+					return IO_ERROR;
+				}
 			}
 
 			if ((stat = IO_read_uint4(&t_compressed->mask_size, stream)) != IO_NORMAL)
 				return stat;
 			if (t_compressed->mask_size != 0)
 			{
-				/* UNCHECKED */ MCMemoryAllocate(t_compressed->mask_size, t_compressed->mask);
-				if (IO_read(t_compressed->mask, sizeof(uint1), t_compressed->mask_size, stream) != IO_NORMAL)
+				if (!MCMemoryAllocate(t_compressed->mask_size, t_compressed->mask) ||
+					IO_read(t_compressed->mask, sizeof(uint1), t_compressed->mask_size, stream) != IO_NORMAL)
+				{
+					MCImageFreeCompressedBitmap(t_compressed);
 					return IO_ERROR;
+				}
 			}
 
 			uint16_t t_pixwidth, t_pixheight;
@@ -1842,23 +1934,43 @@ IO_stat MCImage::load(IO_handle stream, const char *version)
 	if (flags & F_ANGLE)
 		if ((stat = IO_read_uint2(&angle, stream)) != IO_NORMAL)
 			return stat;
-
-	if (m_have_control_colors)
+	
+	// MW-2013-09-05: [[ Bug 11127 ]] At this point the color/pixmap fields in the object
+	//   will pertain to the image colors. This isn't what we want anymore, so free them
+	//   (an RLE compressed rep will already have extracted the info it needs).
+	MCMemoryDeleteArray(colors);
+	for (uint32_t i = 0; i < ncolors; i++)
+		MCCStringFree(colornames[i]);
+	MCMemoryDeleteArray(colornames);
+	MCMemoryDeleteArray(patterns);
+	ncolors = 0;
+	npatterns = 0;
+	dflags = 0;
+	colornames = nil;
+	patterns = nil;
+	colors = nil;
+	
+	// MW-2013-09-05: [[ Bug 11127 ]] If we had an extended control color record, then
+	//   take those as the in-memory fields for colors and pixmaps as they are used
+	//   by the control rendering (the rep has already taken its colors if it needed them).
+	if (s_have_control_colors)
 	{
-		MCMemoryDeallocate(colors);
-		for (uint32_t i = 0; i < ncolors; i++)
-			MCCStringFree(colornames[i]);
-		MCMemoryDeallocate(colornames);
+		colors = s_control_colors;
+		colornames = s_control_color_names;
+		ncolors = s_control_color_count;
+		patterns = s_control_pixmapids;
+		npatterns = s_control_pixmap_count;
+		dflags = s_control_color_flags;
+		if (npatterns != 0 &&
+			!MCMemoryNewArray(npatterns, patterns))
+			return IO_ERROR;
 
-		colors = m_control_colors;
-		colornames = m_control_color_names;
-		ncolors = m_control_color_count;
-		dflags = m_control_color_flags;
-
-		m_control_colors = nil;
-		m_control_color_names = nil;
-		m_control_color_count = 0;
-		m_have_control_colors = false;
+		s_control_colors = nil;
+		s_control_color_names = nil;
+		s_control_color_count = 0;
+		s_control_pixmapids = nil;
+		s_control_pixmap_count = 0;
+		s_have_control_colors = false;
 	}
 
 	return loadpropsets(stream);
@@ -1883,7 +1995,7 @@ MCSharedString *MCImage::getclipboardtext(void)
 
 		MCImageBitmap *t_bitmap = nil;
 
-		t_success = lockbitmap(t_bitmap);
+		t_success = lockbitmap(t_bitmap, false);
 		if (t_success)
 			t_success = MCImageCreateClipboardData(t_bitmap, t_data);
 		unlockbitmap(t_bitmap);
@@ -1910,30 +2022,14 @@ void MCImage::apply_transform()
 {
 	uindex_t t_width = rect.width;
 	uindex_t t_height = rect.height;
-	if (m_rep != nil)
-		m_rep->GetGeometry(t_width, t_height);
+	/* UNCHECKED */ getsourcegeometry(t_width, t_height);
 
 	if (angle != 0)
-	{
-		rotate(angle);
-	}
+		rotate_transform(angle);
 	else if (rect.width != t_width || rect.height != t_height)
-	{
-		if (m_transformed == nil ||
-			m_transformed->GetWidth() != rect.width ||
-			m_transformed->GetHeight() != rect.height)
-		{
-			resize();
-		}
-	}
+		resize_transform();
 	else
-	{
-		if (m_transformed != nil)
-		{
-			m_transformed->Release();
-			m_transformed = nil;
-		}
-	}
+		m_has_transform = false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1973,7 +2069,7 @@ bool MCImage::convert_to_mutable()
 	MCImageBitmap *t_bitmap = nil;
 	if (m_rep != nil)
 	{
-		t_success = lockbitmap(t_bitmap);
+		t_success = lockbitmap(t_bitmap, true);
 		if (t_success)
 			t_success = nil != (t_rep = new MCMutableImageRep(this, t_bitmap));
 		unlockbitmap(t_bitmap);
@@ -2029,9 +2125,9 @@ void MCImage::finishediting()
 	MCImageRep *t_rep = m_rep;
 	MCImageFrame *t_frame = nil;
 
-	t_success = t_rep->LockImageFrame(0, t_frame);
+	t_success = t_rep->LockImageFrame(0, false, t_frame);
 	if (t_success)
-		t_success = setbitmap(t_frame->image);
+		t_success = setbitmap(t_frame->image, 1.0);
 	t_rep->UnlockImageFrame(0, t_frame);
 
 	/* UNCHECKED */ MCAssert(t_success);
@@ -2053,11 +2149,8 @@ void MCImage::setrep(MCImageRep *p_rep)
 
 	m_rep = t_rep;
 
-	if (m_transformed != nil)
-	{
-		m_transformed->Release();
-		m_transformed = nil;
-	}
+	m_has_transform = false;
+	m_scale_factor = 1.0;
 
 	// IM-2013-03-11: [[ BZ 10723 ]] If we have a new image, ensure that the current frame falls within the new framecount
 	// IM-2013-04-15: [[ BZ 10827 ]] Skip this check if the currentframe is 0 (preventing unnecessary image loading)
@@ -2079,35 +2172,81 @@ bool MCImage::setfilename(const char *p_filename)
 		return true;
 	}
 
+	const char *t_src_filename;
+	t_src_filename = nil;
+	
 	char *t_filename = nil;
 	char *t_resolved = nil;
 	MCImageRep *t_rep = nil;
 
-	t_success = MCCStringClone(p_filename, t_filename);
+	// get list of matching scaled images
+	MCImageScaledFile *t_scaled_files;
+	t_scaled_files = nil;
+	uint32_t t_scaled_file_count;
+	t_scaled_file_count = 0;
+	
+	MCGFloat t_scale;
+	t_scale = 1.0;
+	
+	// IM-2013-07-30: [[ ResIndependence ]] search for set of density-mapped files matching given filename
 	if (t_success)
-		t_success = nil != (t_resolved = getstack() -> resolve_filename(p_filename));
-	// MW-2013-07-01: [[ Bug 11001 ]] Reverted for 6.1.0 - this canonicalisation doesn't
-	//   take into account URL references.
-	/*{reverted for correct fix in next release}
-	// MW-2013-06-21: [[ Bug 10975 ]] Make sure we construct an absolute path to use
-	//   for Rep construction.
+		t_success = MCImageGetScaledFiles(p_filename, getstack(), t_scaled_files, t_scaled_file_count);
+	
 	if (t_success)
 	{
-		char *t_resolved_filename;
-		t_resolved_filename = MCS_get_canonical_path(t_resolved);
-		delete t_resolved;
-		t_resolved = t_resolved_filename;
+		if (t_scaled_file_count == 0)
+		{
+			// can't find scaled files, so revert to given filename
+			t_src_filename = p_filename;
+		}
+		else
+		{
+			// use image with lowest res higher than the device scale (or highest res if all are lower)
+			MCGFloat t_device_scale;
+			t_device_scale = MCResGetDeviceScale();
+			
+			const char *t_scaled_filename;
+			t_scaled_filename = nil;
+			
+			// set scale & filename to first scaled file in list
+			t_scale = t_scaled_files[0].scale;
+			t_scaled_filename = t_scaled_files[0].filename;
+			
+			for (uint32_t i = 0; i < t_scaled_file_count; i++)
+			{
+				// if current scale is lower than device scale then take any higher-res image
+				// else if current scale is higher than device res then take any lower-res image not lower than the device res
+				if ((t_scale < t_device_scale && t_scaled_files[i].scale > t_scale) ||
+					(t_scale > t_device_scale && t_scaled_files[i].scale < t_scale && t_scaled_files[i].scale >= t_device_scale))
+				{
+					t_scale = t_scaled_files[i].scale;
+					t_scaled_filename = t_scaled_files[i].filename;
+				}
+			}
+			
+			t_src_filename = t_scaled_filename;
+		}
 	}
-	 */
+	
 	if (t_success)
-		t_success = MCImageRepGetReferenced(t_resolved, t_rep);
+		t_success = MCCStringClone(p_filename, t_filename);
+	
+	if (t_success)
+		t_success = nil != (t_resolved = getstack() -> resolve_filename(t_src_filename));
+	
+	if (t_success)
+		t_success = MCImageRepGetReferenced(t_resolved != nil ? t_resolved : t_filename, t_rep);
 
 	MCCStringFree(t_resolved);
+	MCImageFreeScaledFileList(t_scaled_files, t_scaled_file_count);
 
 	if (t_success)
 	{
 		setrep(t_rep);
 		t_rep->Release();
+		
+		m_scale_factor = t_scale;
+		
 		flags &= ~(F_COMPRESSION | F_TRUE_COLOR | F_NEED_FIXING);
 		flags |= F_HAS_FILENAME;
 
@@ -2139,7 +2278,7 @@ bool MCImage::setdata(void *p_data, uindex_t p_size)
 	return t_success;
 }
 
-bool MCImage::setbitmap(MCImageBitmap *p_bitmap)
+bool MCImage::setbitmap(MCImageBitmap *p_bitmap, MCGFloat p_scale, bool p_update_geometry)
 {
 	bool t_success = true;
 
@@ -2151,6 +2290,27 @@ bool MCImage::setbitmap(MCImageBitmap *p_bitmap)
 		t_success = setcompressedbitmap(t_compressed);
 
 	MCImageFreeCompressedBitmap(t_compressed);
+
+	if (t_success)
+	{
+		angle = 0;
+		m_scale_factor = p_scale;
+		
+		if (p_update_geometry)
+		{
+	#ifdef FEATURE_DONT_RESIZE
+			if (!(flags & F_LOCK_LOCATION) && !(flags & F_PLAYER_DONT_RESIZE))
+	#else
+			if (!(flags & F_LOCK_LOCATION))
+	#endif
+			{
+				uint32_t t_width, t_height;
+				/* UNCHECKED */ getsourcegeometry(t_width, t_height);
+				rect . width = t_width;
+				rect . height = t_height;
+			}
+		}
+	}
 
 	return t_success;
 }
@@ -2197,25 +2357,171 @@ bool MCImage::setcompressedbitmap(MCImageCompressedBitmap *p_compressed)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool MCImage::lockbitmap(MCImageBitmap *&r_bitmap, bool p_update_transform)
+// IM-2013-07-26: [[ ResIndependence ]] render the image at the requested scale,
+// with any transformations (scale, angle) applied
+bool MCImage::copybitmap(MCGFloat p_scale, bool p_premultiplied, MCImageBitmap *&r_bitmap)
+{
+	bool t_success;
+	t_success = true;
+	
+	MCImageFrame *t_frame;
+	t_frame = nil;
+	
+	apply_transform();
+	
+	t_success = m_rep != nil;
+	
+	bool t_copy_pixels;
+	t_copy_pixels = !m_has_transform && p_scale == m_scale_factor;
+	
+	bool t_premultiplied;
+	t_premultiplied = p_premultiplied || !t_copy_pixels;
+	
+	if (t_success)
+		t_success = m_rep->LockImageFrame(currentframe, t_premultiplied, t_frame);
+	
+	bool t_mask, t_alpha;
+	if (t_success)
+		t_mask = MCImageBitmapHasTransparency(t_frame->image, t_alpha);
+	
+	if (t_success)
+	{
+		if (t_copy_pixels)
+		{
+			t_success = MCImageCopyBitmap(t_frame->image, r_bitmap);
+		}
+		else
+		{
+			MCGRaster t_raster;
+			t_raster.width = t_frame->image->width;
+			t_raster.height = t_frame->image->height;
+			t_raster.stride = t_frame->image->stride;
+			t_raster.pixels = t_frame->image->data;
+			t_raster.format = MCImageBitmapHasTransparency(t_frame->image) ? (t_premultiplied ? kMCGRasterFormat_ARGB : kMCGRasterFormat_U_ARGB) : kMCGRasterFormat_xRGB;
+			
+			uint32_t t_width, t_height;
+			t_width = ceil(rect.width * p_scale);
+			t_height = ceil(rect.height * p_scale);
+			
+			MCImageBitmap *t_bitmap;
+			t_bitmap = nil;
+			
+			t_success = MCImageBitmapCreate(t_width, t_height, t_bitmap);
+			
+			if (t_success)
+				MCImageBitmapClear(t_bitmap);
+			
+			MCGContextRef t_context;
+			t_context = nil;
+			
+			if (t_success)
+				t_success = MCGContextCreateWithPixels(t_bitmap->width, t_bitmap->height, t_bitmap->stride, t_bitmap->data, true, t_context);
+			
+			if (t_success)
+			{
+				MCGContextScaleCTM(t_context, p_scale, p_scale);
+				
+				if (m_has_transform)
+					MCGContextConcatCTM(t_context, m_transform);
+				
+				MCGRectangle t_dst;
+				t_dst = MCGRectangleMake(0, 0, t_frame->image->width / m_scale_factor, t_frame->image->height / m_scale_factor);
+				
+				MCGImageFilter t_filter;
+				t_filter = resizequality == INTERPOLATION_BICUBIC ? kMCGImageFilterBicubic : (resizequality == INTERPOLATION_BILINEAR ? kMCGImageFilterBilinear : kMCGImageFilterNearest);
+				
+				MCGContextDrawPixels(t_context, t_raster, t_dst, t_filter);
+				
+				MCGContextRelease(t_context);
+				
+				MCImageBitmapCheckTransparency(t_bitmap);
+				
+				if (!p_premultiplied)
+					MCImageBitmapUnpremultiply(t_bitmap);
+			}
+			
+			if (t_success)
+				r_bitmap = t_bitmap;
+			else
+				MCImageFreeBitmap(t_bitmap);
+		}
+	}
+	
+	if (m_rep != nil)
+		m_rep->UnlockImageFrame(currentframe, t_frame);
+	
+	return t_success;
+}
+
+
+bool MCImage::lockbitmap(MCImageBitmap *&r_bitmap, bool p_premultiplied, bool p_update_transform)
 {
 	if (p_update_transform)
 		apply_transform();
 
-	if (m_transformed != nil)
-	{
-		if (!m_transformed->LockImageFrame(currentframe, m_locked_frame))
-			return false;
-		r_bitmap = m_locked_frame->image;
-		return true;
-	}
-
 	if (m_rep != nil)
 	{
-		if (!m_rep->LockImageFrame(currentframe, m_locked_frame))
+		if (!m_rep->LockImageFrame(currentframe, p_premultiplied || m_has_transform, m_locked_frame))
 			return false;
-		r_bitmap = m_locked_frame->image;
-		return true;
+
+		if (!m_has_transform)
+		{
+			r_bitmap = m_locked_frame->image;
+			return true;
+		}
+
+		// Create a copy of the bitmap rendered with the current transform
+		bool t_success = true;
+
+		MCGContextRef t_context = nil;
+		MCGRaster t_raster;
+
+		uint32_t t_trans_width = rect.width;
+		uint32_t t_trans_height = rect.height;
+
+		// while cropping
+		if ((state & CS_SIZE) && (state & CS_EDITED))
+		{
+			/* OVERHAUL - REVISIT: compute from transform? */
+			t_trans_width = m_current_width;
+			t_trans_height = m_current_height;
+		}
+
+		MCLog("locking transformed image: (%d,%d) -> (%d,%d)", m_locked_frame->image->width, m_locked_frame->image->height, t_trans_width, t_trans_height);
+
+		t_success = MCImageBitmapCreate(t_trans_width, t_trans_height, m_transformed_bitmap);
+		MCImageBitmapClear(m_transformed_bitmap);
+
+		if (t_success)
+			t_success = MCGContextCreateWithPixels(t_trans_width, t_trans_height, m_transformed_bitmap->stride, m_transformed_bitmap->data, true, t_context);
+
+		if (t_success)
+		{
+			t_raster.width = m_locked_frame->image->width;
+			t_raster.height = m_locked_frame->image->height;
+			t_raster.stride = m_locked_frame->image->stride;
+			t_raster.pixels = m_locked_frame->image->data;
+			t_raster.format = kMCGRasterFormat_ARGB;
+
+			MCGRectangle t_dst = MCGRectangleMake(0, 0, m_locked_frame->image->width, m_locked_frame->image->height);
+			MCGImageFilter t_filter = resizequality == INTERPOLATION_BICUBIC ? kMCGImageFilterBicubic : (resizequality == INTERPOLATION_BILINEAR ? kMCGImageFilterBilinear : kMCGImageFilterNearest);
+			MCGContextConcatCTM(t_context, m_transform);
+			MCGContextDrawPixels(t_context, t_raster, t_dst, t_filter);
+		}
+
+		MCGContextRelease(t_context);
+
+		if (t_success)
+		{
+			MCImageBitmapCheckTransparency(m_transformed_bitmap);
+			if (!p_premultiplied)
+				MCImageBitmapUnpremultiply(m_transformed_bitmap);
+			r_bitmap = m_transformed_bitmap;
+			return true;
+		}
+
+		MCImageFreeBitmap(m_transformed_bitmap);
+		m_transformed_bitmap = nil;
 	}
 
 	return false;
@@ -2226,12 +2532,10 @@ void MCImage::unlockbitmap(MCImageBitmap *p_bitmap)
 	if (p_bitmap == nil || m_locked_frame == nil)
 		return;
 
-	if (m_transformed != nil)
-	{
-		m_transformed->UnlockImageFrame(currentframe, m_locked_frame);
-		m_locked_frame = nil;
-	}
-	else if (m_rep != nil)
+	MCImageFreeBitmap(m_transformed_bitmap);
+	m_transformed_bitmap = nil;
+
+	if (m_rep != nil)
 	{
 		m_rep->UnlockImageFrame(currentframe, m_locked_frame);
 		m_locked_frame = nil;
@@ -2276,9 +2580,26 @@ MCString MCImage::getrawdata()
 	return MCString((char*)t_data, t_size);
 }
 
+bool MCImage::getsourcegeometry(uint32_t &r_pixwidth, uint32_t &r_pixheight)
+{
+	if (m_rep == nil || !m_rep->GetGeometry(r_pixwidth, r_pixheight))
+		return false;
+	
+	r_pixwidth = r_pixwidth / m_scale_factor;
+	r_pixheight = r_pixheight / m_scale_factor;
+}
+
 void MCImage::getgeometry(uint32_t &r_pixwidth, uint32_t &r_pixheight)
 {
-	if (m_rep != nil && m_rep->GetGeometry(r_pixwidth, r_pixheight))
+	// while cropping
+	if ((state & CS_EDITED) && (state & CS_SIZE))
+	{
+		r_pixwidth = m_current_width;
+		r_pixheight = m_current_height;
+		return;
+	}
+
+	if (getsourcegeometry(r_pixwidth, r_pixheight))
 		return;
 
 	r_pixwidth = rect.width;

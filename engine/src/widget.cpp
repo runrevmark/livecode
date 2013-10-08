@@ -1698,6 +1698,16 @@ enum MCDialectSyntaxTokenType
 
 enum MCDialectSyntaxError
 {
+	kMCDialectSyntaxErrorNone,
+	
+	kMCDialectSyntaxErrorRightBracketExpected,
+	kMCDialectSyntaxErrorRightParanthesisExpected,
+	kMCDialectSyntaxErrorRightBraceExpected,
+	kMCDialectSyntaxErrorColonExpected,
+	kMCDialectSyntaxErrorEndExpected,
+	kMCDialectSyntaxErrorNormalIdentifierExpected,
+	kMCDialectSyntaxErrorRightAngledBracketExpected,
+	kMCDialectSyntaxErrorUnterminatedIdentifier,
 };
 
 typedef struct MCDialectState *MCDialectStateRef;
@@ -1748,23 +1758,196 @@ static bool MCDialectSyntaxParseFactor(const char*& x_syntax, MCDialectStateRef&
 static bool MCDialectSyntaxParseConcatenation(const char *& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
 static bool MCDialectSyntaxParseAlternation(const char *& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
 
-static bool MCDialectSyntaxMatchRightBracket(const char *& x_syntax, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxMatchRightParanthesis(const char *& x_syntax, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxMatchRightBrace(const char *& x_syntax, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxMatchColon(const char *& x_syntax, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxMatchEnd(const char *& x_syntax, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxMatchIdentifier(const char *& x_syntax, MCDialectIdentifierRef& r_id, MCDialectSyntaxError& r_error);
+static void MCDialectSyntaxSkipWhitespace(const char*& x_syntax)
+{
+	while(*x_syntax != '\0')
+		if (!isspace(*x_syntax))
+			break;
+}
 
-static bool MCDialectSyntaxSkipComma(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipLeftBracket(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipLeftParanthesis(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipLeftBrace(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipAt(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipSemicolon(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipBar(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error);
-static bool MCDialectSyntaxSkipAnyIdentifier(const char*& x_syntax, MCDialectSyntaxTokenType& r_type, MCDialectIdentifierRef& r_id, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxMatchCharToken(const char*& x_syntax, char p_char, MCDialectSyntaxError p_error, MCDialectSyntaxError& r_error)
+{
+	MCDialectSyntaxSkipWhitespace(x_syntax);
+	if (*x_syntax == p_char)
+		return true;
+		
+	r_error = p_error;
+	
+	return true;
+}
 
-static bool MCDialectSyntaxWillMatchConcatEnd(const char*& x_syntax, bool& r_will_match, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxSkipCharToken(const char*& x_syntax, char p_char, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	MCDialectSyntaxSkipWhitespace(x_syntax);
+	if (*x_syntax == p_char)
+		r_skipped = true;
+	else
+		r_skipped = false;
+		
+	return true;
+}
+
+static bool MCDialectSyntaxMatchRightBracket(const char *& x_syntax, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxMatchCharToken(x_syntax, ']', kMCDialectSyntaxErrorRightBracketExpected, r_error);
+}
+
+static bool MCDialectSyntaxMatchRightParanthesis(const char *& x_syntax, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxMatchCharToken(x_syntax, ')', kMCDialectSyntaxErrorRightParanthesisExpected, r_error);
+}
+
+static bool MCDialectSyntaxMatchRightBrace(const char *& x_syntax, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxMatchCharToken(x_syntax, '}', kMCDialectSyntaxErrorRightBraceExpected, r_error);
+}
+
+static bool MCDialectSyntaxMatchColon(const char *& x_syntax, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxMatchCharToken(x_syntax, ':', kMCDialectSyntaxErrorColonExpected, r_error);
+}
+
+static bool MCDialectSyntaxMatchEnd(const char *& x_syntax, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxMatchCharToken(x_syntax, '\0', kMCDialectSyntaxErrorEndExpected, r_error);
+}
+
+static bool MCDialectSyntaxSkipComma(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, ',', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxSkipLeftBracket(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, ']', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxSkipLeftParanthesis(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, ')', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxSkipLeftBrace(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, '}', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxSkipAt(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, '@', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxSkipSemicolon(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, ';', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxSkipBar(const char*& x_syntax, bool& r_skipped, MCDialectSyntaxError& r_error)
+{
+	return MCDialectSyntaxSkipCharToken(x_syntax, '|', r_skipped, r_error);
+}
+
+static bool MCDialectSyntaxMatchIdentifier(const char *& x_syntax, MCDialectIdentifierRef& r_id, MCDialectSyntaxError& r_error)
+{
+	MCDialectSyntaxSkipWhitespace(x_syntax);
+	
+	const char *t_id_start;
+	t_id_start = x_syntax;
+	while(*x_syntax != '\0')
+		if (!isalpha(*x_syntax))
+			break;
+			
+	if (t_id_start == x_syntax)
+	{
+		r_error = kMCDialectSyntaxErrorNormalIdentifierExpected;
+		return false;
+	}
+			
+	// Build id between t_id_start and x_syntax
+	
+	return true;
+}
+
+static bool MCDialectSyntaxSkipAnyIdentifier(const char*& x_syntax, MCDialectSyntaxTokenType& r_type, MCDialectIdentifierRef& r_id, MCDialectSyntaxError& r_error)
+{
+	MCDialectSyntaxSkipWhitespace(x_syntax);
+	
+	const char *t_id_start;
+	t_id_start = x_syntax;
+	
+	MCDialectSyntaxTokenType t_type;
+	if (*x_syntax == '<')
+	{
+		t_type = kMCDialectSyntaxTokenTypeAngledIdentifier;
+		x_syntax += 1;
+	}
+	else if (*x_syntax == '\'')
+	{
+		t_type = kMCDialectSyntaxTokenTypeQuotedIdentifier;
+		x_syntax += 1;
+	}
+	
+	while(*x_syntax != '\0')
+	{
+		if (t_type == kMCDialectSyntaxTokenTypeQuotedIdentifier)
+		{
+			if (*x_syntax != '\'')
+				break;
+		}
+		else if (!isalpha(*x_syntax))
+			break;
+	}
+	
+	const char *t_id_end;
+	t_id_end = x_syntax;
+			
+	if (t_type == kMCDialectSyntaxTokenTypeAngledIdentifier)
+	{
+		if (*x_syntax != '>')
+		{
+			r_error = kMCDialectSyntaxErrorRightAngledBracketExpected;
+			return false;
+		}
+		t_id_start += 1;
+		t_id_end -= 1;
+	}
+	else if (t_type == kMCDialectSyntaxTokenTypeQuotedIdentifier)
+	{
+		if (*x_syntax == '\0')
+		{
+			r_error = kMCDialectSyntaxErrorUnterminatedIdentifier;
+			return false;
+		}
+		t_id_start += 1;
+		t_id_end -= 1;
+	}
+	
+	if (t_id_start == t_id_end)
+	{
+		r_error = kMCDialectSyntaxErrorNormalIdentifierExpected;
+		return false;
+	}
+	
+	// Build id between t_id_start and t_id_end
+	
+	return true;
+}
+
+static bool MCDialectSyntaxWillMatchConcatEnd(const char*& x_syntax, bool& r_will_match, MCDialectSyntaxError& r_error)
+{
+	MCDialectSyntaxSkipWhitespace(x_syntax);
+	
+	if (*x_syntax == '\0' ||
+		*x_syntax == ')' ||
+		*x_syntax == '}' ||
+		*x_syntax == ']' ||
+		*x_syntax == '|')
+		r_will_match = true;
+	else
+		r_will_match = false;
+		
+	return true;
+}
 
 static bool MCDialectSyntaxParseOptional(const char*& x_syntax, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {

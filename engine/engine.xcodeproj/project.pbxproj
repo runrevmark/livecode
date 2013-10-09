@@ -263,6 +263,7 @@
 		4D2A57EF1198637C00135143 /* mode_installer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2A57EE1198637C00135143 /* mode_installer.cpp */; };
 		4D2A5830119871D500135143 /* minizip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2A582F119871D500135143 /* minizip.cpp */; };
 		4D2A583D1198727F00135143 /* internal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D587E4B0B8096FD00200116 /* internal.cpp */; };
+		4D2FC178180491F000F8E469 /* dialect.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2FC177180491F000F8E469 /* dialect.cpp */; };
 		4D377262150785AF000B0EB0 /* fieldhtml.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D377261150785AF000B0EB0 /* fieldhtml.cpp */; };
 		4D37727E150787EA000B0EB0 /* fieldrtf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D37727D150787EA000B0EB0 /* fieldrtf.cpp */; };
 		4D407C0C15F8D15600AA3ABC /* osxscriptold.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D407C0B15F8D15600AA3ABC /* osxscriptold.cpp */; };
@@ -894,6 +895,8 @@
 		4D2A57EE1198637C00135143 /* mode_installer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = mode_installer.cpp; path = src/mode_installer.cpp; sourceTree = "<group>"; };
 		4D2A582F119871D500135143 /* minizip.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = minizip.cpp; path = src/minizip.cpp; sourceTree = "<group>"; };
 		4D2A585411997BDE00135143 /* internal_development.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = internal_development.cpp; path = src/internal_development.cpp; sourceTree = "<group>"; };
+		4D2FC176180491F000F8E469 /* dialect.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = dialect.h; path = src/dialect.h; sourceTree = "<group>"; };
+		4D2FC177180491F000F8E469 /* dialect.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = dialect.cpp; path = src/dialect.cpp; sourceTree = "<group>"; };
 		4D377261150785AF000B0EB0 /* fieldhtml.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = fieldhtml.cpp; path = src/fieldhtml.cpp; sourceTree = "<group>"; };
 		4D3772671507869A000B0EB0 /* textbuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = textbuffer.h; path = src/textbuffer.h; sourceTree = "<group>"; };
 		4D37727D150787EA000B0EB0 /* fieldrtf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = fieldrtf.cpp; path = src/fieldrtf.cpp; sourceTree = "<group>"; };
@@ -2400,6 +2403,8 @@
 				4D587E150B8096E600200116 /* undolst.h */,
 				4D587E620B8096FD00200116 /* vclip.cpp */,
 				4D587DF80B8096E600200116 /* vclip.h */,
+				4D2FC176180491F000F8E469 /* dialect.h */,
+				4D2FC177180491F000F8E469 /* dialect.cpp */,
 			);
 			name = "Core - Objects";
 			sourceTree = "<group>";
@@ -3449,6 +3454,7 @@
 				E8B5BB1416DF77DF00CA02FB /* imagelist.cpp in Sources */,
 				E8AF465B174CF247000B2F9E /* surface.cpp in Sources */,
 				E8AE876C177B3F5C0041B7E0 /* cgimageutil.cpp in Sources */,
+				4D2FC178180491F000F8E469 /* dialect.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

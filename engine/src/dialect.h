@@ -19,6 +19,23 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 typedef struct MCDialect *MCDialectRef;
 
+enum MCDialectTokenType
+{
+	kMCDialectTokenTypeNone,
+	kMCDialectTokenTypeIdentifier,
+	kMCDialectTokenTypeInteger,
+	kMCDialectTokenTypeReal,
+	kMCDialectTokenTypeString,
+};
+
+struct MCDialectParseCallbacks
+{
+	bool (*process_null)(void *ctxt, uindex_t line, uindex_t column, void*& r_value);
+	bool (*process_token)(void *ctxt, uindex_t line, uindex_t column, MCDialectTokenType token_type, MCNameRef token, void*& r_value);
+	bool (*process_action)(void *ctxt, uindex_t line, uindex_t column, void *action_id, void **values, uindex_t value_count, void*& r_value);
+	bool (*process_error)(void *ctxt, uindex_t line, uindex_t column);
+};
+
 void MCDialectCreate(MCDialectRef& r_dialect);
 void MCDialectDestroy(MCDialectRef dialect);
 
@@ -26,7 +43,9 @@ bool MCDialectHasError(MCDialectRef dialect);
 const char *MCDialectGetErrorString(MCDialectRef dialect);
 uindex_t MCDialectGetErrorOffset(MCDialectRef dialect);
 
-void MCDialectAddRule(MCDialectRef dialect, const char *syntax, uindex_t action_id);
+void MCDialectDefine(MCDialectRef dialect, const char *syntax, void *action);
+
+bool MCDialectParse(MCDialectRef dialect, const char *script, const MCDialectParseCallbacks& callbacks, void *context, void*& r_result);
 
 typedef void (*MCDialectPrintCallback)(void *context, const char *format, ...);
 void MCDialectPrint(MCDialectRef dialect, MCDialectPrintCallback callback, void *context);

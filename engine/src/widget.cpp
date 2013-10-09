@@ -1631,13 +1631,13 @@ enum MCWidgetDialectActionType
 
 static struct { const char *syntax; MCWidgetDialectActionType action;} kMCWidgetDialectPhrases[] =
 {
-	{ "root: widget NAME [ based on NAME ] ; { <definition> , ; } ; end widget", kMCWidgetDialectActionWidgetDefinition },
+	{ "root: widget IDENTIFIER [ based on IDENTIFIER ] ; { <definition> , ; } ; end widget", kMCWidgetDialectActionWidgetDefinition },
 
-	{ "definition: variable NAME [ is <type> ]", kMCWidgetDialectActionVariableDefinition },
-	{ "definition: property NAME [ is <type> ] [ getter ID ] [ setter ID ]", kMCWidgetDialectActionPropertyDefinition },
-	{ "definition: method ID { <parameter> , ',' } [ returns <type> ] ; { <command> } ; end method", kMCWidgetDialectActionMethodDefinition },
+	{ "definition: variable IDENTIFIER [ is <type> ]", kMCWidgetDialectActionVariableDefinition },
+	{ "definition: property IDENTIFIER [ is <type> ] [ getter IDENTIFIER ] [ setter IDENTIFIER ]", kMCWidgetDialectActionPropertyDefinition },
+	{ "definition: method IDENTIFIER { <parameter> , ',' } [ returns <type> ] ; { <command> , ; } ; end method", kMCWidgetDialectActionMethodDefinition },
 	
-	{ "parameter: [ @in | @out | @inout ] NAME [ is <type> ]", kMCWidgetDialectActionParameterDefinition },
+	{ "parameter: [ @in | @out | @inout ] IDENTIFIER [ is <type> ]", kMCWidgetDialectActionParameterDefinition },
 	
 	{ "type: boolean", kMCWidgetDialectActionBooleanType },
 	{ "type: integer [ between INTEGER and INTEGER ]", kMCWidgetDialectActionIntegerType },
@@ -1654,7 +1654,7 @@ bool MCWidgetCreateDialect(MCDialectRef& r_dialect)
 	
 	MCDialectCreate(t_dialect);
 	for(uindex_t i = 0; i < sizeof(kMCWidgetDialectPhrases) / sizeof(kMCWidgetDialectPhrases[0]); i++)
-		MCDialectAddRule(t_dialect, kMCWidgetDialectPhrases[i] . syntax, kMCWidgetDialectPhrases[i] . action);
+		MCDialectDefine(t_dialect, kMCWidgetDialectPhrases[i] . syntax, (void *)kMCWidgetDialectPhrases[i] . action);
 	
 	if (!MCDialectHasError(t_dialect))
 	{

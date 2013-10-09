@@ -137,7 +137,7 @@ static bool MCDialectSyntaxParse(const char*& x_syntax, MCNameRef& r_scope, MCDi
 
 struct MCDialectRule
 {
-	uindex_t action_id;
+	void *action;
 	MCDialectStateRef pattern;
 };
 
@@ -188,7 +188,7 @@ uindex_t MCDialectGetErrorOffset(MCDialectRef self)
 	return self -> error_offset;
 }
 
-void MCDialectAddRule(MCDialectRef self, const char *p_syntax, uindex_t p_action_id)
+void MCDialectDefine(MCDialectRef self, const char *p_syntax, void *p_action)
 {
 	MCDialectSyntaxError t_error;
 	MCNewAutoNameRef t_scope_name;
@@ -227,10 +227,59 @@ void MCDialectAddRule(MCDialectRef self, const char *p_syntax, uindex_t p_action
 	/* UNCHECKED */ MCMemoryResizeArray(t_scope -> rule_count + 1, t_scope -> rules, t_scope -> rule_count);
 	t_rule = &t_scope -> rules[t_scope -> rule_count - 1];
 	
-	t_rule -> action_id = p_action_id;
+	t_rule -> action = p_action;
 	t_rule -> pattern = t_state . Take();
 }
 
+#if 0
+struct MCDialectParseInfo
+{
+	const MCDialectParseCallbacks *callbacks;
+	void *context;
+	
+	void *actions;
+	uindex_t action_count;
+}
+
+struct MCDialectParsePoint
+{
+	const char *script;
+	uindex_t line;
+	uindex_t column;
+	uindex_t action_index;
+};
+
+static bool MCDialectParseScope(MCDialectRef self, const MCDialectParseInfo& p_info, const MCDialectParsePoint& p_point, uindex_t p_scope_index)
+{
+	MCDialectScope *t_scope;
+	t_scope = &self -> scopes[p_scope_index];
+
+	for(uindex_t i = 0; i < t_scope -> rule_count; i++)
+	{
+		MCDialectParsePoint t_new_point;
+		t_new_point = p_point;
+		
+		MCDialectParseRule(self, p_info, t_new_point, t_scope -> rules[i]
+	}
+}
+#endif
+
+bool MCDialectParse(MCDialectRef self, const char *p_script, const MCDialectParseCallbacks& p_callbacks, void *p_context, void*& r_result)
+{
+#if 0
+	MCDialectParseInfo t_info;
+	t_info . callbacks = p_callbacks;
+	t_info . context = p_context;
+	
+	MCDialectParsePoint t_point;
+	t_point . script = p_script;
+	t_point . line = 1;
+	t_point . column = 1;
+	t_point . action_index = 0;
+	return MCDialectParseScope(self, t_info, t_point, 0, r_result);
+#endif
+}
+						   
 void MCDialectPrint(MCDialectRef self, MCDialectPrintCallback p_callback, void *p_context)
 {
 	for(uindex_t i = 0; i < self -> scope_count; i++)
@@ -240,7 +289,7 @@ void MCDialectPrint(MCDialectRef self, MCDialectPrintCallback p_callback, void *
 		{
 			p_callback(p_context, j == 0 ? "\t: " : "\t| ");
 			MCDialectStatePrint(self -> scopes[i] . rules[j] . pattern, p_callback, p_context);
-			p_callback(p_context, "\t{ %d }\n", self -> scopes[i] . rules[j] . action_id);
+			p_callback(p_context, "\t{ %d }\n", self -> scopes[i] . rules[j] . action);
 		}
 	}
 }
@@ -1028,7 +1077,7 @@ public:
 		{
 			MCAutoPointer<char> t_line_str;
 			t_line_str = t_lines[t_line_index] . clone();
-			MCDialectAddRule(t_dialect, *t_line_str, t_line_index);
+			MCDialectDefine(t_dialect, *t_line_str, (void *)t_line_index);
 			if (MCDialectHasError(t_dialect))
 				break;
 		}
@@ -1094,6 +1143,79 @@ private:
 	MCVarref *m_it;
 };
 
+static bool dialect_parse_process_null(void *p_context, uindex_t p_line, uindex_t p_column, void*& r_value)
+{
+	return false;
+}
+
+static bool dialect_parse_process_token(void *p_context, uindex_t p_line, uindex_t p_column, MCDialectTokenType p_token_type, MCNameRef p_token, void*& r_value)
+{
+	return false;
+}
+
+static bool dialect_parse_process_action(void *p_context, uindex_t p_line, uindex_t p_column, void *p_action, void **p_values, uindex_t p_value_count, void*& r_value)
+{
+	return false;
+}
+
+static bool dialect_parse_process_error(void *p_context, uindex_t p_line, uindex_t p_column)
+{
+	return false;
+}
+
+class MCInternalDialectParse: public MCStatement
+{
+public:
+	MCInternalDialectParse(void)
+	{
+		m_script = nil;
+	}
+	
+	~MCInternalDialectParse(void)
+	{
+		delete m_script;
+	}
+	
+	Parse_stat parse(MCScriptPoint& sp)
+	{
+		initpoint(sp);
+		if (sp . parseexp(False, True, &m_script) != PS_NORMAL)
+			return PS_ERROR;
+		return PS_NORMAL;
+	}
+	
+	Exec_stat exec(MCExecPoint& ep)
+	{
+		if (m_script -> eval(ep) != ES_NORMAL)
+			return ES_ERROR;
+		
+		if (s_dialect == nil)
+		{
+			MCresult -> sets("no dialect");
+			return ES_NORMAL;
+		}
+		
+		MCAutoPointer<char> t_script;
+		t_script = ep . getsvalue() . clone();
+		
+		MCDialectParseCallbacks t_callbacks =
+		{
+			dialect_parse_process_null,
+			dialect_parse_process_token,
+			dialect_parse_process_action,
+			dialect_parse_process_error
+		};
+		
+		void *t_result;
+		MCDialectParse(s_dialect, *t_script, t_callbacks, &ep, t_result);
+	
+		return ES_NORMAL;
+	}
+	
+private:
+	MCExpression *m_script;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Small helper template
@@ -1104,6 +1226,7 @@ MCInternalVerbInfo MCinternalverbs[] =
 {
 	{ "dialect", "configure", class_factory<MCInternalDialectConfigure> },
 	{ "dialect", "print", class_factory<MCInternalDialectPrint> },
+	{ "dialect", "parse", class_factory<MCInternalDialectParse> },
 	{ nil, nil, nil },
 };
 

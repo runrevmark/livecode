@@ -54,6 +54,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "deploy.h"
 #include "capsule.h"
 #include "player.h"
+#include "internal.h"
 
 #if defined(_WINDOWS_DESKTOP)
 #include "w32prefix.h"
@@ -779,6 +780,13 @@ bool MCModeCanLoadHome(void)
 
 MCStatement *MCModeNewCommand(int2 which)
 {
+	switch(which)
+	{
+		case S_INTERNAL:
+			return new MCInternal;
+		default:
+			break;
+	}
 	return NULL;
 }
 

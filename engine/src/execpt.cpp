@@ -821,30 +821,29 @@ void MCExecPoint::appendmcstring(const MCString& p_string)
 	concat(p_string, EC_NONE, True);
 }
 
-void MCExecPoint::appendstringf(const char *p_spec, ...)
+void MCExecPoint::appendstringfv(const char *p_spec, va_list p_args)
 {
-	va_list t_args;
 	int t_count;
-
+	
 #if defined(_HAS_VSCPRINTF)
-	va_start(t_args, p_spec);
-	t_count = _vscprintf(p_spec, t_args);
-	va_end(t_args);
+	//va_start(t_args, p_spec);
+	t_count = _vscprintf(p_spec, p_args);
+	//va_end(t_args);
 #elif defined(_HAS_VSNPRINTF)
-	va_start(t_args, p_spec);
-	t_count = vsnprintf(nil, 0, p_spec, t_args);
-	va_end(t_args);
+	//va_start(t_args, p_spec);
+	t_count = vsnprintf(nil, 0, p_spec, p_args);
+	//va_end(t_args);
 #else
 #error MCExecPoint::setstringf not implemented
 #endif
-
+	
 	if (t_count < 256)
 	{
 		char t_buffer[256];
-		va_start(t_args, p_spec);
-		vsprintf(t_buffer, p_spec, t_args);
-		va_end(t_args);
-
+		//va_start(t_args, p_spec);
+		vsprintf(t_buffer, p_spec, p_args);
+		//va_end(t_args);
+		
 		concat(t_buffer, EC_NONE, True);
 	}
 	else
@@ -853,13 +852,21 @@ void MCExecPoint::appendstringf(const char *p_spec, ...)
 		t_buffer = (char *)malloc(t_count + 1);
 		if (t_buffer != nil)
 		{
-			va_start(t_args, p_spec);
-			vsprintf(t_buffer, p_spec, t_args);
-			va_end(t_args);
+			//va_start(t_args, p_spec);
+			vsprintf(t_buffer, p_spec, p_args);
+			//va_end(t_args);
 			concat(t_buffer, EC_NONE, True);
 			free(t_buffer);
 		}
 	}
+}
+
+void MCExecPoint::appendstringf(const char *p_spec, ...)
+{
+	va_list t_args;
+	va_start(t_args, p_spec);
+	appendstringfv(p_spec, t_args);
+	va_end(t_args);
 }
 
 void MCExecPoint::appendchars(const char *p_chars, uindex_t p_count)

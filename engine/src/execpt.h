@@ -487,6 +487,7 @@ public:
 	void appendcstring(const char *string);
 	void appendmcstring(const MCString& string);
 	void appendstringf(const char *spec, ...);
+	void appendstringfv(const char *spec, va_list args);
 	void appendchars(const char *string, uindex_t length);
 	void appendchar(char character);
 	void appendunichars(const uint2 *string, uindex_t length);

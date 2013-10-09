@@ -112,6 +112,48 @@ private:
 	MCNameRef m_name;
 };
 
+class MCNewAutoNameRef
+{
+public:
+	MCNewAutoNameRef(void)
+	{
+		m_name = nil;
+	}
+	
+	~MCNewAutoNameRef(void)
+	{
+		MCNameDelete(m_name);
+	}
+	
+	MCNameRef Take(void)
+	{
+		MCNameRef t_name;
+		t_name = m_name;
+		m_name = nil;
+		return t_name;
+	}
+	
+	void Give(MCNameRef p_name)
+	{
+		assert(m_name == nil);
+		m_name = p_name;
+	}
+	
+	MCNameRef& operator & (void)
+	{
+		assert(m_name == nil);
+		return m_name;
+	}
+	
+	MCNameRef operator * (void) const
+	{
+		return m_name;
+	}
+	
+private:
+	MCNameRef m_name;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #endif

@@ -176,16 +176,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 //////////////////////////////////////////////////////////////////////
 //
-//  FOUNDATION TYPES
-//
-
-class MCString;
-
-#include "name.h"
-#include "rawarray.h"
-
-//////////////////////////////////////////////////////////////////////
-//
 //  HANDLE DEFINITIONS
 //
 
@@ -1085,6 +1075,16 @@ typedef unsigned long       Atom;
 #define XK_WheelDown	0xFF1D
 #define XK_WheelLeft	0xFF1E
 #define XK_WheelRight	0xFF1F
+
+//////////////////////////////////////////////////////////////////////
+//
+//  FOUNDATION TYPES
+//
+
+class MCString;
+
+#include "name.h"
+#include "rawarray.h"
 
 //////////////////////////////////////////////////////////////////////
 //

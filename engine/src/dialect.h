@@ -19,11 +19,16 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 typedef struct MCDialect *MCDialectRef;
 
-void MCDialectCreate(MCDialectRef& r_babel);
-void MCDialectDestroy(MCDialectRef babel);
+void MCDialectCreate(MCDialectRef& r_dialect);
+void MCDialectDestroy(MCDialectRef dialect);
 
-bool MCDialectIsValid(MCDialectRef babel);
+bool MCDialectHasError(MCDialectRef dialect);
+const char *MCDialectGetErrorString(MCDialectRef dialect);
+uindex_t MCDialectGetErrorOffset(MCDialectRef dialect);
 
-void MCDialectAddRule(MCDialectRef babal, const char *syntax, uindex_t action_id);
+void MCDialectAddRule(MCDialectRef dialect, const char *syntax, uindex_t action_id);
+
+typedef void (*MCDialectPrintCallback)(void *context, const char *format, ...);
+void MCDialectPrint(MCDialectRef dialect, MCDialectPrintCallback callback, void *context);
 
 #endif

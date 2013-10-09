@@ -1656,7 +1656,7 @@ bool MCWidgetCreateDialect(MCDialectRef& r_dialect)
 	for(uindex_t i = 0; i < sizeof(kMCWidgetDialectPhrases) / sizeof(kMCWidgetDialectPhrases[0]); i++)
 		MCDialectAddRule(t_dialect, kMCWidgetDialectPhrases[i] . syntax, kMCWidgetDialectPhrases[i] . action);
 	
-	if (MCDialectIsValid(t_dialect))
+	if (!MCDialectHasError(t_dialect))
 	{
 		r_dialect = t_dialect;
 		return true;

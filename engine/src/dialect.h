@@ -51,4 +51,52 @@ bool MCDialectParse(MCDialectRef dialect, const char *script, const MCDialectPar
 typedef void (*MCDialectPrintCallback)(void *context, const char *format, ...);
 void MCDialectPrint(MCDialectRef dialect, MCDialectPrintCallback callback, void *context);
 
+///////////////////////////////////////////////////////////////////////////////
+
+typedef struct MCDialectBuilder *MCDialectBuilderRef;
+
+enum MCDialectBuilderError
+{
+	kMCDialectBuilderErrorNone,
+	kMCDialectBuilderErrorOutOfMemory,
+	kMCDialectBuilderErrorNoPhraseInProgress,
+	kMCDialectBuilderErrorPhraseAlreadyInProgress,
+	kMCDialectBuilderErrorInsufficentStateArity,
+	kMCDialectBuilderErrorPatternNotFinished,
+	kMCDialectBuilderErrorUnbalancedPattern,
+	kMCDialectBuilderErrorMismatchedPattern,
+};
+
+void MCDialectBuilderBegin(MCDialectBuilderRef& r_builder);
+void MCDialectBuilderEnd(MCDialectBuilderRef builder, MCDialectBuilderError& r_error, MCDialectRef& r_dialect);
+
+bool MCDialectBuilderHasError(MCDialectBuilderRef builder);
+
+void MCDialectBuilderCancel(MCDialectBuilderRef builder);
+
+void MCDialectBuilderBeginRule(MCDialectBuilderRef builder, uindex_t index, uindex_t action);
+void MCDialectBuilderEndRule(MCDialectBuilderRef builder);
+
+void MCDialectBuilderBeginAlternation(MCDialectBuilderRef builder);
+void MCDialectBuilderEndAlternation(MCDialectBuilderRef builder);
+
+void MCDialectBuilderBeginConcatenation(MCDialectBuilderRef builder);
+void MCDialectBuilderEndConcatenation(MCDialectBuilderRef builder);
+
+void MCDialectBuilderBeginRepetition(MCDialectBuilderRef builder);
+void MCDialectBuilderEndRepetition(MCDialectBuilderRef builder);
+
+void MCDialectBuilderMatchEpsilon(MCDialectBuilderRef builder);
+void MCDialectBuilderMatchRule(MCDialectBuilderRef builder, uindex_t index);
+void MCDialectBuilderMatchToken(MCDialectBuilderRef builder, uindex_t index, bool marked);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCDialectGrammarBegin(MCDialectBuilderRef builder, MCDialectGrammarRef& r_grammar);
+bool MCDialectGrammarEnd(MCDialectGrammarRef grammar);
+
+void MCDialectGrammarDefineRule(MCDialectGrammarRef grammar, const char *rule, uindex_t action);
+
+////////////////////////////////////////////////////////////////////////////////
+
 #endif

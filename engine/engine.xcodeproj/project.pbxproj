@@ -263,7 +263,6 @@
 		4D2A57EF1198637C00135143 /* mode_installer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2A57EE1198637C00135143 /* mode_installer.cpp */; };
 		4D2A5830119871D500135143 /* minizip.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2A582F119871D500135143 /* minizip.cpp */; };
 		4D2A583D1198727F00135143 /* internal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D587E4B0B8096FD00200116 /* internal.cpp */; };
-		4D2FC178180491F000F8E469 /* dialect.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2FC177180491F000F8E469 /* dialect.cpp */; };
 		4D377262150785AF000B0EB0 /* fieldhtml.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D377261150785AF000B0EB0 /* fieldhtml.cpp */; };
 		4D37727E150787EA000B0EB0 /* fieldrtf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D37727D150787EA000B0EB0 /* fieldrtf.cpp */; };
 		4D407C0C15F8D15600AA3ABC /* osxscriptold.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D407C0B15F8D15600AA3ABC /* osxscriptold.cpp */; };
@@ -274,6 +273,11 @@
 		4D4F9E3B13CDF24A00B9B15D /* osximage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F9E3913CDF24A00B9B15D /* osximage.cpp */; };
 		4D4F9E3C13CDF24A00B9B15D /* osxmisc.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F9E3A13CDF24A00B9B15D /* osxmisc.cpp */; };
 		4D4F9E6713CDFB8100B9B15D /* osxfield.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F9E6613CDFB8100B9B15D /* osxfield.cpp */; };
+		4D5837DA1806A9E8006DE6A2 /* dialect-builder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D5837D91806A9E8006DE6A2 /* dialect-builder.cpp */; };
+		4D58380E1806C2D6006DE6A2 /* dialect.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2FC177180491F000F8E469 /* dialect.cpp */; };
+		4D5839471806F519006DE6A2 /* dialect-state.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D5839461806F519006DE6A2 /* dialect-state.cpp */; };
+		4D5839481806F527006DE6A2 /* dialect-builder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D5837D91806A9E8006DE6A2 /* dialect-builder.cpp */; };
+		4D5839831806F663006DE6A2 /* dialect.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D2FC177180491F000F8E469 /* dialect.cpp */; };
 		4D5880860B80BDF000200116 /* QuickTime.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D5880850B80BDF000200116 /* QuickTime.framework */; };
 		4D5881210B80BF1E00200116 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D5881200B80BF1E00200116 /* IOKit.framework */; };
 		4D58856B0B80DEAC00200116 /* da.lproj in Resources */ = {isa = PBXBuildFile; fileRef = 4D58854C0B80DEAB00200116 /* da.lproj */; };
@@ -913,6 +917,9 @@
 		4D4F9E3A13CDF24A00B9B15D /* osxmisc.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = osxmisc.cpp; path = src/osxmisc.cpp; sourceTree = "<group>"; };
 		4D4F9E4D13CDF6EA00B9B15D /* osxtheme.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = osxtheme.h; path = src/osxtheme.h; sourceTree = "<group>"; };
 		4D4F9E6613CDFB8100B9B15D /* osxfield.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = osxfield.cpp; path = src/osxfield.cpp; sourceTree = "<group>"; };
+		4D5837D81806A9DA006DE6A2 /* dialect-internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "dialect-internal.h"; path = "src/dialect-internal.h"; sourceTree = "<group>"; };
+		4D5837D91806A9E8006DE6A2 /* dialect-builder.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "dialect-builder.cpp"; path = "src/dialect-builder.cpp"; sourceTree = "<group>"; };
+		4D5839461806F519006DE6A2 /* dialect-state.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "dialect-state.cpp"; path = "src/dialect-state.cpp"; sourceTree = "<group>"; };
 		4D587DA20B80945B00200116 /* LiveCode-Community.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "LiveCode-Community.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D587DA50B80945B00200116 /* Revolution-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Revolution-Info.plist"; path = "rsrc/Revolution-Info.plist"; sourceTree = "<group>"; };
 		4D587DB20B80949B00200116 /* Release.xcconfig */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = ../rules/Release.xcconfig; sourceTree = SOURCE_ROOT; };
@@ -1605,6 +1612,18 @@
 			path = billing;
 			sourceTree = "<group>";
 		};
+		4D5837D61806A9B6006DE6A2 /* Dialect */ = {
+			isa = PBXGroup;
+			children = (
+				4D2FC176180491F000F8E469 /* dialect.h */,
+				4D5837D81806A9DA006DE6A2 /* dialect-internal.h */,
+				4D2FC177180491F000F8E469 /* dialect.cpp */,
+				4D5837D91806A9E8006DE6A2 /* dialect-builder.cpp */,
+				4D5839461806F519006DE6A2 /* dialect-state.cpp */,
+			);
+			name = Dialect;
+			sourceTree = "<group>";
+		};
 		4D587D920B80944100200116 = {
 			isa = PBXGroup;
 			children = (
@@ -1646,6 +1665,7 @@
 		4D587DCC0B8096B000200116 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				4D5837D61806A9B6006DE6A2 /* Dialect */,
 				E8A49102170F166400769C7A /* Core - Foundation */,
 				E8A49105170F16DA00769C7A /* Core - Graphics */,
 				E8A49108170F17A700769C7A /* Core - Language */,
@@ -2403,8 +2423,6 @@
 				4D587E150B8096E600200116 /* undolst.h */,
 				4D587E620B8096FD00200116 /* vclip.cpp */,
 				4D587DF80B8096E600200116 /* vclip.h */,
-				4D2FC176180491F000F8E469 /* dialect.h */,
-				4D2FC177180491F000F8E469 /* dialect.cpp */,
 			);
 			name = "Core - Objects";
 			sourceTree = "<group>";
@@ -3208,6 +3226,7 @@
 				E8D7F8321785A88200EC051A /* imagelist.cpp in Sources */,
 				E8D7F8391785A8AC00EC051A /* graphicscontext.cpp in Sources */,
 				E8D7F8471785A99900EC051A /* srvtheme.cpp in Sources */,
+				4D5837DA1806A9E8006DE6A2 /* dialect-builder.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3266,6 +3285,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D221AFB171D5F0F00E7E557 /* dummy.cpp in Sources */,
+				4D58380E1806C2D6006DE6A2 /* dialect.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3454,7 +3474,9 @@
 				E8B5BB1416DF77DF00CA02FB /* imagelist.cpp in Sources */,
 				E8AF465B174CF247000B2F9E /* surface.cpp in Sources */,
 				E8AE876C177B3F5C0041B7E0 /* cgimageutil.cpp in Sources */,
-				4D2FC178180491F000F8E469 /* dialect.cpp in Sources */,
+				4D5839471806F519006DE6A2 /* dialect-state.cpp in Sources */,
+				4D5839481806F527006DE6A2 /* dialect-builder.cpp in Sources */,
+				4D5839831806F663006DE6A2 /* dialect.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

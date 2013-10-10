@@ -44,6 +44,7 @@ const char *MCDialectGetErrorString(MCDialectRef dialect);
 uindex_t MCDialectGetErrorOffset(MCDialectRef dialect);
 
 void MCDialectDefine(MCDialectRef dialect, const char *syntax, void *action);
+void MCDialectOptimize(MCDialectRef dialect);
 
 bool MCDialectParse(MCDialectRef dialect, const char *script, const MCDialectParseCallbacks& callbacks, void *context, void*& r_result);
 

@@ -43,6 +43,9 @@ static bool MCDialectStateCreateConcatenation(MCDialectStateRef left, MCDialectS
 static bool MCDialectStateCreateRepetition(MCDialectStateRef pattern, MCDialectStateRef separator, MCDialectStateRef& r_state);
 static bool MCDialectStateCreateReference(MCNameRef name, MCDialectStateRef& r_state);
 static bool MCDialectStateCreateIdentifier(MCNameRef name, bool is_marked, MCDialectStateRef& r_state);
+static bool MCDialectStateCreateMatch(void *p_action, MCDialectStateRef& r_state);
+
+static bool MCDialectStateFlatten(MCDialectStateRef self);
 
 static void MCDialectStateRelease(MCDialectStateRef self);
 static MCDialectStateRef MCDialectStateRetain(MCDialectStateRef self);
@@ -131,21 +134,14 @@ static const char *s_dialect_syntax_error_strings[] =
 	"unterminated identifier",
 };
 
-static bool MCDialectSyntaxParse(const char*& x_syntax, MCNameRef& r_scope, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
+static bool MCDialectSyntaxParse(const char*& x_syntax, void *action, MCNameRef& r_scope, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct MCDialectRule
 {
-	void *action;
-	MCDialectStateRef pattern;
-};
-
-struct MCDialectScope
-{
 	MCNameRef name;
-	MCDialectRule *rules;
-	uindex_t rule_count;
+	MCDialectStateRef pattern;
 };
 
 struct MCDialect
@@ -154,8 +150,8 @@ struct MCDialect
 	char *error_string;
 	uindex_t error_offset;
 	
-	MCDialectScope *scopes;
-	uindex_t scope_count;
+	MCDialectRule *rules;
+	uindex_t rule_count;
 };
 
 void MCDialectCreate(MCDialectRef& r_dialect)
@@ -191,11 +187,11 @@ uindex_t MCDialectGetErrorOffset(MCDialectRef self)
 void MCDialectDefine(MCDialectRef self, const char *p_syntax, void *p_action)
 {
 	MCDialectSyntaxError t_error;
-	MCNewAutoNameRef t_scope_name;
-	MCAutoDialectStateRef t_state;
+	MCNewAutoNameRef t_rule_name;
+	MCAutoDialectStateRef t_pattern;
 	const char *t_syntax_ptr;
 	t_syntax_ptr = p_syntax;
-	if (!MCDialectSyntaxParse(t_syntax_ptr, &t_scope_name, &t_state, t_error))
+	if (!MCDialectSyntaxParse(t_syntax_ptr, p_action, &t_rule_name, &t_pattern, t_error))
 	{
 		MCCStringClone(s_dialect_syntax_error_strings[t_error], self -> error_string);
 		self -> error_offset = t_syntax_ptr - p_syntax;
@@ -204,31 +200,36 @@ void MCDialectDefine(MCDialectRef self, const char *p_syntax, void *p_action)
 	}
 	
 	// Search for a suitable scope.
-	MCDialectScope *t_scope;
-	t_scope = nil;
-	for(uindex_t i = 0; i < self -> scope_count; i++)
-		if (MCNameIsEqualTo(*t_scope_name, self -> scopes[i] . name, kMCCompareExact))
+	MCDialectRule *t_rule;
+	t_rule = nil;
+	for(uindex_t i = 0; i < self -> rule_count; i++)
+		if (MCNameIsEqualTo(*t_rule_name, self -> rules[i] . name, kMCCompareExact))
 		{
-			t_scope = &self -> scopes[i];
+			t_rule = &self -> rules[i];
 			break;
 		}
 	
-	// If there was no scope with the given name, create one.
-	if (t_scope == nil)
+	// If there was no rule with the given name, create one.
+	if (t_rule == nil)
 	{
-		/* UNCHECKED */ MCMemoryResizeArray(self -> scope_count + 1, self -> scopes, self -> scope_count);
+		/* UNCHECKED */ MCMemoryResizeArray(self -> rule_count + 1, self -> rules, self -> rule_count);
 		
-		t_scope = &self -> scopes[self -> scope_count - 1];
-		MCNameClone(*t_scope_name, t_scope -> name);
+		t_rule = &self -> rules[self -> rule_count - 1];
+		MCNameClone(*t_rule_name, t_rule -> name);
 	}
 	
-	// Now add the rule.
-	MCDialectRule *t_rule;
-	/* UNCHECKED */ MCMemoryResizeArray(t_scope -> rule_count + 1, t_scope -> rules, t_scope -> rule_count);
-	t_rule = &t_scope -> rules[t_scope -> rule_count - 1];
-	
-	t_rule -> action = p_action;
-	t_rule -> pattern = t_state . Take();
+	// Add the pattern to the rule.
+	if (t_rule -> pattern == nil)
+		t_rule -> pattern = t_pattern . Take();
+	else
+		/* UNCHECKED */ MCDialectStateCreateAlternation(t_rule -> pattern, *t_pattern, t_rule -> pattern);
+}
+
+void MCDialectOptimize(MCDialectRef self)
+{
+	for(uindex_t i = 0; i < self -> rule_count; i++)
+		 if (!MCDialectStateFlatten(self -> rules[i] . pattern))
+			return;
 }
 
 #if 0
@@ -282,15 +283,11 @@ bool MCDialectParse(MCDialectRef self, const char *p_script, const MCDialectPars
 						   
 void MCDialectPrint(MCDialectRef self, MCDialectPrintCallback p_callback, void *p_context)
 {
-	for(uindex_t i = 0; i < self -> scope_count; i++)
+	for(uindex_t i = 0; i < self -> rule_count; i++)
 	{
-		p_callback(p_context, "%s\n", MCNameGetCString(self -> scopes[i] . name));
-		for(uindex_t j = 0; j < self -> scopes[i] . rule_count; j++)
-		{
-			p_callback(p_context, j == 0 ? "\t: " : "\t| ");
-			MCDialectStatePrint(self -> scopes[i] . rules[j] . pattern, p_callback, p_context);
-			p_callback(p_context, "\t{ %d }\n", self -> scopes[i] . rules[j] . action);
-		}
+		p_callback(p_context, "%s\n\t: ", MCNameGetCString(self -> rules[i] . name));
+		MCDialectStatePrint(self -> rules[i] . pattern, p_callback, p_context);
+		p_callback(p_context, "\n");
 	}
 }
 
@@ -307,6 +304,7 @@ enum MCDialectStateType
 	kMCDialectStateTypeRepetition,
 	kMCDialectStateTypeReference,
 	kMCDialectStateTypeIdentifier,
+	kMCDialectStateTypeMatch
 };
 
 struct MCDialectState
@@ -334,6 +332,10 @@ struct MCDialectState
 			MCNameRef name;
 			bool is_marked;
 		} identifier;
+		struct
+		{
+			void *action;
+		} match;
 	};
 };
 
@@ -477,6 +479,80 @@ static bool MCDialectStateCreateIdentifier(MCNameRef p_name, bool p_is_marked, M
 	return true;
 }
 
+static bool MCDialectStateCreateMatch(void *p_action, MCDialectStateRef& r_state)
+{
+	MCDialectStateRef self;
+	if (!MCDialectStateCreate(kMCDialectStateTypeMatch, self))
+		return false;
+	
+	self -> match . action = p_action;
+	
+	r_state = self;
+	
+	return true;
+}
+
+static bool MCDialectStateFlatten(MCDialectStateRef self)
+{
+	switch(self -> type)
+	{
+		case kMCDialectStateTypeAlternation:
+		{
+			uindex_t t_new_child_count;
+			t_new_child_count = 0;
+			for(uindex_t i = 0; i < self -> alternation . child_count; i++)
+			{
+				if (!MCDialectStateFlatten(self -> alternation . children[i]))
+					return false;
+				if (self -> alternation . children[i] -> type == kMCDialectStateTypeAlternation)
+					t_new_child_count += self -> alternation . children[i] -> alternation . child_count;
+				else
+					t_new_child_count += 1;
+			}
+			
+			MCDialectStateRef *t_new_children;
+			if (!MCMemoryNewArray(t_new_child_count, t_new_children))
+				return false;
+			
+			uindex_t t_new_child_index;
+			t_new_child_index = 0;
+			for(uindex_t i = 0; i < self -> alternation . child_count; i++)
+			{
+				if (self -> alternation . children[i] -> type == kMCDialectStateTypeAlternation)
+				{
+					for(uindex_t j = 0; j < self -> alternation . children[i] -> alternation . child_count; j++)
+						t_new_children[t_new_child_index++] = MCDialectStateRetain(self -> alternation . children[i] -> alternation . children[j]);
+					MCDialectStateRelease(self -> alternation . children[i]);
+				}
+				else
+					t_new_children[t_new_child_index++] = self -> alternation . children[i];
+			}
+
+			MCMemoryDeleteArray(self -> alternation . children);
+			self -> alternation . children = t_new_children;
+			self -> alternation . child_count = t_new_child_count;
+		}
+		break;
+		
+		case kMCDialectStateTypeConcatenation:
+			for(uindex_t i = 0; i < self -> concatenation . child_count; i++)
+				if (!MCDialectStateFlatten(self -> concatenation . children[i]))
+					return false;
+			break;
+			
+		case kMCDialectStateTypeRepetition:
+			MCDialectStateFlatten(self -> repetition . pattern);
+			if (self -> repetition . separator != nil)
+				MCDialectStateFlatten(self -> repetition . separator);
+			break;
+			
+		default:
+			break;
+	}
+	
+	return true;
+}
+
 static void MCDialectStatePrint(MCDialectStateRef self, MCDialectPrintCallback p_callback, void *p_context)
 {
 	switch(self -> type)
@@ -523,6 +599,14 @@ static void MCDialectStatePrint(MCDialectStateRef self, MCDialectPrintCallback p
 			
 		case kMCDialectStateTypeIdentifier:
 			p_callback(p_context, "%s'%s'", self -> identifier . is_marked ? "@" : "", MCNameGetCString(self -> identifier . name));
+			break;
+			
+		case kMCDialectStateTypeMatch:
+			p_callback(p_context, "{%p}", self -> match . action);
+			break;
+			
+		default:
+			p_callback(p_context, "?");
 			break;
 	}
 }
@@ -1011,7 +1095,7 @@ static bool MCDialectSyntaxParseAlternation(const char *& x_syntax, MCDialectSta
 	return true;
 }
 
-static bool MCDialectSyntaxParse(const char*& x_syntax, MCNameRef& r_scope, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
+static bool MCDialectSyntaxParse(const char*& x_syntax, void *p_action, MCNameRef& r_scope, MCDialectStateRef& r_state, MCDialectSyntaxError& r_error)
 {
 	MCNewAutoNameRef t_scope;
 	if (!MCDialectSyntaxMatchIdentifier(x_syntax, &t_scope, r_error))
@@ -1026,9 +1110,16 @@ static bool MCDialectSyntaxParse(const char*& x_syntax, MCNameRef& r_scope, MCDi
 	
 	if (!MCDialectSyntaxMatchEnd(x_syntax, r_error))
 		return false;
-	
+		
+	MCAutoDialectStateRef t_match_state;
+	if (!MCDialectStateCreateMatch(p_action, &t_match_state) ||
+		!MCDialectStateCreateConcatenation(*t_state, *t_match_state, r_state))
+	{
+		r_error = kMCDialectSyntaxErrorOutOfMemory;
+		return false;
+	}
+
 	r_scope = t_scope . Take();
-	r_state = t_state . Take();
 	
 	return true;
 }
@@ -1092,6 +1183,7 @@ public:
 			if (s_dialect != nil)
 				MCDialectDestroy(s_dialect);
 			s_dialect = t_dialect;
+			// MCDialectOptimize(s_dialect);
 			MCresult -> clear();
 		}
 	}

@@ -2683,7 +2683,7 @@ bool MCString::split(char p_char, MCString& r_head, MCString& r_tail)
 	}
 
 	r_head . set(sptr, t_string - sptr);
-	r_tail . set(t_string + 1, t_length);
+	r_tail . set(t_string + 1, t_length - 1);
 	
 	return true;
 }

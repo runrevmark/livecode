@@ -31,7 +31,8 @@ enum MCDialectStateType
 	kMCDialectStateTypeRepetition,
 	kMCDialectStateTypeRule,
 	kMCDialectStateTypeToken,
-	kMCDialectStateTypeMatch
+	kMCDialectStateTypeMatch,
+	kMCDialectStateTypeBreak,
 };
 
 bool MCDialectStateCreate(MCDialectStateType type, MCDialectStateRef& r_state);
@@ -39,6 +40,7 @@ bool MCDialectStateCreateEpsilon(MCDialectStateRef& r_state);
 bool MCDialectStateCreateRule(uindex_t name, MCDialectStateRef& r_state);
 bool MCDialectStateCreateToken(uindex_t token, bool is_marked, MCDialectStateRef& r_state);
 bool MCDialectStateCreateMatch(uindex_t action, MCDialectStateRef& r_state);
+bool MCDialectStateCreateBreak(MCDialectStateRef& r_state);
 
 MCDialectStateRef MCDialectStateRetain(MCDialectStateRef state);
 void MCDialectStateRelease(MCDialectStateRef state);
@@ -51,6 +53,8 @@ bool MCDialectStateIsConcatenation(MCDialectStateRef state);
 bool MCDialectStateIsRepetition(MCDialectStateRef state);
 
 bool MCDialectStateAppend(MCDialectStateRef state, MCDialectStateRef new_state);
+
+void MCDialectStatePrint(MCDialectStateRef state, MCDialectPrintCallback p_callback, void *p_context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -101,6 +105,10 @@ public:
 private:
 	MCDialectStateRef m_ref;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCDialectCreate(MCDialectStateRef *rules, uindex_t rule_count, MCDialectRef& r_dialect);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -149,8 +149,8 @@ public:
 	
 	void get(const char *&s, uint4 &l)
 	{
-		sptr = s;
-		length = l;
+		s = sptr;
+		l = length;
 	}
 	
 	const char *getstring() const

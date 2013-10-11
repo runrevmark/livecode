@@ -265,6 +265,8 @@
 		4D2A583D1198727F00135143 /* internal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D587E4B0B8096FD00200116 /* internal.cpp */; };
 		4D377262150785AF000B0EB0 /* fieldhtml.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D377261150785AF000B0EB0 /* fieldhtml.cpp */; };
 		4D37727E150787EA000B0EB0 /* fieldrtf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D37727D150787EA000B0EB0 /* fieldrtf.cpp */; };
+		4D3813491807FFEA007FBBAB /* dialect-grammar.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D3813481807FFEA007FBBAB /* dialect-grammar.cpp */; };
+		4D3816151808389F007FBBAB /* dialect-syntax.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D3816141808389F007FBBAB /* dialect-syntax.cpp */; };
 		4D407C0C15F8D15600AA3ABC /* osxscriptold.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D407C0B15F8D15600AA3ABC /* osxscriptold.cpp */; };
 		4D432F1F141A2DFE001164F9 /* tilecachesw.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D432F1E141A2DFE001164F9 /* tilecachesw.cpp */; };
 		4D433504141BC5FC001164F9 /* tilecachecg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D433503141BC5FC001164F9 /* tilecachecg.cpp */; };
@@ -904,6 +906,8 @@
 		4D377261150785AF000B0EB0 /* fieldhtml.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = fieldhtml.cpp; path = src/fieldhtml.cpp; sourceTree = "<group>"; };
 		4D3772671507869A000B0EB0 /* textbuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = textbuffer.h; path = src/textbuffer.h; sourceTree = "<group>"; };
 		4D37727D150787EA000B0EB0 /* fieldrtf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = fieldrtf.cpp; path = src/fieldrtf.cpp; sourceTree = "<group>"; };
+		4D3813481807FFEA007FBBAB /* dialect-grammar.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = "dialect-grammar.cpp"; sourceTree = "<group>"; };
+		4D3816141808389F007FBBAB /* dialect-syntax.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "dialect-syntax.cpp"; path = "src/dialect-syntax.cpp"; sourceTree = "<group>"; };
 		4D407C0B15F8D15600AA3ABC /* osxscriptold.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = osxscriptold.cpp; path = src/osxscriptold.cpp; sourceTree = "<group>"; };
 		4D432F1E141A2DFE001164F9 /* tilecachesw.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = tilecachesw.cpp; path = src/tilecachesw.cpp; sourceTree = "<group>"; };
 		4D433503141BC5FC001164F9 /* tilecachecg.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = tilecachecg.cpp; path = src/tilecachecg.cpp; sourceTree = "<group>"; };
@@ -1620,6 +1624,8 @@
 				4D2FC177180491F000F8E469 /* dialect.cpp */,
 				4D5837D91806A9E8006DE6A2 /* dialect-builder.cpp */,
 				4D5839461806F519006DE6A2 /* dialect-state.cpp */,
+				4D3813481807FFEA007FBBAB /* dialect-grammar.cpp */,
+				4D3816141808389F007FBBAB /* dialect-syntax.cpp */,
 			);
 			name = Dialect;
 			sourceTree = "<group>";
@@ -3477,6 +3483,8 @@
 				4D5839471806F519006DE6A2 /* dialect-state.cpp in Sources */,
 				4D5839481806F527006DE6A2 /* dialect-builder.cpp in Sources */,
 				4D5839831806F663006DE6A2 /* dialect.cpp in Sources */,
+				4D3813491807FFEA007FBBAB /* dialect-grammar.cpp in Sources */,
+				4D3816151808389F007FBBAB /* dialect-syntax.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

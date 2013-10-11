@@ -116,6 +116,12 @@ bool MCDialectStateCreateMatch(uindex_t p_name, MCDialectStateRef& r_state)
 	return true;
 }
 
+bool MCDialectStateCreateBreak(MCDialectStateRef& r_state)
+{
+	return MCDialectStateCreate(kMCDialectStateTypeBreak, r_state);
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////
 
 MCDialectStateRef MCDialectStateRetain(MCDialectStateRef self)
@@ -203,13 +209,27 @@ bool MCDialectStateIsRepetition(MCDialectStateRef self)
 
 bool MCDialectStateAppend(MCDialectStateRef self, MCDialectStateRef p_new_state)
 {
+	if ((p_new_state -> type == kMCDialectStateTypeAlternation || p_new_state -> type == kMCDialectStateTypeConcatenation) &&
+		p_new_state -> alternation . child_count == 1)
+		p_new_state = p_new_state -> alternation . children[0];
+		
 	switch(self -> type)
 	{
 		case kMCDialectStateTypeAlternation:
 		case kMCDialectStateTypeConcatenation:
-			if (!MCMemoryResizeArray(self -> alternation . child_count + 1, self -> alternation . children, self -> alternation . child_count))
-				return false;
-			self -> alternation . children[self -> alternation . child_count - 1] = MCDialectStateRetain(p_new_state);
+			if (self -> type == p_new_state -> type)
+			{
+				if (!MCMemoryResizeArray(self -> alternation . child_count + p_new_state -> alternation . child_count, self -> alternation . children, self -> alternation . child_count))
+					return false;
+				for(uindex_t i = 0; i < p_new_state -> alternation . child_count; i++)
+					self -> alternation . children[i + self -> alternation . child_count - p_new_state -> alternation . child_count] = MCDialectStateRetain(p_new_state -> alternation . children[i]);
+			}
+			else
+			{
+				if (!MCMemoryResizeArray(self -> alternation . child_count + 1, self -> alternation . children, self -> alternation . child_count))
+					return false;
+				self -> alternation . children[self -> alternation . child_count - 1] = MCDialectStateRetain(p_new_state);
+			}
 			break;
 			
 		case kMCDialectStateTypeRepetition:
@@ -227,6 +247,66 @@ bool MCDialectStateAppend(MCDialectStateRef self, MCDialectStateRef p_new_state)
 	}
 	
 	return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCDialectStatePrint(MCDialectStateRef self, MCDialectPrintCallback p_callback, void *p_context)
+{
+	switch(self -> type)
+	{
+		case kMCDialectStateTypeEpsilon:
+			p_callback(p_context, "e");
+			break;
+			
+		case kMCDialectStateTypeBreak:
+			p_callback(p_context, ";");
+			break;
+			
+		case kMCDialectStateTypeAlternation:
+			for(uindex_t i = 0; i < self -> alternation . child_count; i++)
+			{
+				p_callback(p_context, i == 0 ? "( " : " | ");
+				MCDialectStatePrint(self -> alternation . children[i], p_callback, p_context);
+			}
+			p_callback(p_context, " )");
+			break;
+			
+		case kMCDialectStateTypeConcatenation:
+			for(uindex_t i = 0; i < self -> concatenation . child_count; i++)
+			{
+				p_callback(p_context, i == 0 ? "" : " ");
+				MCDialectStatePrint(self -> concatenation . children[i], p_callback, p_context);
+			}
+			break;
+			
+		case kMCDialectStateTypeRepetition:
+			p_callback(p_context, "{ ");
+			MCDialectStatePrint(self -> repetition . pattern, p_callback, p_context);
+			if (self -> repetition . separator != nil)
+			{
+				p_callback(p_context, " , ");
+				MCDialectStatePrint(self -> repetition . separator, p_callback, p_context);
+			}
+			p_callback(p_context, " }");
+			break;
+			
+		case kMCDialectStateTypeRule:
+			p_callback(p_context, "<%u>", self -> rule . name);
+			break;
+			
+		case kMCDialectStateTypeToken:
+			p_callback(p_context, "%s%u", self -> token . is_marked ? "@" : "", self -> token . name);
+			break;
+			
+		case kMCDialectStateTypeMatch:
+			p_callback(p_context, "{%u}", self -> match . name);
+			break;
+			
+		default:
+			p_callback(p_context, "?");
+			break;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////

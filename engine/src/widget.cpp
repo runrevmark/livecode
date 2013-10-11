@@ -1610,6 +1610,8 @@ Exec_stat MCWidgetCmd::exec(MCExecPoint& ep)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#if 0
+
 enum MCWidgetDialectActionType
 {
 	kMCWidgetDialectActionNone,
@@ -1666,5 +1668,7 @@ bool MCWidgetCreateDialect(MCDialectRef& r_dialect)
 	
 	return false;					  
 }
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////

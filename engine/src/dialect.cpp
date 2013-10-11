@@ -17,23 +17,91 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "prefix.h"
 
 #include "core.h"
-#include "globdefs.h"
-#include "objdefs.h"
-#include "parsedef.h"
-#include "filedefs.h"
-
-#include "execpt.h"
-#include "express.h"
-#include "statemnt.h"
-#include "internal.h"
-#include "scriptpt.h"
-#include "util.h"
-#include "globals.h"
 
 #include "dialect.h"
+#include "dialect-internal.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct MCDialect
+{
+	uint32_t references;
+	
+	MCDialectStateRef *rules;
+	uindex_t rule_count;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void MCDialectDestroy(MCDialectRef self)
+{
+	if (self == nil)
+		return;
+	
+	for(uindex_t i = 0; i < self -> rule_count; i++)
+		MCDialectStateRelease(self -> rules[i]);
+	
+	MCMemoryDeleteArray(self -> rules);
+	MCMemoryDelete(self);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCDialectCreate(MCDialectStateRef *p_rules, uindex_t p_rule_count, MCDialectRef& r_dialect)
+{
+	bool t_success;
+	t_success = true;
+	
+	MCDialectRef self;
+	if (t_success)
+		t_success = MCMemoryNew(self);
+	
+	if (t_success)
+		t_success = MCMemoryNewArray(p_rule_count, self -> rules);
+	
+	if (t_success)
+	{
+		for(uindex_t i = 0; i < p_rule_count; i++)
+			self -> rules[self -> rule_count++] = MCDialectStateRetain(p_rules[i]);
+		
+		self -> references = 1;
+		
+		r_dialect = self;
+	}
+	else
+		MCDialectDestroy(self);
+	
+	return t_success;
+}
+
+MCDialectRef MCDialectRetain(MCDialectRef self)
+{
+	self -> references += 1;
+	return self;
+}
+
+void MCDialectRelease(MCDialectRef self)
+{
+	self -> references -= 1;
+	if (self -> references != 0)
+		return;
+	
+	MCDialectDestroy(self);
+}
+
+void MCDialectPrint(MCDialectRef self, MCDialectPrintCallback p_callback, void *p_context)
+{
+	for(uindex_t i = 0; i < self -> rule_count; i++)
+	{
+		p_callback(p_context, "%d\n\t: ", i);
+		MCDialectStatePrint(self -> rules[i], p_callback, p_context);
+		p_callback(p_context, "\n");
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+#if 0
 typedef struct MCDialectState *MCDialectStateRef;
 
 static bool MCDialectStateCreateEpsilon(MCDialectStateRef& r_state);
@@ -260,7 +328,7 @@ static bool MCDialectParseScope(MCDialectRef self, const MCDialectParseInfo& p_i
 		MCDialectParsePoint t_new_point;
 		t_new_point = p_point;
 		
-		MCDialectParseRule(self, p_info, t_new_point, t_scope -> rules[i]
+		MCDialectParseRule(self, p_info, t_new_point, t_scope -> rules[i]);
 	}
 }
 #endif
@@ -1124,202 +1192,5 @@ static bool MCDialectSyntaxParse(const char*& x_syntax, void *p_action, MCNameRe
 	return true;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-static MCDialectRef s_dialect = nil;
-
-class MCInternalDialectConfigure: public MCStatement
-{
-public:
-	MCInternalDialectConfigure(void)
-	{
-		m_syntax = nil;
-	}
-	
-	~MCInternalDialectConfigure(void)
-	{
-		delete m_syntax;
-	}
-	
-	Parse_stat parse(MCScriptPoint& sp)
-	{
-		initpoint(sp);
-		if (sp . parseexp(False, True, &m_syntax) != PS_NORMAL)
-			return PS_ERROR;
-		return PS_NORMAL;
-	}
-	
-	Exec_stat exec(MCExecPoint& ep)
-	{
-		if (m_syntax -> eval(ep) != ES_NORMAL)
-			return ES_ERROR;
-		
-		MCString *t_lines;
-		uint2 t_line_count;
-		t_lines = nil;
-		t_line_count = 0;
-		MCU_break_string(ep . getsvalue(), t_lines, t_line_count, False);
-		
-		MCDialectRef t_dialect;
-		MCDialectCreate(t_dialect);
-		
-		uindex_t t_line_index;
-		for(t_line_index = 0; t_line_index < t_line_count; t_line_index++)
-		{
-			MCAutoPointer<char> t_line_str;
-			t_line_str = t_lines[t_line_index] . clone();
-			MCDialectDefine(t_dialect, *t_line_str, (void *)t_line_index);
-			if (MCDialectHasError(t_dialect))
-				break;
-		}
-		
-		if (MCDialectHasError(t_dialect))
-		{
-			ep . setstringf("line %d, col %d: %s", t_line_index + 1, MCDialectGetErrorOffset(t_dialect), MCDialectGetErrorString(t_dialect));
-			MCresult -> store(ep, false);
-		}
-		else
-		{
-			if (s_dialect != nil)
-				MCDialectDestroy(s_dialect);
-			s_dialect = t_dialect;
-			// MCDialectOptimize(s_dialect);
-			MCresult -> clear();
-		}
-	}
-			
-private:
-	MCExpression *m_syntax;
-};
-
-static void ep_print_callback(void *ctxt, const char *p_format, ...)
-{
-	va_list t_args;
-	va_start(t_args, p_format);
-	((MCExecPoint *)ctxt) -> appendstringfv(p_format, t_args);
-	va_end(t_args);
-}
-
-class MCInternalDialectPrint: public MCStatement
-{
-public:
-	MCInternalDialectPrint(void)
-	{
-	}
-	
-	~MCInternalDialectPrint(void)
-	{
-	}
-	
-	Parse_stat parse(MCScriptPoint& sp)
-	{
-		getit(sp, m_it);
-		return PS_NORMAL;
-	}
-	
-	Exec_stat exec(MCExecPoint& ep)
-	{
-		m_it -> clear();
-		ep . clear();
-		
-		if (s_dialect != nil)
-		{
-			MCDialectPrint(s_dialect, ep_print_callback, &ep);
-			m_it -> set(ep);
-		}
-		
-		return ES_NORMAL;
-	}
-
-private:
-	MCVarref *m_it;
-};
-
-static bool dialect_parse_process_null(void *p_context, uindex_t p_line, uindex_t p_column, void*& r_value)
-{
-	return false;
-}
-
-static bool dialect_parse_process_token(void *p_context, uindex_t p_line, uindex_t p_column, MCDialectTokenType p_token_type, MCNameRef p_token, void*& r_value)
-{
-	return false;
-}
-
-static bool dialect_parse_process_action(void *p_context, uindex_t p_line, uindex_t p_column, void *p_action, void **p_values, uindex_t p_value_count, void*& r_value)
-{
-	return false;
-}
-
-static bool dialect_parse_process_error(void *p_context, uindex_t p_line, uindex_t p_column)
-{
-	return false;
-}
-
-class MCInternalDialectParse: public MCStatement
-{
-public:
-	MCInternalDialectParse(void)
-	{
-		m_script = nil;
-	}
-	
-	~MCInternalDialectParse(void)
-	{
-		delete m_script;
-	}
-	
-	Parse_stat parse(MCScriptPoint& sp)
-	{
-		initpoint(sp);
-		if (sp . parseexp(False, True, &m_script) != PS_NORMAL)
-			return PS_ERROR;
-		return PS_NORMAL;
-	}
-	
-	Exec_stat exec(MCExecPoint& ep)
-	{
-		if (m_script -> eval(ep) != ES_NORMAL)
-			return ES_ERROR;
-		
-		if (s_dialect == nil)
-		{
-			MCresult -> sets("no dialect");
-			return ES_NORMAL;
-		}
-		
-		MCAutoPointer<char> t_script;
-		t_script = ep . getsvalue() . clone();
-		
-		MCDialectParseCallbacks t_callbacks =
-		{
-			dialect_parse_process_null,
-			dialect_parse_process_token,
-			dialect_parse_process_action,
-			dialect_parse_process_error
-		};
-		
-		void *t_result;
-		MCDialectParse(s_dialect, *t_script, t_callbacks, &ep, t_result);
-	
-		return ES_NORMAL;
-	}
-	
-private:
-	MCExpression *m_script;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Small helper template
-template<class T> inline MCStatement *class_factory(void) { return new T; }
-
-// The internal verb table used by the '_internal' command
-MCInternalVerbInfo MCinternalverbs[] =
-{
-	{ "dialect", "configure", class_factory<MCInternalDialectConfigure> },
-	{ "dialect", "print", class_factory<MCInternalDialectPrint> },
-	{ "dialect", "parse", class_factory<MCInternalDialectParse> },
-	{ nil, nil, nil },
-};
-
-////////////////////////////////////////////////////////////////////////////////
+#endif
+				

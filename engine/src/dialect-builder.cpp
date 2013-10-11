@@ -113,9 +113,22 @@ static bool MCDialectBuilderPopStateOfType(MCDialectBuilderRef builder, MCDialec
 // Begin a nested constuct of the given type.
 static bool MCDialectBuilderBeginNest(MCDialectBuilderRef self, MCDialectStateType p_state_type);
 // Begin a nested constuct of the given type.
-static bool MCDialectBuilderContinueNest(MCDialectBuilderRef self, MCDialectStateType p_state_type);
-// Begin a nested constuct of the given type.
 static bool MCDialectBuilderEndNest(MCDialectBuilderRef self, MCDialectStateType p_state_type);
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void MCDialectBuilderDestroy(MCDialectBuilderRef self)
+{
+	for(uindex_t i = 0; i < self -> rule_count; i++)
+		MCDialectStateRelease(self -> rules[i] . pattern);
+	MCMemoryDeleteArray(self -> rules);
+	
+	for(uindex_t i = 0; i < self -> state_count; i++)
+		MCDialectStateRelease(self -> states[i]);
+	MCMemoryDeleteArray(self -> states);
+	
+	MCMemoryDeleteArray(self);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -146,7 +159,47 @@ void MCDialectBuilderEnd(MCDialectBuilderRef self, MCDialectBuilderError& r_erro
 		return;
 	}
 	
-	// TODO: Build the dialect!!
+	if (self -> error != kMCDialectBuilderErrorNone)
+	{
+		r_error = self -> error;
+		return;
+	}
+	
+	// Check that all rules are defined.
+	for(uindex_t i = 0; i < self -> rule_count; i++)
+		if (self -> rules[i] . pattern == nil)
+		{
+			r_error = kMCDialectBuilderErrorNotAllRulesDefined;
+			return;
+		}
+		
+	bool t_success;
+	t_success = true;
+		
+	MCDialectStateRef *t_rules;
+	t_rules = nil;
+	if (t_success)
+		t_success = MCMemoryNewArray(self -> rule_count, t_rules);
+	
+	if (t_success)
+		for(uindex_t i = 0; i < self -> rule_count; i++)
+			t_rules[i] = self -> rules[i] . pattern;
+	
+	MCDialectRef t_dialect;
+	if (t_success)
+		t_success = MCDialectCreate(t_rules, self -> rule_count, t_dialect);
+	
+	if (t_success)
+	{
+		r_error = kMCDialectBuilderErrorNone;
+		r_dialect = t_dialect;
+	}
+	else
+		r_error = kMCDialectBuilderErrorOutOfMemory;
+	
+	MCDialectBuilderDestroy(self);
+	
+	MCMemoryDelete(t_rules);
 }
 
 bool MCDialectBuilderHasError(MCDialectBuilderRef self)
@@ -156,7 +209,10 @@ bool MCDialectBuilderHasError(MCDialectBuilderRef self)
 
 void MCDialectBuilderCancel(MCDialectBuilderRef self)
 {
-	// TODO: Cancel the build.
+	if (self == nil)
+		return;
+
+	MCDialectBuilderDestroy(self);
 }
 
 void MCDialectBuilderBeginPhrase(MCDialectBuilderRef self, uindex_t p_rule_name, uindex_t p_action_name)
@@ -167,6 +223,11 @@ void MCDialectBuilderBeginPhrase(MCDialectBuilderRef self, uindex_t p_rule_name,
 	
 	// If we already have a phrase in progress, it's an error.
 	if (!MCDialectBuilderCheckNoPhraseInProgress(self))
+		return;
+	
+	// Now find the rule the phrase is being added to.
+	MCDialectBuilderRule *t_rule;
+	if (!MCDialectBuilderEnsureRule(self, self -> current_rule_name, t_rule))
 		return;
 	
 	// A phrase begines with an implicit concatenation as it terminates in a
@@ -203,8 +264,27 @@ void MCDialectBuilderEndPhrase(MCDialectBuilderRef self)
 	if (!MCDialectBuilderEnsureRule(self, self -> current_rule_name, t_rule))
 		return;
 	
-	if (!MCDialectBuilderAppendStateToState(self, t_rule -> pattern, *t_root_state))
-		return;
+	// If the pattern is nil, then just take this phrase's pattern to be the
+	// root state.
+	if (t_rule -> pattern == nil)
+		t_rule -> pattern = MCDialectStateRetain(*t_root_state);
+	else
+	{
+		// If the pattern is not already an alternation, put it inside an
+		// alternation node.
+		if (!MCDialectStateIsAlternation(t_rule -> pattern))
+		{
+			MCDialectStateRef t_current_state;
+			t_current_state = t_rule -> pattern;
+			if (!MCDialectBuilderNewState(self, t_rule -> pattern, kMCDialectStateTypeAlternation, 1, t_current_state))
+				return;
+			MCDialectStateRelease(t_current_state);
+		}
+	
+		// Now append the new state to the alternation.
+		if (!MCDialectBuilderAppendStateToState(self, t_rule -> pattern, *t_root_state))
+			return;
+	}
 }
 
 void MCDialectBuilderBeginAlternation(MCDialectBuilderRef self)
@@ -238,13 +318,6 @@ void MCDialectBuilderBeginRepetition(MCDialectBuilderRef self)
 		return;
 }
 
-void MCDialectBuilderContinueRepetition(MCDialectBuilderRef self)
-{
-	// Continue the repetition nest.
-	if (!MCDialectBuilderContinueNest(self, kMCDialectStateTypeRepetition))
-		return;
-}
-
 void MCDialectBuilderEndRepetition(MCDialectBuilderRef self)
 {
 	if (!MCDialectBuilderEndNest(self, kMCDialectStateTypeRepetition))
@@ -268,7 +341,7 @@ void MCDialectBuilderMatchEpsilon(MCDialectBuilderRef self)
 		return;
 }
 
-void MCDialectBuilderMatchRule(MCDialectBuilderRef self, index_t p_rule_name)
+void MCDialectBuilderMatchRule(MCDialectBuilderRef self, uindex_t p_rule_name)
 {
 	// If we are in an error state, then do nothing.
 	if (MCDialectBuilderHasError(self))
@@ -278,14 +351,21 @@ void MCDialectBuilderMatchRule(MCDialectBuilderRef self, index_t p_rule_name)
 	if (!MCDialectBuilderCheckPhraseInProgress(self))
 		return;
 	
+	// Make sure we can append a state to the top of the stack.
 	if (!MCDialectBuilderCheckCanAppendState(self))
 		return;
 	
-	if (!MCDialectBuilderAppendNewState(self, kMCDialectStateTypeRule, p_rule_name))
+	// Make sure we have a rule with the given name.
+	MCDialectBuilderRule *t_rule;
+	if (!MCDialectBuilderEnsureRule(self, p_rule_name, t_rule))
+		return;
+	
+	// Append the new rule state, the index is the offset in the rules array.
+	if (!MCDialectBuilderAppendNewState(self, kMCDialectStateTypeRule, t_rule - self -> rules))
 		return;
 }
 
-void MCDialectBuilderMatchToken(MCDialectBuilderRef self, index_t p_token_name, bool p_marked)
+void MCDialectBuilderMatchToken(MCDialectBuilderRef self, uindex_t p_token_name, bool p_marked)
 {
 	// If we are in an error state, then do nothing.
 	if (MCDialectBuilderHasError(self))
@@ -299,6 +379,23 @@ void MCDialectBuilderMatchToken(MCDialectBuilderRef self, index_t p_token_name, 
 		return;
 	
 	if (!MCDialectBuilderAppendNewState(self, kMCDialectStateTypeToken, p_token_name, p_marked))
+		return;
+}
+
+void MCDialectBuilderMatchBreak(MCDialectBuilderRef self)
+{
+	// If we are in an error state, then do nothing.
+	if (MCDialectBuilderHasError(self))
+		return;
+	
+	// If we are not in a phrase, it's an error.
+	if (!MCDialectBuilderCheckPhraseInProgress(self))
+		return;
+	
+	if (!MCDialectBuilderCheckCanAppendState(self))
+		return;
+	
+	if (!MCDialectBuilderAppendNewState(self, kMCDialectStateTypeBreak))
 		return;
 }
 
@@ -365,6 +462,7 @@ static bool MCDialectBuilderEnsureRule(MCDialectBuilderRef self, uindex_t p_rule
 	assert(!MCDialectBuilderHasError(self));
 	
 	MCDialectBuilderRule *t_rule;
+	t_rule = nil;
 	for(uindex_t i = 0; i < self -> rule_count; i++)
 		if (self -> rules[i] . name == p_rule_name)
 		{
@@ -378,10 +476,6 @@ static bool MCDialectBuilderEnsureRule(MCDialectBuilderRef self, uindex_t p_rule
 			return MCDialectBuilderThrow(self, kMCDialectBuilderErrorOutOfMemory);
 		
 		t_rule = &self -> rules[self -> rule_count - 1];
-		
-		if (!MCDialectBuilderNewState(self, t_rule -> pattern, kMCDialectStateTypeAlternation, 0))
-			return false;
-		
 		t_rule -> name = p_rule_name;
 	}
 	
@@ -454,6 +548,11 @@ static bool MCDialectBuilderNewStateV(MCDialectBuilderRef self, MCDialectStateRe
 			if (!MCDialectStateCreateMatch(va_arg(p_args, uindex_t), &t_new_state))
 				return MCDialectBuilderThrow(self, kMCDialectBuilderErrorOutOfMemory);
 			break;
+		
+		case kMCDialectStateTypeBreak:
+			if (!MCDialectStateCreateBreak(&t_new_state))
+				return MCDialectBuilderThrow(self, kMCDialectBuilderErrorOutOfMemory);
+			break;
 			
 		default:
 			assert(false);
@@ -461,6 +560,8 @@ static bool MCDialectBuilderNewStateV(MCDialectBuilderRef self, MCDialectStateRe
 	}
 	
 	r_new_state = t_new_state . Take();
+	
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -628,26 +729,6 @@ static bool MCDialectBuilderBeginNest(MCDialectBuilderRef self, MCDialectStateTy
 	
 	// Push a new alternation state.
 	if (!MCDialectBuilderPushNewState(self, p_state_type, 0))
-		return false;
-}
-
-static bool MCDialectBuilderContinueNest(MCDialectBuilderRef self, MCDialectStateType p_state_type)
-{
-	// If we are in an error state, then do nothing.
-	if (MCDialectBuilderHasError(self))
-		return false;
-	
-	// If we are not in a phrase, it's an error.
-	if (!MCDialectBuilderCheckPhraseInProgress(self))
-		return false;
-	
-	// Pop the top state, ensuring it is of the correct type.
-	MCAutoDialectStateRef t_state;
-	if (!MCDialectBuilderPopStateOfType(self, p_state_type, &t_state))
-		return false;
-	
-	// Now push the state back on again.
-	if (!MCDialectBuilderPushState(self, *t_state))
 		return false;
 }
 

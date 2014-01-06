@@ -341,11 +341,15 @@ public:
 	virtual void relayercontrol_insert(MCControl *control, MCControl *target);
 
 	MCNameRef getdefaultpropsetname(void);
-
+	
+	// MERG-2015-01-06: [[ EngineProps ]] Methods for sending getprop/setprop messages from keyword
+	Exec_stat sendgetprop(MCExecPoint& ep, Properties which, MCNameRef p_prop_name);
+    Exec_stat sendsetprop(MCExecPoint& ep, Properties which, MCNameRef p_prop_name);
+	
 	Exec_stat sendgetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
 	Exec_stat getcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
 	Exec_stat sendsetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
-	Exec_stat setcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
+    Exec_stat setcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
 
 	Exec_stat changeid(uint32_t new_id);
 

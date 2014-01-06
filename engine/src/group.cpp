@@ -796,7 +796,11 @@ void MCGroup::setrect(const MCRectangle &nrect)
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCGroup::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
-	switch (which)
+	Exec_stat t_stat = sendgetprop(ep, which, kMCEmptyName);
+    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
+        return t_stat;
+    
+    switch (which)
 	{
 #ifdef /* MCGroup::getprop */ LEGACY_EXEC
 	case P_CANT_DELETE:
@@ -984,7 +988,11 @@ Exec_stat MCGroup::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCGroup::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
-	Boolean dirty = False;
+	Exec_stat t_stat = sendsetprop(ep, p, kMCEmptyName);
+    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
+        return t_stat;
+    
+    Boolean dirty = False;
 	int2 i1, i2, i3, i4;
 	MCString data = ep.getsvalue();
 

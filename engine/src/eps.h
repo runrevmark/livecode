@@ -51,8 +51,9 @@ public:
 	virtual Boolean mdown(uint2 which);
 	virtual Boolean mup(uint2 which);
 	virtual void setrect(const MCRectangle &nrect);
-	virtual Exec_stat getprop(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
-	virtual Exec_stat setprop(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
+	// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+	virtual Exec_stat getprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
+	virtual Exec_stat setprop_legacy(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
 	// virtual functions from MCControl
 	IO_stat load(IO_handle stream, const char *version);
 	IO_stat extendedload(MCObjectInputStream& p_stream, const char *p_version, uint4 p_length);

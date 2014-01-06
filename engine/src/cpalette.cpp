@@ -174,7 +174,8 @@ Boolean MCColors::mup(uint2 which)
 	return True;
 }
 
-Exec_stat MCColors::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCColors::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	switch (which)
 	{
@@ -187,12 +188,14 @@ Exec_stat MCColors::getprop(uint4 parid, Properties which, MCExecPoint& ep, Bool
 		break;
 #endif /* MCColors::getprop */ 
 	default:
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 		return MCControl::getprop(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCColors::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCColors::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = True;
 	MCString data = ep.getsvalue();
@@ -218,7 +221,8 @@ Exec_stat MCColors::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 		break;
 #endif /* MCColors::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty && opened)
 	{

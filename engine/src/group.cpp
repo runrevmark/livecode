@@ -793,7 +793,8 @@ void MCGroup::setrect(const MCRectangle &nrect)
 	}
 }
 
-Exec_stat MCGroup::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCGroup::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	switch (which)
 	{
@@ -974,12 +975,14 @@ Exec_stat MCGroup::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 		break;
 #endif /* MCGroup::getprop */
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCGroup::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCGroup::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = False;
 	int2 i1, i2, i3, i4;
@@ -991,12 +994,14 @@ Exec_stat MCGroup::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	case P_SHOW_BORDER:
 	case P_BORDER_WIDTH:
 	case P_TEXT_SIZE:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		dirty = computeminrect(False);
 		break;
 	case P_TEXT_HEIGHT:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		resetscrollbars(False);
 		break;
@@ -1133,7 +1138,8 @@ Exec_stat MCGroup::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	case P_RIGHT_MARGIN:
 	case P_TOP_MARGIN:
 	case P_BOTTOM_MARGIN:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		if (leftmargin == defaultmargin && rightmargin == defaultmargin
 		        && topmargin == defaultmargin && bottommargin == defaultmargin)
@@ -1337,7 +1343,8 @@ Exec_stat MCGroup::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	break;
 #endif /* MCGroup::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty && opened)
 	{

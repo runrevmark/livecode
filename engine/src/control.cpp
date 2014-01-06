@@ -383,7 +383,8 @@ uint2 MCControl::gettransient() const
 	return 0;
 }
 
-Exec_stat MCControl::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCControl::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	switch (which)
 	{
@@ -451,13 +452,15 @@ Exec_stat MCControl::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boo
 	break;
 #endif /* MCControl::getprop */ 
 	default:
-		return MCObject::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCObject::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
-Exec_stat MCControl::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCControl::getarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 	switch(which)
 	{
@@ -471,12 +474,14 @@ Exec_stat MCControl::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep
 		return MCBitmapEffectsGetProperties(m_bitmap_effects, which, ep, key);
 #endif /* MCControl::getarrayprop */
 	default:
-		return MCObject::getarrayprop(parid, which, ep, key, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCObject::getarrayprop_legacy(parid, which, ep, key, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCControl::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCControl::setprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = True;
 	int2 i1, i2, i3, i4;
@@ -608,7 +613,8 @@ Exec_stat MCControl::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boo
 	// The opaque property can affect the layer's opaqueness.
 	case P_FILLED:
 	case P_OPAQUE:
-		if (MCObject::setprop(parid, which, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCObject::setprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 
 		// Mark the layer attrs for recompute.
@@ -616,7 +622,8 @@ Exec_stat MCControl::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boo
 		return ES_NORMAL;
 #endif /* MCControl::setprop */
 	default:
-		return MCObject::setprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCObject::setprop_legacy(parid, which, ep, effective);
 	}
 
 	if (dirty && opened)
@@ -627,7 +634,8 @@ Exec_stat MCControl::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boo
 	return ES_NORMAL;
 }
 
-Exec_stat MCControl::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCControl::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 	Boolean dirty;
 	dirty = False;
@@ -659,8 +667,9 @@ Exec_stat MCControl::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep
 	default:
 		break;
 	}
-
-	return MCObject::setarrayprop(parid, which, ep, key, effective);
+	
+	// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+	return MCObject::setarrayprop_legacy(parid, which, ep, key, effective);
 }
 
 void MCControl::select()

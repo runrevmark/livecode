@@ -652,7 +652,7 @@ void MCScrollbar::timer(MCNameRef mptr, MCParameter *params)
 		MCControl::timer(mptr, params);
 }
 
-Exec_stat MCScrollbar::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+Exec_stat MCScrollbar::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	switch (which)
 	{
@@ -708,12 +708,14 @@ Exec_stat MCScrollbar::getprop(uint4 parid, Properties which, MCExecPoint& ep, B
 		break;
 #endif /* MCScrollbar::getprop */
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCScrollbar::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCScrollbar::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = True;
 	real8 newvalue;
@@ -851,7 +853,8 @@ Exec_stat MCScrollbar::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boole
 		break;
 #endif /* MCScrollbar::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	flags |= F_SAVE_ATTS;
 	if (dirty && opened)

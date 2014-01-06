@@ -459,7 +459,7 @@ void MCGraphic::setgradientrect(MCGradientFill *p_gradient, const MCRectangle &n
 	}
 }
 
-Exec_stat MCGraphic::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+Exec_stat MCGraphic::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	uint2 i;
 
@@ -662,13 +662,15 @@ Exec_stat MCGraphic::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boo
 		break;
 #endif /* MCGraphic::getprop */
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
-Exec_stat MCGraphic::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCGraphic::getarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCGraphic::getarrayprop */ LEGACY_EXEC
 	switch(which)
@@ -681,13 +683,15 @@ Exec_stat MCGraphic::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep
 	break;
 	
 	default:
-		return MCControl::getarrayprop(parid, which, ep, key, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getarrayprop_legacy(parid, which, ep, key, effective);
 	}
 	return ES_NORMAL;
 #endif /* MCGraphic::getarrayprop */
 }
 
-Exec_stat MCGraphic::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCGraphic::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = True;
 	int2 i1;
@@ -797,7 +801,8 @@ Exec_stat MCGraphic::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean
 			MCGradientFillFree(m_fill_gradient);
 			m_fill_gradient = NULL;
 		}
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	break;
 	case P_FORE_COLOR:
 	case P_FORE_PATTERN:
@@ -806,7 +811,8 @@ Exec_stat MCGraphic::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean
 			MCGradientFillFree(m_stroke_gradient);
 			m_stroke_gradient = NULL;
 		}
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	break;
 	case P_EDIT_MODE:
 		{
@@ -1179,7 +1185,8 @@ Exec_stat MCGraphic::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean
 		break;
 #endif /* MCGraphic::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty)
 	{
@@ -1197,7 +1204,8 @@ Exec_stat MCGraphic::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean
 }
 
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
-Exec_stat MCGraphic::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCGraphic::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCGraphic::setarrayprop */ LEGACY_EXEC
 	Boolean dirty;
@@ -1227,7 +1235,8 @@ Exec_stat MCGraphic::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep
 	}
 	break;
 	default:
-		return MCControl::setarrayprop(parid, which, ep, key, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setarrayprop_legacy(parid, which, ep, key, effective);
 	}
 
 	if (dirty && opened)

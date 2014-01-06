@@ -1183,7 +1183,8 @@ void MCField::setrect(const MCRectangle &nrect)
         do_recompute(true);
 }
 
-Exec_stat MCField::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCField::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	switch (which)
 	{
@@ -1433,7 +1434,8 @@ Exec_stat MCField::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 		return gettextatts(parid, P_ENCODING, ep, nil, False, 0, INT32_MAX, false);
 #endif /* MCField::getprop */ 
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
@@ -1501,7 +1503,8 @@ void MCField::formattabstops(Properties which, MCExecPoint& ep, uint16_t *tabs, 
 	}
 }
 
-Exec_stat MCField::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCField::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = False;
 	Boolean reset = False;
@@ -1768,7 +1771,8 @@ Exec_stat MCField::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	case P_WIDTH:
 	case P_HEIGHT:
 	case P_RECTANGLE:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		dirty = reset = True;
 		break;
@@ -1942,7 +1946,8 @@ Exec_stat MCField::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	case P_DISABLED:
 	case P_ENABLED:
 	case P_BORDER_WIDTH:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 
 		if (p == P_3D || p == P_OPAQUE || p == P_ENABLED || p == P_DISABLED)
@@ -1969,7 +1974,8 @@ Exec_stat MCField::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 		return settextatts(parid, P_FLAGGED_RANGES, ep, nil, 0, INT32_MAX, false);
 #endif /* MCField::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty && opened)
 	{

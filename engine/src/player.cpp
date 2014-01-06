@@ -616,7 +616,7 @@ void MCPlayer::timer(MCNameRef mptr, MCParameter *params)
 	MCControl::timer(mptr, params);
 }
 
-Exec_stat MCPlayer::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+Exec_stat MCPlayer::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	uint2 i = 0;
 	switch (which)
@@ -787,12 +787,14 @@ Exec_stat MCPlayer::getprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 		break;
 #endif /* MCPlayer::getprop */
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCPlayer::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCPlayer::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = False;
 	Boolean wholecard = False;
@@ -923,7 +925,8 @@ Exec_stat MCPlayer::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 		setselection();
 		break;
 	case P_TRAVERSAL_ON:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 #ifdef FEATURE_QUICKTIME
 		if (qtstate == QT_INITTED && getstate(CS_PREPARED))
@@ -977,7 +980,8 @@ Exec_stat MCPlayer::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 		break;
 	case P_SHOW_BORDER:
 	case P_BORDER_WIDTH:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		setrect(rect);
 		dirty = True;
@@ -1089,7 +1093,8 @@ Exec_stat MCPlayer::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 	case P_INVISIBLE:
 		{
 			uint4 oldflags = flags;
-			Exec_stat stat = MCControl::setprop(parid, p, ep, effective);
+			// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+			Exec_stat stat = MCControl::setprop_legacy(parid, p, ep, effective);
 			if (flags != oldflags && !(flags & F_VISIBLE))
 				playstop();
 #ifdef FEATURE_QUICKTIME
@@ -1102,7 +1107,8 @@ Exec_stat MCPlayer::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 		break;
 #endif /* MCPlayer::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty && opened && flags & F_VISIBLE)
 	{

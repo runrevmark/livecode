@@ -1032,7 +1032,8 @@ void MCStack::setrect(const MCRectangle &nrect)
 		resize(oldrect . width, oldrect . height);
 }
 
-Exec_stat MCStack::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCStack::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	uint2 j = 0;
 	uint2 k = 0;
@@ -1533,8 +1534,9 @@ Exec_stat MCStack::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 	{
 		Exec_stat t_stat;
 		t_stat = mode_getprop(parid, which, ep, MCnullmcstring, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 		if (t_stat == ES_NOT_HANDLED)
-			return MCObject::getprop(parid, which, ep, effective);
+			return MCObject::getprop_legacy(parid, which, ep, effective);
 
 		return t_stat;
 	}
@@ -1544,7 +1546,8 @@ Exec_stat MCStack::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 }
 
 
-Exec_stat MCStack::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCStack::setprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty;
 	Boolean bval;
@@ -1630,8 +1633,9 @@ Exec_stat MCStack::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 			// If the name is going to be empty, coerce to 'Untitled'.
 			if (ep . isempty())
 				ep . setstaticcstring(MCuntitledstring);
-
-			if (MCObject::setprop(parid, which, ep, effective) != ES_NORMAL)
+			
+			// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+			if (MCObject::setprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 				return ES_ERROR;
 
 			dirtywindowname();
@@ -1670,8 +1674,9 @@ Exec_stat MCStack::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 	case P_VISIBLE:
 
 		dirty = True;
-
-		if (MCObject::setprop(parid, which, ep, effective) != ES_NORMAL)
+			
+			// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCObject::setprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		if (opened && (!(state & CS_IGNORE_CLOSE)) )
 		{
@@ -1723,7 +1728,8 @@ Exec_stat MCStack::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 	case P_TEXT_SIZE:
 	case P_TEXT_STYLE:
 	case P_TEXT_HEIGHT:
-		if (MCObject::setprop(parid, which, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCObject::setprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		// MW-2011-08-18: [[ Redraw ]] This could be restricted to just children
 		//   of this stack - but for now do the whole screen.
@@ -2452,7 +2458,8 @@ Exec_stat MCStack::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 		break;
 	case P_BLEND_LEVEL:
 		old_blendlevel = blendlevel;
-		if (MCObject::setprop(parid, which, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCObject::setprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		
 		// MW-2011-11-03: [[ Bug 9852 ]] Make sure an update is scheduled to sync the
@@ -2576,8 +2583,9 @@ Exec_stat MCStack::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boole
 	{
 		Exec_stat t_stat;
 		t_stat = mode_setprop(parid, which, ep, MCnullmcstring, MCnullmcstring, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 		if (t_stat == ES_NOT_HANDLED)
-			return MCObject::setprop(parid, which, ep, effective);
+			return MCObject::setprop_legacy(parid, which, ep, effective);
 
 		return t_stat;
 	}

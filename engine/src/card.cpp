@@ -899,7 +899,8 @@ void MCCard::timer(MCNameRef mptr, MCParameter *params)
 		MCObject::timer(mptr, params);
 }
 
-Exec_stat MCCard::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCCard::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	MCRectangle minrect;
 	uint2 num;
@@ -1040,12 +1041,14 @@ Exec_stat MCCard::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolea
 		return ES_ERROR;
 #endif /* MCCard::getprop */
 	default:
-		return MCObject::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCObject::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCCard::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCCard::setprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = False;
 	uint4 newnumber;
@@ -1086,7 +1089,8 @@ Exec_stat MCCard::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolea
 	case P_TEXT_STYLE:
 	case P_TEXT_HEIGHT:
 		// Try to set the property.
-		if (MCObject::setprop(parid, which, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCObject::setprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		
 		// Now dirty everything in the stack (inc. flush tilecache since
@@ -1163,7 +1167,8 @@ Exec_stat MCCard::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolea
 		break;
 #endif /* MCCard::setprop */
 	default:
-		return MCObject::setprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCObject::setprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }

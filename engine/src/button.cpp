@@ -1602,7 +1602,8 @@ void MCButton::setrect(const MCRectangle &nrect)
 	}
 }
 
-Exec_stat MCButton::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCButton::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	uint2 fheight;
 	uint2 j = 0;
@@ -1874,12 +1875,14 @@ Exec_stat MCButton::getprop(uint4 parid, Properties which, MCExecPoint& ep, Bool
 		break;
 #endif /* MCButton::getprop */ 
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCButton::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCButton::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = True;
 	Boolean all = p == P_STYLE || p == P_LABEL_WIDTH || MCaqua && standardbtn();
@@ -1892,7 +1895,8 @@ Exec_stat MCButton::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 	{
 #ifdef /* MCButton::setprop */ LEGACY_EXEC
 	case P_NAME:
-		if (MCObject::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCObject::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		clearmnemonic();
 		setupmnemonic();
@@ -2256,7 +2260,8 @@ Exec_stat MCButton::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 			menumode = WM_CLOSED;
 		break;
 	case P_SHOW_BORDER:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		if (MCaqua && menumode == WM_PULLDOWN)
 		{
@@ -2402,7 +2407,8 @@ Exec_stat MCButton::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 	case P_TEXT_STYLE:
 	case P_ENABLED:
 	case P_DISABLED:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 
 		// MW-2007-07-05: [[ Bug 1292 ]] Field inside combo-box doesn't respect the button's properties
@@ -2422,7 +2428,9 @@ Exec_stat MCButton::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 		break;
 	case P_MARGINS:
 		// MW-2007-07-05: [[ Bug 1292 ]] We pass the margins through to the combo-box field
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 
 		if (entry != NULL)
@@ -2487,9 +2495,11 @@ Exec_stat MCButton::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean 
 		// MW-2005-09-05: [[Bug 3167]] Only set the entry's property if it exists!
 		if (entry != NULL)
 			entry -> setprop(parid, p, ep, effective);
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 #endif /* MCButton::setprop */
 	}
 	if (dirty && opened)

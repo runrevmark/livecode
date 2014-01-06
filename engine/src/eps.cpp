@@ -188,7 +188,8 @@ void MCEPS::setrect(const MCRectangle &nrect)
 		rect = nrect;
 }
 
-Exec_stat MCEPS::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCEPS::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	switch (which)
 	{
@@ -244,12 +245,14 @@ Exec_stat MCEPS::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean
 		break;
 #endif /* MCEPS::getprop */ 
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCEPS::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCEPS::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = True;
 	real8 n;
@@ -262,7 +265,8 @@ Exec_stat MCEPS::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean eff
 #ifdef /* MCEPS::setprop */ LEGACY_EXEC
 	case P_TRAVERSAL_ON:
 	case P_SHOW_BORDER:
-		if (MCControl::setprop(parid, p, ep, effective) != ES_NORMAL)
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		if (MCControl::setprop_legacy(parid, p, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 		resetscale();
 		break;
@@ -415,7 +419,8 @@ Exec_stat MCEPS::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean eff
 		break;
 #endif /* MCEPS::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty && opened)
 	{

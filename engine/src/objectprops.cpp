@@ -248,7 +248,8 @@ Exec_stat MCObject::getcustomprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameR
 	return t_stat;
 }
 
-Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCObject::getprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 #ifdef /* MCObject::getprop */ LEGACY_EXEC
 	uint2 num = 0;
@@ -616,7 +617,7 @@ static bool string_contains_item(const char *p_string, const char *p_item)
 }
 
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
-Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+Exec_stat MCObject::getarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCObject::getarrayprop */ LEGACY_EXEC
 	switch(which)
@@ -626,7 +627,7 @@ Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep,
 	case P_TEXT_STYLE:
 	{
 		// First fetch the current property value.
-		if (getprop(parid, which, ep, effective) != ES_NORMAL)
+		if (getprop_legacy(parid, which, ep, effective) != ES_NORMAL)
 			return ES_ERROR;
 
 		// If the key is empty, then we are done.
@@ -1258,7 +1259,8 @@ Exec_stat MCObject::setcustomprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameR
 	return t_stat;
 }
 
-Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCObject::setprop_legacy(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
 #ifdef /* MCObject::setprop */ LEGACY_EXEC
 	Boolean dirty = True;
@@ -1715,7 +1717,8 @@ Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 }
 
 // MW-2011-11-23: [[ Array Chunk Props ]] Add 'effective' param to arrayprop access.
-Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCObject::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCObject::setarrayprop */ LEGACY_EXEC
 	MCString data;
@@ -1726,8 +1729,9 @@ Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep,
 	{
 		// MW-2011-11-23: [[ Array TextStyle ]] If the key is empty, then we are
 		//   manipulating the whole set at once.
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 		if (MCNameIsEmpty(key))
-			return setprop(parid, which, ep, effective);
+			return setprop_legacy(parid, which, ep, effective);
 
 		// Determine whether we are setting or unsetting.
 		Boolean newstate;
@@ -1757,7 +1761,8 @@ Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep,
 
 		// Now unparse to a style string, and apply.
 		MCF_unparsetextatts(P_TEXT_STYLE, ep, 0, nil, 0, 0, t_style_set);
-		return setprop(parid, which, ep, False);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return setprop_legacy(parid, which, ep, False);
 	}
 	break;
 	case P_CUSTOM_KEYS:

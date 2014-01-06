@@ -593,7 +593,8 @@ void MCImageSetMask(MCImageBitmap *p_bitmap, uint8_t *p_mask_data, uindex_t p_ma
 	MCImageBitmapCheckTransparency(p_bitmap);
 }
 
-Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCImage::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
 	uint2 i;
 	uint4 size = 0;
@@ -849,12 +850,14 @@ Exec_stat MCImage::getprop(uint4 parid, Properties which, MCExecPoint& ep, Boole
 		break;
 #endif /* MCImage::getprop */
 	default:
-		return MCControl::getprop(parid, which, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::getprop_legacy(parid, which, ep, effective);
 	}
 	return ES_NORMAL;
 }
 
-Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
+// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+Exec_stat MCImage::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
 	Boolean dirty = False;
 	uint2 i;
@@ -868,7 +871,8 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	case P_VISIBLE:
 		{
 			Boolean wasvisible = isvisible();
-			Exec_stat stat = MCControl::setprop(parid, p, ep, effective);
+			// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+			Exec_stat stat = MCControl::setprop_legacy(parid, p, ep, effective);
 			if (!(MCbufferimages || flags & F_I_ALWAYS_BUFFER)
 			        && !isvisible() && m_rep != nil)
 				closeimage();
@@ -1240,7 +1244,8 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 	case P_INK:
 	case P_BLEND_LEVEL:
 		{
-			Exec_stat t_stat = MCControl::setprop(parid, p, ep, effective);
+			// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+			Exec_stat t_stat = MCControl::setprop_legacy(parid, p, ep, effective);
 			if (t_stat == ES_NORMAL)
 				notifyneeds(false);
 			return t_stat;
@@ -1248,7 +1253,8 @@ Exec_stat MCImage::setprop(uint4 parid, Properties p, MCExecPoint &ep, Boolean e
 		break;
 #endif /* MCImage::setprop */
 	default:
-		return MCControl::setprop(parid, p, ep, effective);
+		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
+		return MCControl::setprop_legacy(parid, p, ep, effective);
 	}
 	if (dirty && opened)
 	{

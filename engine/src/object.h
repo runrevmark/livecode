@@ -353,6 +353,16 @@ public:
 	Exec_stat getcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
     Exec_stat setcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
 
+	// MW-2014-01-06: [[ EngineProps ]] New object property accessor methods.
+	//   if which is UNDEFINED, then name contains the name of the property
+	//   otherwise which is the resolved keyword of the property and name is nil
+	//   if key is nil, then it is a plain property access
+	//   otherwise it is an array property access
+	// These methods proceed as follows:
+	//   
+	Exec_stat getproperty(uint32_t part_id, MCExecPoint& ep, Properties which, MCNameRef name, MCNameRef key, Boolean effective);
+	Exec_stat setproperty(uint32_t part_id, MCExecPoint& ep, Properties which, MCNameRef name, MCNameRef key, Boolean effective);
+	
 	Exec_stat changeid(uint32_t new_id);
 
 	uint4 getid() const

@@ -709,10 +709,6 @@ static bool string_contains_item(const char *p_string, const char *p_item)
 Exec_stat MCObject::getarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCObject::getarrayprop */ LEGACY_EXEC
-	Exec_stat t_stat = sendgetprop(ep, which, key);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     switch(which)
 	{
 	// MW-2011-11-23: [[ Array TextStyle ]] We now treat textStyle as (potentially) an
@@ -1871,10 +1867,6 @@ Exec_stat MCObject::setprop_legacy(uint4 parid, Properties which, MCExecPoint &e
 Exec_stat MCObject::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCObject::setarrayprop */ LEGACY_EXEC
-	Exec_stat t_stat = sendsetprop(ep, which, key);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     MCString data;
 	data = ep . getsvalue();
 	switch(which)
@@ -1984,24 +1976,44 @@ Exec_stat MCObject::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoi
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
+	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	Exec_stat t_stat = sendgetprop(ep, which, kMCEmptyName);
+    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
+        return t_stat;
+	
 	return getprop_legacy(parid, which, ep, effective);
 }
 
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
+	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	Exec_stat t_stat = sendsetprop(ep, which, kMCEmptyName);
+    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
+        return t_stat;
+    
 	return setprop_legacy(parid, which, ep, effective);
 }
 
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
+	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	Exec_stat t_stat = sendgetprop(ep, which, key);
+    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
+        return t_stat;
+	
 	return getarrayprop_legacy(parid, which, ep, key, effective);
 }
 
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
+	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	Exec_stat t_stat = sendsetprop(ep, which, key);
+    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
+        return t_stat;
+	
 	return setarrayprop_legacy(parid, which, ep, key, effective);
 }
 

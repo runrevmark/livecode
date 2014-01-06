@@ -1186,10 +1186,6 @@ void MCField::setrect(const MCRectangle &nrect)
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCField::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
-	Exec_stat t_stat = sendgetprop(ep, which, kMCEmptyName);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     switch (which)
 	{
 #ifdef /* MCField::getprop */ LEGACY_EXEC
@@ -1510,10 +1506,6 @@ void MCField::formattabstops(Properties which, MCExecPoint& ep, uint16_t *tabs, 
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCField::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
-	Exec_stat t_stat = sendsetprop(ep, p, kMCEmptyName);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     Boolean dirty = False;
 	Boolean reset = False;
 	int4 savex = textx;

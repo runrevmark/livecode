@@ -1605,10 +1605,6 @@ void MCButton::setrect(const MCRectangle &nrect)
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCButton::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
-	Exec_stat t_stat = sendgetprop(ep, which, kMCEmptyName);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     uint2 fheight;
 	uint2 j = 0;
 
@@ -1888,10 +1884,6 @@ Exec_stat MCButton::getprop_legacy(uint4 parid, Properties which, MCExecPoint& e
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCButton::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
-	Exec_stat t_stat = sendsetprop(ep, p, kMCEmptyName);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     Boolean dirty = True;
 	Boolean all = p == P_STYLE || p == P_LABEL_WIDTH || MCaqua && standardbtn();
 	int2 i1;

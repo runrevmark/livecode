@@ -386,10 +386,6 @@ uint2 MCControl::gettransient() const
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCControl::getprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, Boolean effective)
 {
-	Exec_stat t_stat = sendgetprop(ep, which, kMCEmptyName);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     switch (which)
 	{
 #ifdef /* MCControl::getprop */ LEGACY_EXEC
@@ -475,12 +471,7 @@ Exec_stat MCControl::getarrayprop_legacy(uint4 parid, Properties which, MCExecPo
 	case P_BITMAP_EFFECT_OUTER_GLOW:
 	case P_BITMAP_EFFECT_INNER_GLOW:
 	case P_BITMAP_EFFECT_COLOR_OVERLAY:
-        {
-            Exec_stat t_stat = sendgetprop(ep, which, key);
-            if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-                return t_stat;
-            return MCBitmapEffectsGetProperties(m_bitmap_effects, which, ep, key);
-        }
+		return MCBitmapEffectsGetProperties(m_bitmap_effects, which, ep, key);
 #endif /* MCControl::getarrayprop */
 	default:
 		// MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
@@ -656,11 +647,7 @@ Exec_stat MCControl::setarrayprop_legacy(uint4 parid, Properties which, MCExecPo
 	case P_BITMAP_EFFECT_OUTER_GLOW:
 	case P_BITMAP_EFFECT_INNER_GLOW:
 	case P_BITMAP_EFFECT_COLOR_OVERLAY:
-	{	
-        Exec_stat t_stat = sendsetprop(ep, which, key);
-        if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-            return t_stat;
-        
+	{
         MCRectangle t_old_effective_rect = geteffectiverect();
 		if (MCBitmapEffectsSetProperties(m_bitmap_effects, which, ep, key, dirty) != ES_NORMAL)
 			return ES_ERROR;

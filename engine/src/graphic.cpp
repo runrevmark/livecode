@@ -673,12 +673,6 @@ Exec_stat MCGraphic::getprop_legacy(uint4 parid, Properties which, MCExecPoint& 
 Exec_stat MCGraphic::getarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCGraphic::getarrayprop */ LEGACY_EXEC
-	if (which == P_GRADIENT_FILL || which == P_GRADIENT_STROKE)
-    {
-        Exec_stat t_stat = sendgetprop(ep, which, key);
-        if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-            return t_stat;
-    }
     switch(which)
 	{
 	case P_GRADIENT_FILL:
@@ -699,10 +693,6 @@ Exec_stat MCGraphic::getarrayprop_legacy(uint4 parid, Properties which, MCExecPo
 // MW-2014-01-06: [[ PropRefactor ]] Indirect prop access for consistency with refactor.
 Exec_stat MCGraphic::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, Boolean effective)
 {
-	Exec_stat t_stat = sendsetprop(ep, p, kMCEmptyName);
-    if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-        return t_stat;
-    
     Boolean dirty = True;
 	int2 i1;
 	MCRectangle drect = rect;
@@ -1218,13 +1208,6 @@ Exec_stat MCGraphic::setprop_legacy(uint4 parid, Properties p, MCExecPoint &ep, 
 Exec_stat MCGraphic::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
 #ifdef /* MCGraphic::setarrayprop */ LEGACY_EXEC
-	if (which == P_GRADIENT_FILL || which == P_GRADIENT_STROKE)
-    {
-        Exec_stat t_stat = sendsetprop(ep, which, key);
-        if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
-            return t_stat;
-    }
-   
     Boolean dirty;
 	dirty = False;
 	switch(which)

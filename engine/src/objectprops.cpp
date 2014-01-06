@@ -1827,6 +1827,30 @@ Exec_stat MCObject::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoi
 #endif /* MCObject::setarrayprop */
 }
 
+// MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
+Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+{
+	return getprop_legacy(parid, which, ep, effective);
+}
+
+// MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
+Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
+{
+	return setprop_legacy(parid, which, ep, effective);
+}
+
+// MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
+Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+{
+	return getarrayprop_legacy(parid, which, ep, key, effective);
+}
+
+// MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
+Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
+{
+	return setarrayprop_legacy(parid, which, ep, key, effective);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "props.cpp"

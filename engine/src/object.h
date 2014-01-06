@@ -323,6 +323,14 @@ public:
 	// MW-2012-02-14: [[ FontRefs ]] Returns the current concrete fontref of the object.
 	MCFontRef getfontref(void) const { return m_font; }
 
+	// MW-2014-01-06: [[ PropRefactor ]] Indirected prop access potentially via messages (eventually call _legacy variants).
+	Exec_stat getarrayprop(uint32_t p_part_id, Properties p_which, MCExecPoint& ep, MCNameRef p_index, Boolean p_effective);
+    Exec_stat setarrayprop(uint32_t p_part_id, Properties p_which, MCExecPoint& ep, MCNameRef p_index, Boolean p_effective);
+	
+	// MW-2014-01-06: [[ PropRefactor ]] Indirected prop access potentially via messages (eventually call _legacy variants).
+	Exec_stat getprop(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
+	Exec_stat setprop(uint4 parid, Properties which, MCExecPoint &, Boolean effective);
+	
 	const MCRectangle &getrect() const;
     virtual MCRectangle getrectangle(bool p_effective) const;
 

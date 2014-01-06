@@ -3553,13 +3553,13 @@ bool MCObject::resolveparentscript(void)
 	{
 		t_script -> Resolve(t_control);
 
-		// MW-2015-05-30: [[ InheritedPscripts ]] Next we must ensure the
+		// MW-2013-05-30: [[ InheritedPscripts ]] Next we must ensure the
 		//   existence of the inheritence hierarchy, so resolve the parentScript's
 		//   parentScript.
 		if (!t_control -> resolveparentscript())
 			return false;
 
-		// MW-2015-05-30: [[ InheritedPscripts ]] And then make sure it creates its
+		// MW-2013-05-30: [[ InheritedPscripts ]] And then make sure it creates its
 		//   super-use chain.
 		if (!parent_script -> Inherit())
 			return false;

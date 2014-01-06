@@ -342,13 +342,15 @@ public:
 
 	MCNameRef getdefaultpropsetname(void);
 	
-	// MERG-2015-01-06: [[ EngineProps ]] Methods for sending getprop/setprop messages from keyword
+	// MERG-2014-01-06: [[ EngineProps ]] Methods for sending getprop/setprop messages from keyword
 	Exec_stat sendgetprop(MCExecPoint& ep, Properties which, MCNameRef p_prop_name);
     Exec_stat sendsetprop(MCExecPoint& ep, Properties which, MCNameRef p_prop_name);
 	
-	Exec_stat sendgetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
+	// MW-2014-01-06: [[ EngineProps ]] Renamed from sendgetprop/setprop to distinguish from keyword props (sendgetprop/sendsetprop).
+	Exec_stat sendcustomgetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
+	Exec_stat sendcustomsetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
+	
 	Exec_stat getcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
-	Exec_stat sendsetprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
     Exec_stat setcustomprop(MCExecPoint& ep, MCNameRef set_name, MCNameRef prop_name);
 
 	Exec_stat changeid(uint32_t new_id);

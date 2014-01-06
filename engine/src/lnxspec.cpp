@@ -1484,7 +1484,7 @@ IO_handle MCS_fakeopenwrite(void)
 
 IO_handle MCS_fakeopencustom(MCFakeOpenCallbacks *p_callbacks, void *p_state)
 {
-	// MW-2015-05-03: [[ x64 ]] Use 'uintptr_t' as cast for callbacks (param is actually
+	// MW-2013-05-03: [[ x64 ]] Use 'uintptr_t' as cast for callbacks (param is actually
 	//   size_t, but uintptr_t is the 'correct' type for this usage - there should really
 	//   be a different constructor for this case!)
 	return new IO_header(NULL, (char *)p_state, (uintptr_t)p_callbacks, 0, IO_FAKECUSTOM);

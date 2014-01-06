@@ -173,7 +173,7 @@ Exec_stat MCObject::getrectprop(Properties p_which, MCExecPoint& ep, Boolean p_e
 }
 #endif /* MCObject::getrectprop */
 
-Exec_stat MCObject::sendgetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
+Exec_stat MCObject::sendcustomgetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
 {
 	// If the set name is nil, then we send a 'getProp <propname>' otherwise we
 	// send a 'getProp <setname> <propname>'.
@@ -236,7 +236,7 @@ Exec_stat MCObject::getcustomprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameR
 
 	Exec_stat t_stat;
 
-	t_stat = sendgetprop(ep, p_set_name, p_prop_name);
+	t_stat = sendcustomgetprop(ep, p_set_name, p_prop_name);
 	if (t_stat == ES_NOT_HANDLED || t_stat == ES_PASS)
 	{
 		MCVariableValue *p;
@@ -1282,7 +1282,7 @@ Exec_stat MCObject::setvisibleprop(uint4 parid, Properties which, MCExecPoint& e
 }
 #endif /* MCObject::setvisibleprop */
 
-Exec_stat MCObject::sendsetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
+Exec_stat MCObject::sendcustomsetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
 {
 	// If the set name is nil, then we send a 'setProp <propname> <value>'
 	// otherwise we send a 'setProp <setname>[<propname>] <value>'.
@@ -1336,7 +1336,7 @@ Exec_stat MCObject::sendsetprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef
 Exec_stat MCObject::setcustomprop(MCExecPoint& ep, MCNameRef p_set_name, MCNameRef p_prop_name)
 {
 	Exec_stat t_stat;
-	t_stat = sendsetprop(ep, p_set_name, p_prop_name);
+	t_stat = sendcustomsetprop(ep, p_set_name, p_prop_name);
 
 	if (t_stat == ES_PASS || t_stat == ES_NOT_HANDLED)
 	{
@@ -1976,7 +1976,7 @@ Exec_stat MCObject::setarrayprop_legacy(uint4 parid, Properties which, MCExecPoi
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
-	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	// MERG-2014-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
 	Exec_stat t_stat = sendgetprop(ep, which, kMCEmptyName);
     if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
         return t_stat;
@@ -1987,7 +1987,7 @@ Exec_stat MCObject::getprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Boolean effective)
 {
-	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	// MERG-2014-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
 	Exec_stat t_stat = sendsetprop(ep, which, kMCEmptyName);
     if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
         return t_stat;
@@ -1998,7 +1998,7 @@ Exec_stat MCObject::setprop(uint4 parid, Properties which, MCExecPoint &ep, Bool
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
-	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	// MERG-2014-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
 	Exec_stat t_stat = sendgetprop(ep, which, key);
     if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
         return t_stat;
@@ -2009,7 +2009,7 @@ Exec_stat MCObject::getarrayprop(uint4 parid, Properties which, MCExecPoint& ep,
 // MW-2014-01-06: [[ PropRefactor ]] Main prop access method - defers to _legacy variant.
 Exec_stat MCObject::setarrayprop(uint4 parid, Properties which, MCExecPoint& ep, MCNameRef key, Boolean effective)
 {
-	// MERG-2015-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
+	// MERG-2014-01-06: [[ EngineProps ]] First see if we should dispatch a message for the engine prop.
 	Exec_stat t_stat = sendsetprop(ep, which, key);
     if (!(t_stat == ES_NOT_HANDLED || t_stat == ES_PASS))
         return t_stat;

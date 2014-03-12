@@ -399,7 +399,7 @@ static void MCFontDrawTextCallback(MCFontRef p_font, const char *p_text, uint32_
 	MCGContextDrawPlatformText(ctxt->m_gcontext, (unichar_t *) ep . getsvalue() . getstring(), ep . getsvalue() . getlength(), MCGPointMake(ctxt->x, ctxt->y), t_font);
     
     // The draw position needs to be advanced. Can this be done more efficiently?
-    ctxt -> x += MCGContextMeasurePlatformText(NULL, (unichar_t*)ep.getsvalue().getstring(), ep.getsvalue().getlength(), t_font);
+    ctxt -> x += MCGContextMeasurePlatformText(ctxt -> m_gcontext, (unichar_t*)ep.getsvalue().getstring(), ep.getsvalue().getlength(), t_font);
 }
 
 void MCFontDrawText(MCGContextRef p_gcontext, int32_t x, int32_t y, const char *p_text, uint32_t p_length, MCFontRef p_font, bool p_is_unicode)

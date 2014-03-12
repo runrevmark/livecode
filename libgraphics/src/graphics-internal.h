@@ -122,6 +122,18 @@ struct __MCGContextLayer
 	MCGContextLayerRef parent;
 };
 
+typedef struct MCGThreadContext *MCGThreadContextRef;
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct MCGThreadContext
+{
+#ifdef _MACOSX
+	void *text_style;
+	void *text_layout;
+#endif
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct __MCGImage
@@ -151,7 +163,7 @@ struct __MCGContext
 	MCGContextStateRef	state;
 	MCGContextLayerRef  layer;
 	MCGPathRef			path;
-	
+
 	bool				is_valid;
 	uint32_t			references;
 };
@@ -551,6 +563,19 @@ protected:
 private:    
     typedef SkShader INHERITED;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+typedef struct MCGThreadLock *MCGThreadLockRef;
+
+void MCGThreadLockCreate(MCGThreadLockRef& r_lock);
+void MCGThreadLockDestroy(MCGThreadLockRef lock);
+void MCGThreadLockAcquire(MCGThreadLockRef lock);
+void MCGThreadLockRelease(MCGThreadLockRef lock);
+
+void MCGThreadContextCreate(MCGThreadContextRef& r_context);
+void MCGThreadContextRetain(MCGThreadContextRef context);
+void MCGThreadContextRelease(MCGThreadContextRef context);
 
 ////////////////////////////////////////////////////////////////////////////////
 

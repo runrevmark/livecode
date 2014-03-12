@@ -49,6 +49,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "osxdc.h"
 
+#include <pthread.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // MW-2011-09-13: [[ Redraw ]] If non-nil, this pixmap is used in the next
@@ -1088,6 +1090,8 @@ class MCMacStackSurface: public MCStackSurface
 	void *m_locked_bits;
 	uint32_t m_locked_stride;
 	
+	bool m_defer_unlock;
+	
 public:
 	MCMacStackSurface(MCStack *p_stack, int32_t p_surface_height, MCRegionRef p_region, CGContextRef p_context)
 	{
@@ -1098,7 +1102,11 @@ public:
 		
 		m_locked_context = nil;
 		m_locked_bits = nil;
+		
+		m_defer_unlock = false;
 	}
+	
+	void setDeferUnlock(bool p_value) { m_defer_unlock = p_value; }
 	
 	bool Lock(void)
 	{
@@ -1163,6 +1171,9 @@ public:
 	
 	void UnlockGraphics(void)
 	{
+		if (m_defer_unlock)
+			return;
+		
 		if (m_locked_context == nil)
 			return;
 		
@@ -1288,6 +1299,50 @@ public:
 #define kHIRevolutionStackViewClassID CFSTR("com.runrev.revolution.stackview")
 
 OSStatus HIRevolutionStackViewHandler(EventHandlerCallRef p_call_ref, EventRef p_event, void *p_data);
+
+struct MCMacStackTile
+{
+	MCMacStackSurface *surface;
+	MCRegionRef region;
+	pthread_t thread;
+	MCStack *stack;
+};
+
+void *MCMacStackTileRenderThread(void *p_ctxt)
+{
+	MCMacStackTile *t_tile;
+	t_tile = (MCMacStackTile *)p_ctxt;
+	
+	t_tile -> stack -> view_surface_redrawwindow(t_tile -> surface, t_tile -> region);
+	
+	return nil;
+}
+
+void MCMacStackTileRender(MCStack *p_stack, int p_surface_height, MCRegionRef p_region, CGContextRef p_graphics, MCRectangle p_tile, MCMacStackTile*& r_tile)
+{	
+	MCMacStackTile *t_tile;
+	t_tile = new MCMacStackTile;
+	MCRegionCreate(t_tile -> region);
+	MCRegionIntersectRect(t_tile -> region, p_region, p_tile);
+	t_tile -> surface = new MCMacStackSurface(p_stack, p_surface_height, t_tile -> region, p_graphics);
+	t_tile -> surface -> setDeferUnlock(true);
+	t_tile -> stack = p_stack;
+	t_tile -> surface -> Lock();
+	pthread_create(&t_tile -> thread, nil, MCMacStackTileRenderThread, t_tile);
+	r_tile = t_tile;
+}
+
+void MCMacStackTileCollect(MCMacStackTile *p_tile)
+{
+	void *t_result;
+	pthread_join(p_tile -> thread, &t_result);
+	p_tile -> surface -> setDeferUnlock(false);
+	p_tile -> surface -> UnlockPixels();
+	p_tile -> surface -> Unlock();
+	delete p_tile -> surface;
+	MCRegionDestroy(p_tile -> region);
+	delete p_tile;
+}
 
 struct HIRevolutionStackViewData
 {
@@ -1513,16 +1568,39 @@ OSStatus HIRevolutionStackViewHandler(EventHandlerCallRef p_call_ref, EventRef p
 					// Save the context state
 					CGContextSaveGState(t_graphics);
 					
-					MCMacStackSurface t_surface(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics);
+					MCRectangle t_rect;
+					t_rect = MCRegionGetBoundingBox(t_surface_rgn);
 					
-					if (t_surface.Lock())
+					if ((t_rect . width > 64 && t_rect . height > 64) && s_update_callback == nil)
 					{
-						// If we don't have an update pixmap, then use redrawwindow.
-						if (s_update_callback == nil)
-							t_context -> stack -> view_surface_redrawwindow(&t_surface, t_surface_rgn);
-						else
-							s_update_callback(&t_surface, t_surface_rgn, s_update_context);
-						t_surface.Unlock();
+						MCMacStackTile *t_tiles[4];
+						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
+											 MCRectangleMake(t_rect . x, t_rect . y, t_rect . width / 2, t_rect . height / 2), t_tiles[0]);
+						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
+											 MCRectangleMake(t_rect . x + t_rect . width / 2, t_rect . y, t_rect . width - t_rect . width / 2, t_rect . height / 2), t_tiles[1]);
+						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
+											 MCRectangleMake(t_rect . x, t_rect . y + t_rect . height / 2, t_rect . width / 2, t_rect . height - t_rect . height / 2), t_tiles[2]);
+						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
+											 MCRectangleMake(t_rect . x + t_rect . width / 2, t_rect . y + t_rect . height / 2, t_rect . width - t_rect . width / 2, t_rect . height - t_rect . height / 2), t_tiles[3]);
+						
+						MCMacStackTileCollect(t_tiles[0]);
+						MCMacStackTileCollect(t_tiles[1]);
+						MCMacStackTileCollect(t_tiles[2]);
+						MCMacStackTileCollect(t_tiles[3]);
+					}
+					else
+					{
+						MCMacStackSurface t_surface(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics);
+						
+						if (t_surface.Lock())
+						{
+							// If we don't have an update pixmap, then use redrawwindow.
+							if (s_update_callback == nil)
+								t_context -> stack -> view_surface_redrawwindow(&t_surface, t_surface_rgn);
+							else
+								s_update_callback(&t_surface, t_surface_rgn, s_update_context);
+							t_surface.Unlock();
+						}
 					}
 
 					// Restore the context state

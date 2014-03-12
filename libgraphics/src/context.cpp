@@ -2521,12 +2521,14 @@ MCGFloat MCGContextMeasureText(MCGContextRef self, const char *p_text, uindex_t 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static MCGThreadLockRef s_measure_cache_lock = NULL;
 static MCGCacheTableRef s_measure_cache = NULL;
 
 void MCGTextMeasureCacheInitialize(void)
 {
     // MM-2014-01-09: [[ Bug 11623 ]] Make sure we initialise globals otherwise old values will be present on Android after restart.
     s_measure_cache = NULL;
+	//MCGThreadLockCreate(s_measure_cache_lock);
 	srand(time(NULL));
 	/* UNCHECKED */ MCGCacheTableCreate(kMCGTextMeasureCacheTableSize, kMCGTextMeasureCacheMaxOccupancy, kMCGTextMeasureCacheByteSize, s_measure_cache);
 }
@@ -2534,12 +2536,15 @@ void MCGTextMeasureCacheInitialize(void)
 void MCGTextMeasureCacheFinalize(void)
 {
 	MCGCacheTableDestroy(s_measure_cache);
+	//MCGThreadLockDestroy(s_measure_cache_lock);
     s_measure_cache = NULL;
 }
 
 void MCGTextMeasureCacheCompact(void)
 {
+	//MCGThreadLockAcquire(s_measure_cache_lock);
 	MCGCacheTableCompact(s_measure_cache);
+	//MCGThreadLockRelease(s_measure_cache_lock);
 }
 
 MCGFloat MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_text, uindex_t p_length, const MCGFont &p_font)
@@ -2598,9 +2603,13 @@ MCGFloat MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_te
 		t_key_ptr += sizeof(p_font . style);
 		
 		MCGFloat *t_width_ptr;
+		//if (self != nil)
+		//	MCGThreadLockAcquire(s_measure_cache_lock);
 		t_width_ptr = (MCGFloat *) MCGCacheTableGet(s_measure_cache, t_key, t_key_length);		
 		if (t_width_ptr != NULL)
 		{
+			//if (self != nil)
+			//	MCGThreadLockRelease(s_measure_cache_lock);
 			MCMemoryDelete(t_key);
 			return *t_width_ptr;
 		}		
@@ -2608,11 +2617,15 @@ MCGFloat MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_te
 		MCGFloat t_width;
 		t_width = __MCGContextMeasurePlatformText(self, p_text, p_length, p_font);
 		MCGCacheTableSet(s_measure_cache, t_key, t_key_length, &t_width, sizeof(MCGFloat));
+		//if (self != nil)
+		//	MCGThreadLockRelease(s_measure_cache_lock);
+		
 		return t_width;
 	}
 	
 	if (!t_success)
 		MCMemoryDelete(t_key);
+	
 	return 0.0;
 }
 

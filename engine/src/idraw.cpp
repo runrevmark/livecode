@@ -35,6 +35,20 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "graphicscontext.h"
 #include "graphics_util.h"
 
+#include <pthread.h>
+
+static pthread_mutex_t s_image_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void take_image_lock(void)
+{
+	pthread_mutex_lock(&s_image_lock);
+}
+
+static void release_image_lock(void)
+{
+	pthread_mutex_unlock(&s_image_lock);
+}
+
 bool MCImage::get_rep_and_transform(MCImageRep *&r_rep, bool &r_has_transform, MCGAffineTransform &r_transform)
 {
 	// IM-2013-11-05: [[ RefactorGraphics ]] Use resampled image rep for best-quality scaling
@@ -128,7 +142,9 @@ void MCImage::drawme(MCDC *dc, int2 sx, int2 sy, uint2 sw, uint2 sh, int2 dx, in
 			
 			// IM-2014-01-31: [[ HiDPI ]] Get the appropriate image for the combined
 			//   context device & image transforms
+			take_image_lock();
 			t_success = t_rep->LockImageFrame(currentframe, true, t_device_scale, t_frame);
+			release_image_lock();
 			if (t_success)
 			{
 				MCImageDescriptor t_image;
@@ -187,19 +203,26 @@ void MCImage::drawme(MCDC *dc, int2 sx, int2 sy, uint2 sw, uint2 sh, int2 dx, in
                 drawnodata(dc, drect, sw, sh, dx, dy);
 			}
 
+			take_image_lock();
 			t_rep->UnlockImageFrame(currentframe, t_frame);
+			release_image_lock();
 		}
 
 		if (state & CS_DO_START)
 		{
-			MCImageFrame *t_frame = nil;
-			if (m_rep->LockImageFrame(currentframe, true, getdevicescale(), t_frame))
+			take_image_lock();
+			if (state & CS_DO_START)
 			{
-				MCscreen->addtimer(this, MCM_internal, t_frame->duration);
-				m_rep->UnlockImageFrame(currentframe, t_frame);
+				MCImageFrame *t_frame = nil;
+				if (m_rep->LockImageFrame(currentframe, true, getdevicescale(), t_frame))
+				{
+					MCscreen->addtimer(this, MCM_internal, t_frame->duration);
+					m_rep->UnlockImageFrame(currentframe, t_frame);
 
-				state &= ~CS_DO_START;
+					state &= ~CS_DO_START;
+				}
 			}
+			release_image_lock();
 		}
 	}
     else if (filename != nil)

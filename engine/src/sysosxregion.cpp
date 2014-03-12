@@ -109,6 +109,21 @@ bool MCRegionExcludeRect(MCRegionRef self, const MCRectangle& rect)
 	return true;
 }
 
+bool MCRegionIntersectRect(MCRegionRef dst, MCRegionRef src, MCRectangle r)
+{
+	RgnHandle t_r;
+	t_r = NewRgn();
+	Rect t_mr;
+	t_mr . left = r . x;
+	t_mr . top = r . y;
+	t_mr . right = r . x + r . width;
+	t_mr . bottom = r . y + r . height;
+	RectRgn(t_r, &t_mr);
+	SectRgn((RgnHandle)src, t_r, (RgnHandle)dst);
+	DisposeRgn(t_r);
+	return true;
+}
+
 bool MCRegionOffset(MCRegionRef self, int32_t p_dx, int32_t p_dy)
 {
 	OffsetRgn((RgnHandle)self, p_dx, p_dy);

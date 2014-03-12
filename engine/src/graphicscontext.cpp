@@ -549,10 +549,10 @@ void MCGraphicsContext::setfillstyle(uint2 style, MCPatternRef p, int2 x, int2 y
 		t_transform = MCGAffineTransformTranslate(t_transform, x, y);
 
         // MM-2014-01-27: [[ UpdateImageFilters ]] Updated to use new libgraphics image filter types (was bilinear).
-		MCGContextSetFillPattern(m_gcontext, p->image, t_transform, kMCGImageFilterMedium);
 		m_pattern = MCPatternRetain(p);
 		m_pattern_x = x;
 		m_pattern_y = y;
+		MCGContextSetFillPattern(m_gcontext, p->image, t_transform, kMCGImageFilterMedium);
 	}
 	else if (style == FillStippled)
 		MCGContextSetFillPaintStyle(m_gcontext, kMCGPaintStyleStippled);

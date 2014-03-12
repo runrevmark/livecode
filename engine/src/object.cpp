@@ -1280,7 +1280,7 @@ Boolean MCObject::getforecolor(uint2 di, Boolean rev, Boolean hilite,
 			c = dc->getblack();
 		break;
 	case DI_BACK:
-#ifdef _MACOSX
+#ifdef _MACOSX0
 		if (IsMacLFAM() && dc -> gettype() != CONTEXT_TYPE_PRINTER)
 		{
 			extern bool MCMacThemeGetBackgroundPattern(Window_mode p_mode, bool p_active, MCPatternRef &r_pattern);
@@ -1372,7 +1372,7 @@ void MCObject::setforeground(MCDC *dc, uint2 di, Boolean rev, Boolean hilite)
 			t_parent = t_parent -> getparent();
 		}
 
-		dc->setfillstyle(FillTiled, t_pattern, x, y);
+		//dc->setfillstyle(FillTiled, t_pattern, x, y);
 	}
 }
 

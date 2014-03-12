@@ -307,12 +307,17 @@ static bool osx_draw_text_to_cgcontext_at_location(const void *p_text, uindex_t 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static pthread_mutex_t s_text_lock;
+
 void MCGPlatformInitialize(void)
 {
+	pthread_mutex_init(&s_text_lock, nil);
 }
 
 void MCGPlatformFinalize(void)
 {
+	pthread_mutex_destroy(&s_text_lock);
+	
     if (s_colour != NULL)
         CGColorRelease(s_colour);
     if (s_colour_space != NULL)
@@ -325,6 +330,8 @@ void MCGContextDrawPlatformText(MCGContextRef self, const unichar_t *p_text, uin
 {
 	if (!MCGContextIsValid(self))
 		return;	
+	
+	pthread_mutex_lock(&s_text_lock);
 	
 	bool t_success;
 	t_success = true;
@@ -359,7 +366,10 @@ void MCGContextDrawPlatformText(MCGContextRef self, const unichar_t *p_text, uin
 		t_clipped_bounds = MCGRectangleIntegerBounds(t_float_clipped_bounds);
 		
 		if (t_clipped_bounds . width == 0 || t_clipped_bounds . height == 0)
+		{
+			pthread_mutex_unlock(&s_text_lock);
 			return;
+		}
 	}
 	
 	void *t_data;
@@ -409,12 +419,16 @@ void MCGContextDrawPlatformText(MCGContextRef self, const unichar_t *p_text, uin
 	MCMemoryDelete(t_data);	
 	CGContextRelease(t_cgcontext);	
 	self -> is_valid = t_success;
+	
+	pthread_mutex_unlock(&s_text_lock);
 }
 
 MCGFloat __MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_text, uindex_t p_length, const MCGFont &p_font)
 {	
 	bool t_success;
 	t_success = true;
+	
+	pthread_mutex_lock(&s_text_lock);
 	
     if (t_success)
         t_success = osx_prepare_text(p_text, p_length, p_font);
@@ -423,6 +437,8 @@ MCGFloat __MCGContextMeasurePlatformText(MCGContextRef self, const unichar_t *p_
     t_width = 0;
     if (t_success)
         t_success = osx_measure_text_substring_width(p_length, t_width);
+	
+	pthread_mutex_unlock(&s_text_lock);
 	
     return (MCGFloat) t_width;
 }

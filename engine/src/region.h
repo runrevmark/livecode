@@ -37,6 +37,7 @@ bool MCRegionIncludeRect(MCRegionRef region, const MCRectangle& rect);
 bool MCRegionExcludeRect(MCRegionRef region, const MCRectangle& rect);
 
 bool MCRegionUnion(MCRegionRef dst, MCRegionRef x, MCRegionRef y);
+bool MCRegionIntersectRect(MCRegionRef dst, MCRegionRef x, MCRectangle r);
 
 bool MCRegionOffset(MCRegionRef region, int32_t dx, int32_t dy);
 

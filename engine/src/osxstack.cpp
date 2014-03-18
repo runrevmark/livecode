@@ -1300,39 +1300,140 @@ public:
 
 OSStatus HIRevolutionStackViewHandler(EventHandlerCallRef p_call_ref, EventRef p_event, void *p_data);
 
+// A tile thread sits and waits on a condition variable. When the variable is signalled,
+// it wakes up and starts processing the request. When the tile thread has done its work
+// it notifies the main thread's condition variable.
+
 struct MCMacStackTile
 {
+    MCMacStackTile *next;
+    
+    bool kill;
+    
+    bool in_use;
+    
+	pthread_t thread;
+    pthread_cond_t condition;
+    pthread_mutex_t mutex;
+    
 	MCMacStackSurface *surface;
 	MCRegionRef region;
-	pthread_t thread;
 	MCStack *stack;
 };
+
+static MCMacStackTile *s_inactive_tiles = nil, *s_waiting_tiles = nil;
+static uindex_t s_active_tile_count = 0;
+static pthread_cond_t s_main_thread_condition = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t s_main_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void *MCMacStackTileRenderThread(void *p_ctxt)
 {
 	MCMacStackTile *t_tile;
 	t_tile = (MCMacStackTile *)p_ctxt;
 	
-	t_tile -> stack -> view_surface_redrawwindow(t_tile -> surface, t_tile -> region);
-	
+    pthread_setname_np("Render Worker");
+    
+    // We loop forever servicing requests until the 'kill' bool is set.
+    pthread_mutex_lock(&t_tile -> mutex);
+    while(!t_tile -> kill)
+    {
+        if (!t_tile -> in_use)
+            pthread_cond_wait(&t_tile -> condition, &t_tile -> mutex);
+        
+        // Check the 'in_use' var - if this is false then this was a 'spurious' wakeup.
+        if (t_tile -> in_use)
+        {
+            pthread_mutex_unlock(&t_tile -> mutex);
+            t_tile -> stack -> view_surface_redrawwindow(t_tile -> surface, t_tile -> region);
+            pthread_mutex_lock(&t_tile -> mutex);
+            
+            t_tile -> in_use = false;
+            
+            // We are done, so lock the mainthread mutex and signal the main thread
+            // to finish processing.
+            pthread_mutex_lock(&s_main_thread_mutex);
+            t_tile -> next = s_waiting_tiles;
+            s_waiting_tiles = t_tile;
+            pthread_cond_signal(&s_main_thread_condition);
+            pthread_mutex_unlock(&s_main_thread_mutex);
+        }
+    }
+    pthread_mutex_unlock(&t_tile -> mutex);
+    
 	return nil;
 }
 
 void MCMacStackTileRender(MCStack *p_stack, int p_surface_height, MCRegionRef p_region, CGContextRef p_graphics, MCRectangle p_tile, MCMacStackTile*& r_tile)
-{	
-	MCMacStackTile *t_tile;
-	t_tile = new MCMacStackTile;
-	MCRegionCreate(t_tile -> region);
+{
+    // Make sure we have at least one inactive tile.
+    if (s_inactive_tiles == nil)
+    {
+        MCMacStackTile *t_new_tile;
+        t_new_tile = new MCMacStackTile;
+        t_new_tile -> next = s_inactive_tiles;
+        t_new_tile -> kill = false;
+        t_new_tile -> in_use = false;
+        t_new_tile -> surface = nil;
+        MCRegionCreate(t_new_tile -> region);
+        t_new_tile -> stack = nil;
+        pthread_cond_init(&t_new_tile -> condition, nil);
+        pthread_mutex_init(&t_new_tile -> mutex, nil);
+        s_inactive_tiles = t_new_tile;
+        pthread_create(&t_new_tile -> thread, nil, MCMacStackTileRenderThread, t_new_tile);
+    }
+    
+    // Pull the first inactive tile off the list (we know we have at least one!).
+    MCMacStackTile *t_tile;
+    t_tile = s_inactive_tiles;
+    s_inactive_tiles = t_tile -> next;
+    
+    // Fill in the tile's fields.
 	MCRegionIntersectRect(t_tile -> region, p_region, p_tile);
 	t_tile -> surface = new MCMacStackSurface(p_stack, p_surface_height, t_tile -> region, p_graphics);
 	t_tile -> surface -> setDeferUnlock(true);
 	t_tile -> stack = p_stack;
 	t_tile -> surface -> Lock();
-	pthread_create(&t_tile -> thread, nil, MCMacStackTileRenderThread, t_tile);
+    
+    // Now wake up the thread
+    pthread_mutex_lock(&t_tile -> mutex);
+    t_tile -> in_use = true;
+    pthread_cond_signal(&t_tile -> condition);
+    pthread_mutex_unlock(&t_tile -> mutex);
+    
+    // At this point the thread should now be running and doing its work.
 	r_tile = t_tile;
 }
 
-void MCMacStackTileCollect(MCMacStackTile *p_tile)
+void MCMacStackTileCollectAll(void)
+{
+    pthread_mutex_lock(&s_main_thread_mutex);
+    while(s_active_tile_count > 0)
+    {
+        pthread_cond_wait(&s_main_thread_condition, &s_main_thread_mutex);
+        while (s_waiting_tiles != nil)
+        {
+            MCMacStackTile *t_tile;
+            t_tile = s_waiting_tiles;
+            s_waiting_tiles = s_waiting_tiles -> next;
+            s_active_tile_count -= 1;
+            pthread_mutex_unlock(&s_main_thread_mutex);
+            
+            // Copy the tile's surface to the target surface.
+            t_tile -> surface -> setDeferUnlock(false);
+            t_tile -> surface -> UnlockPixels();
+            t_tile -> surface -> Unlock();
+            
+            // Move the tile to the inactive list.
+            t_tile -> next = s_inactive_tiles;
+            s_inactive_tiles = t_tile;
+            
+            pthread_mutex_lock(&s_main_thread_mutex);
+        }
+    }
+    pthread_mutex_unlock(&s_main_thread_mutex);
+}
+
+/*void MCMacStackTileCollect(MCMacStackTile *p_tile)
 {
 	void *t_result;
 	pthread_join(p_tile -> thread, &t_result);
@@ -1342,7 +1443,7 @@ void MCMacStackTileCollect(MCMacStackTile *p_tile)
 	delete p_tile -> surface;
 	MCRegionDestroy(p_tile -> region);
 	delete p_tile;
-}
+}*/
 
 struct HIRevolutionStackViewData
 {
@@ -1571,9 +1672,12 @@ OSStatus HIRevolutionStackViewHandler(EventHandlerCallRef p_call_ref, EventRef p
 					MCRectangle t_rect;
 					t_rect = MCRegionGetBoundingBox(t_surface_rgn);
 					
-					if ((t_rect . width > 64 && t_rect . height > 64) && s_update_callback == nil)
+					if ((t_rect . width > 32 && t_rect . height > 32) && s_update_callback == nil)
 					{
 						MCMacStackTile *t_tiles[4];
+                        
+                        s_active_tile_count = 4;
+                        
 						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
 											 MCRectangleMake(t_rect . x, t_rect . y, t_rect . width / 2, t_rect . height / 2), t_tiles[0]);
 						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
@@ -1582,11 +1686,16 @@ OSStatus HIRevolutionStackViewHandler(EventHandlerCallRef p_call_ref, EventRef p
 											 MCRectangleMake(t_rect . x, t_rect . y + t_rect . height / 2, t_rect . width / 2, t_rect . height - t_rect . height / 2), t_tiles[2]);
 						MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
 											 MCRectangleMake(t_rect . x + t_rect . width / 2, t_rect . y + t_rect . height / 2, t_rect . width - t_rect . width / 2, t_rect . height - t_rect . height / 2), t_tiles[3]);
+                        /*for(int i = 0; i < 4; i++)
+                            MCMacStackTileRender(t_context -> stack, t_surface_height, t_surface_rgn, t_graphics,
+                                                 MCRectangleMake(t_rect . x, t_rect . y + i * (t_rect . height / 4), t_rect . width, t_rect . height / 4 + (i == 3 ? 1 : 0)), t_tiles[i]);*/
 						
-						MCMacStackTileCollect(t_tiles[0]);
+                        MCMacStackTileCollectAll();
+                        
+						/*MCMacStackTileCollect(t_tiles[0]);
 						MCMacStackTileCollect(t_tiles[1]);
 						MCMacStackTileCollect(t_tiles[2]);
-						MCMacStackTileCollect(t_tiles[3]);
+						MCMacStackTileCollect(t_tiles[3]);*/
 					}
 					else
 					{
@@ -1605,6 +1714,8 @@ OSStatus HIRevolutionStackViewHandler(EventHandlerCallRef p_call_ref, EventRef p
 
 					// Restore the context state
 					CGContextRestoreGState(t_graphics);
+                    
+                    CGContextFlush(t_graphics);
 					
 					MCRegionDestroy(t_surface_rgn);
 				}

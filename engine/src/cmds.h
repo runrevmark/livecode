@@ -1883,11 +1883,13 @@ class MCSave : public MCStatement
 {
 	MCChunk *target;
 	MCExpression *filename;
+    MCChunk *into;
 public:
 	MCSave()
 	{
 		target = NULL;
 		filename = NULL;
+        into = NULL;
 	}
 	virtual ~MCSave();
 	virtual Parse_stat parse(MCScriptPoint &);

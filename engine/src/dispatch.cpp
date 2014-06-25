@@ -814,6 +814,69 @@ IO_stat MCDispatch::savestack(MCStack *sptr, const MCString& fname)
 	return stat;
 }
 
+IO_stat MCDispatch::savestackintobuffer(MCStack *sptr, MCExecPoint& ep)
+{
+    IO_handle t_stream;
+    t_stream = MCS_fakeopenwrite();
+    
+    IO_stat t_stat;
+    t_stat = dosavestacktostream(sptr, t_stream);
+    
+	MCLogicalFontTableFinish();
+    
+    char *t_buffer;
+    uint4 t_length;
+    t_buffer = nil;
+    t_length = 0;
+    t_stat = MCS_fakeclosewrite(t_stream, t_buffer, t_length);
+    
+    if (t_stat == IO_NORMAL)
+    {
+        ep . grabbuffer(t_buffer, t_length);
+        MCresult -> clear();
+    }
+    else
+    {
+        free(t_buffer);
+		if (MCresult -> isclear())
+			MCresult->sets("error saving stack");
+    }
+    
+    return t_stat;
+}
+
+IO_stat MCDispatch::dosavestacktostream(MCStack *sptr, IO_handle stream)
+{
+	// MW-2012-03-04: [[ StackFile5500 ]] Work out what header to emit, and the size.
+	const char *t_header;
+	uint32_t t_header_size;
+	if (MCstackfileversion >= 5500)
+		t_header = newheader5500, t_header_size = 8;
+	else if (MCstackfileversion >= 2700)
+		t_header = newheader, t_header_size = 8;
+	else
+		t_header = header, t_header_size = HEADERSIZE;
+	
+	if (IO_write(t_header, sizeof(char), t_header_size, stream) != IO_NORMAL
+        || IO_write_uint1(CHARSET, stream) != IO_NORMAL)
+		return IO_ERROR;
+    
+	if (IO_write_uint1(OT_NOTHOME, stream) != IO_NORMAL
+        || IO_write_string(NULL, stream) != IO_NORMAL)
+		return IO_ERROR;
+	
+	// MW-2012-02-22; [[ NoScrollSave ]] Adjust the rect by the current group offset.
+	MCgroupedobjectoffset . x = 0;
+	MCgroupedobjectoffset . y = 0;
+	
+	MCresult -> clear();
+	if (sptr->save(stream, 0, false) != IO_NORMAL
+        || IO_write_uint1(OT_END, stream) != IO_NORMAL)
+		return IO_ERROR;
+    
+    return IO_NORMAL;
+}
+
 IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCString &fname)
 {
 	if (MCModeCheckSaveStack(sptr, fname) != IO_NORMAL)
@@ -864,46 +927,16 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCString &fname)
 	MCfiletype = oldfiletype;
 	MCString errstring = "Error writing stack (disk full?)";
 	
-	// MW-2012-03-04: [[ StackFile5500 ]] Work out what header to emit, and the size.
-	const char *t_header;
-	uint32_t t_header_size;
-	if (MCstackfileversion >= 5500)
-		t_header = newheader5500, t_header_size = 8;
-	else if (MCstackfileversion >= 2700)
-		t_header = newheader, t_header_size = 8;
-	else
-		t_header = header, t_header_size = HEADERSIZE;
-	
-	if (IO_write(t_header, sizeof(char), t_header_size, stream) != IO_NORMAL
-	        || IO_write_uint1(CHARSET, stream) != IO_NORMAL)
-	{
-		MCresult->sets(errstring);
-		cleanup(stream, linkname, backup);
-		return IO_ERROR;
-	}
-
-	if (IO_write_uint1(OT_NOTHOME, stream) != IO_NORMAL
-	        || IO_write_string(NULL, stream) != IO_NORMAL)
-	{ // was stackfiles
-		MCresult->sets(errstring);
-		cleanup(stream, linkname, backup);
-		return IO_ERROR;
-	}
-	
-	// MW-2012-02-22; [[ NoScrollSave ]] Adjust the rect by the current group offset.
-	MCgroupedobjectoffset . x = 0;
-	MCgroupedobjectoffset . y = 0;
-	
-	MCresult -> clear();
-	if (sptr->save(stream, 0, false) != IO_NORMAL
-	        || IO_write_uint1(OT_END, stream) != IO_NORMAL)
-	{
+    MCresult -> clear();
+	if (dosavestacktostream(sptr, stream) != IO_NORMAL)
+    {
 		if (MCresult -> isclear())
 			MCresult->sets(errstring);
 		cleanup(stream, linkname, backup);
-		return IO_ERROR;
-	}
-	MCS_close(stream);
+        return IO_ERROR;
+    }
+    
+    MCS_close(stream);
 	uint2 oldmask = MCS_umask(0);
 	uint2 newmask = ~oldmask & 00777;
 	if (oldmask & 00400)

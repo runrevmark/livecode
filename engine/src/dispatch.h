@@ -87,6 +87,7 @@ public:
 
 	void cleanup(IO_handle stream, char *lname, char *bname);
 	IO_stat savestack(MCStack *sptr, const MCString &);
+    IO_stat savestackintobuffer(MCStack *sptr, MCExecPoint& ep);
 	IO_stat startup(void);
 
 	void wclose(Window w);
@@ -215,5 +216,6 @@ private:
 	// MW-2012-02-17: [[ LogFonts ]] Actual method which performs a save stack. This
 	//   is wrapped by savestack to handle logical font table.
 	IO_stat dosavestack(MCStack *sptr, const MCString &);
+    IO_stat dosavestacktostream(MCStack *sptr, IO_handle stream);
 };
 #endif

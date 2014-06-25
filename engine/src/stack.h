@@ -587,6 +587,7 @@ public:
 	void compact();
 	Boolean checkid(uint4 cardid, uint4 controlid);
 	IO_stat saveas(const MCString &);
+	IO_stat saveasbuffer(MCExecPoint& ep);
 	MCStack *findname(Chunk_term type, const MCString &);
 	MCStack *findid(Chunk_term type, uint4 inid, Boolean alt);
 	void setmark();

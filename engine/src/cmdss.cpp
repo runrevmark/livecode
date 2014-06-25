@@ -1351,19 +1351,31 @@ Parse_stat MCSave::parse(MCScriptPoint &sp)
 		(PE_SAVE_BADEXP, sp);
 		return PS_ERROR;
 	}
-	if (sp.next(type) != PS_NORMAL)
-		return PS_NORMAL;
-	if (sp.lookup(SP_FACTOR, te) != PS_NORMAL || te->which != PT_AS)
-	{
-		sp.backup();
-		return PS_NORMAL;
-	}
-	if (sp.parseexp(False, True, &filename) != PS_NORMAL)
-	{
-		MCperror->add
-		(PE_SAVE_BADFILEEXP, sp);
-		return PS_ERROR;
-	}
+    if (sp.skip_token(SP_FACTOR, TT_PREP, PT_INTO) == PS_NORMAL)
+    {
+        into = new MCChunk(True);
+        if (into -> parse(sp, False) != PS_NORMAL)
+        {
+            MCperror -> add(PE_SAVE_BADEXP, sp);
+            return PS_ERROR;
+        }
+    }
+    else
+    {
+        if (sp.next(type) != PS_NORMAL)
+            return PS_NORMAL;
+        if (sp.lookup(SP_FACTOR, te) != PS_NORMAL || te->which != PT_AS)
+        {
+            sp.backup();
+            return PS_NORMAL;
+        }
+        if (sp.parseexp(False, True, &filename) != PS_NORMAL)
+        {
+            MCperror->add
+            (PE_SAVE_BADFILEEXP, sp);
+            return PS_ERROR;
+        }
+    }
 	return PS_NORMAL;
 }
 
@@ -1393,18 +1405,26 @@ Exec_stat MCSave::exec(MCExecPoint &ep)
 		return ES_ERROR;
 	}
 	MCStack *sptr = (MCStack *)optr;
-	if (filename != NULL)
-	{
-		if (filename->eval(ep) != ES_NORMAL)
-		{
-			MCeerror->add
-			(EE_SAVE_BADNOFILEEXP, line, pos);
-			return ES_ERROR;
-		}
-	}
-	else
-		ep.clear();
-	sptr->saveas(ep.getsvalue());
+    if (into == NULL)
+    {
+        if (filename != NULL)
+        {
+            if (filename->eval(ep) != ES_NORMAL)
+            {
+                MCeerror->add
+                (EE_SAVE_BADNOFILEEXP, line, pos);
+                return ES_ERROR;
+            }
+        }
+        else
+            ep.clear();
+        sptr->saveas(ep.getsvalue());
+    }
+    else
+    {
+        sptr -> saveasbuffer(ep);
+        into -> set(ep, PT_INTO);
+    }
 	return ES_NORMAL;
 #endif /* MCSave */
 }

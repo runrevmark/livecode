@@ -700,6 +700,12 @@ IO_stat MCStack::saveas(const MCString &fname)
 	return IO_NORMAL;
 }
 
+IO_stat MCStack::saveasbuffer(MCExecPoint& ep)
+{
+    ep . clear();
+    return MCdispatcher -> savestackintobuffer(this, ep);
+}
+
 MCStack *MCStack::findname(Chunk_term type, const MCString &findname)
 { // should do case-sensitive match on filename on UNIX...
 	if (type == CT_STACK)

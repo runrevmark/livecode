@@ -1645,6 +1645,14 @@ static MCError LCArgumentsCreateV(const char *p_signature, va_list p_args, MCVar
 				t_string . length = [t_data length];
 				t_error = MCVariableStore(t_argv[i], kMCOptionAsString, &t_string);
 			}
+            break;
+                
+            case 'O': // Any supported Objective-C object
+            {
+                id t_object;
+                t_object = va_arg(p_args, id);
+                t_error = (MCError) LCValueArrayValueFromObjcValue(t_argv[i], t_object);
+            }
 			break;
 #endif
 		}

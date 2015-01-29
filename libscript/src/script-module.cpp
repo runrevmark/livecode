@@ -201,8 +201,8 @@ void MCScriptDestroyModule(MCScriptModuleRef self)
     
     // Release the bits pickle-release doesn't touch.
     for(uindex_t i = 0; i < self -> dependency_count; i++)
-        if (self -> dependencies[i] . instance != nil)
-            MCScriptReleaseInstance(self -> dependencies[i] . instance);
+        if (self -> dependencies[i] . module != nil)
+            MCScriptReleaseModule(self -> dependencies[i] . module);
     for(uindex_t i = 0; i < self -> type_count; i++)
         if (self -> types[i] -> typeinfo != nil)
             MCValueRelease(self -> types[i] -> typeinfo);
@@ -398,16 +398,6 @@ MCNameRef MCScriptGetNameOfModule(MCScriptModuleRef self)
     return self -> name;
 }
 
-bool MCScriptIsModuleALibrary(MCScriptModuleRef self)
-{
-    return self -> module_kind == kMCScriptModuleKindLibrary;
-}
-
-bool MCScriptIsModuleAWidget(MCScriptModuleRef self)
-{
-    return self -> module_kind == kMCScriptModuleKindWidget;
-}
-
 bool MCScriptEnsureModuleIsUsable(MCScriptModuleRef self)
 {
     // If the module has already been ensured as usable, we are done.
@@ -444,17 +434,13 @@ bool MCScriptEnsureModuleIsUsable(MCScriptModuleRef self)
                     return false;
             }
             
-            // Check that signatures match.
+            // TODO: Check that signatures match.
             
             t_import_def -> definition = t_def;
         }
         
         // A used module must be usable.
         if (!MCScriptEnsureModuleIsUsable(t_module))
-            return false;
-        
-        // Now create the instance we need.
-        if (!MCScriptCreateInstanceOfModule(t_module, self -> dependencies[i] . instance))
             return false;
     }
 
@@ -531,7 +517,7 @@ bool MCScriptEnsureModuleIsUsable(MCScriptModuleRef self)
                     t_import = &self -> imported_definitions[t_ext_def -> index];
                     
                     MCScriptModuleRef t_module;
-                    t_module = self -> dependencies[t_import -> module] . instance -> module;
+                    t_module = self -> dependencies[t_import -> module] . module;
                     t_typeinfo = t_module -> types[static_cast<MCScriptTypeDefinition *>(t_import -> definition) -> type] -> typeinfo;
                 }
                 else
@@ -612,8 +598,10 @@ bool MCScriptEnsureModuleIsUsable(MCScriptModuleRef self)
     // First validate the module - if this fails we do nothing more.
     if (!MCScriptValidateModule(self))
         return false;
-    
-    // Now bind all the public types.
+
+    // Allocate the slot array, if we can.
+    if (!MCMemoryNewArray(self -> slot_count, self -> slots))
+        return false;
     
     self -> is_usable = true;
     
@@ -638,6 +626,24 @@ bool MCScriptCopyDependenciesOfModule(MCScriptModuleRef self, /* copy */ MCPrope
     return true;
 }
 
+bool MCScriptCopyWidgetsOfModule(MCScriptModuleRef self, /* copy */ MCProperListRef& r_property_names)
+{
+    MCAutoProperListRef t_props;
+    if (!MCProperListCreateMutable(&t_props))
+        return false;
+    
+    for(uindex_t i = 0; i < self -> exported_definition_count; i++)
+        if (self -> definitions[self -> exported_definitions[i] . index] -> kind == kMCScriptDefinitionKindWidget)
+            if (!MCProperListPushElementOntoBack(*t_props, self -> exported_definitions[i] . name))
+                return false;
+    
+    if (!MCProperListCopy(*t_props, r_property_names))
+        return false;
+    
+    return true;
+}
+
+#if 0
 bool MCScriptCopyPropertiesOfModule(MCScriptModuleRef self, /* copy */ MCProperListRef& r_property_names)
 {
     MCAutoProperListRef t_props;
@@ -725,6 +731,7 @@ bool MCScriptQueryEventOfModule(MCScriptModuleRef self, MCNameRef p_event, /* ge
     
     return true;
 }
+#endif
 
 bool MCScriptCopyHandlersOfModule(MCScriptModuleRef self, /* copy */ MCProperListRef& r_handler_names)
 {

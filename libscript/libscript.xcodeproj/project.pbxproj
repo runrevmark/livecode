@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4D184CB91A7A2BA600AF2236 /* script-machine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D184CB81A7A2BA600AF2236 /* script-machine.cpp */; };
 		4D21B5AA19DDAA0C00B64BEF /* script-private.h in Headers */ = {isa = PBXBuildFile; fileRef = 4D21B5A919DDAA0C00B64BEF /* script-private.h */; };
 		4D21B5FF19E3DFCB00B64BEF /* script-module.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D21B5FE19E3DFCB00B64BEF /* script-module.cpp */; };
 		4D21B60119E3DFED00B64BEF /* script-package.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D21B60019E3DFED00B64BEF /* script-package.cpp */; };
@@ -160,6 +161,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		4D184CB81A7A2BA600AF2236 /* script-machine.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "script-machine.cpp"; path = "src/script-machine.cpp"; sourceTree = "<group>"; };
 		4D21B5A819DDA9F400B64BEF /* script.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = script.h; path = include/script.h; sourceTree = "<group>"; };
 		4D21B5A919DDAA0C00B64BEF /* script-private.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "script-private.h"; path = "src/script-private.h"; sourceTree = "<group>"; };
 		4D21B5FE19E3DFCB00B64BEF /* script-module.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "script-module.cpp"; path = "src/script-module.cpp"; sourceTree = "<group>"; };
@@ -297,6 +299,7 @@
 				4D21B60019E3DFED00B64BEF /* script-package.cpp */,
 				4D21B60219E3DFF800B64BEF /* script-instance.cpp */,
 				4DDA20441A136FF4001B0CA2 /* script-builder.cpp */,
+				4D184CB81A7A2BA600AF2236 /* script-machine.cpp */,
 			);
 			name = Source;
 			sourceTree = "<group>";
@@ -541,12 +544,11 @@
 				4D21B5FF19E3DFCB00B64BEF /* script-module.cpp in Sources */,
 				4D21B60319E3DFF800B64BEF /* script-instance.cpp in Sources */,
 				4DDA20451A136FF4001B0CA2 /* script-builder.cpp in Sources */,
+				4D184CB91A7A2BA600AF2236 /* script-machine.cpp in Sources */,
 				4D79B6821A273BA000DD750C /* module-bitwise.cpp in Sources */,
 				4D79B6831A273BA000DD750C /* module-byte.cpp in Sources */,
 				4D79B6851A273BA000DD750C /* module-encoding.cpp in Sources */,
 				4D21B60119E3DFED00B64BEF /* script-package.cpp in Sources */,
-				C7A74E161A6D07CC0031099F /* module-system.cpp in Sources */,
-				C7A74E171A6D07DF0031099F /* module-date.cpp in Sources */,
 				4D79B68F1A273BA000DD750C /* module-type.cpp in Sources */,
 				766113891A31FB640042DE7F /* module-array.cpp in Sources */,
 				4D79B6811A273BA000DD750C /* module-binary.cpp in Sources */,

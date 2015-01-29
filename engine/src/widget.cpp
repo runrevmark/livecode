@@ -107,13 +107,13 @@ void MCWidget::bind(MCNameRef p_kind, MCValueRef p_rep)
     // Assign the kind.
     MCValueAssign(m_kind, p_kind);
     
-    // Attempt to find the module and build an instance (lookup module is a get
-    // whereas creating an instance is a copy).
+    // Attempt to find the module and create an instance of its principal
+    // widget.
     MCScriptModuleRef t_module;
     MCScriptInstanceRef t_instance;
     if (MCScriptLookupModule(p_kind, t_module) &&
         MCScriptEnsureModuleIsUsable(t_module) &&
-        MCScriptCreateInstanceOfModule(t_module, t_instance))
+        MCScriptCreateInstanceOfObjectFromModule(t_module, nil, t_instance))
     {
         // Set the instance.
         m_instance = t_instance;
@@ -571,7 +571,7 @@ bool MCWidget::getcustomprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRe
 {
     // Treat as a normal custom property if not a widget property
     MCTypeInfoRef t_getter, t_setter;
-    if (m_instance == nil || !MCNameIsEmpty(p_set_name) || !MCScriptQueryPropertyOfModule(MCScriptGetModuleOfInstance(m_instance), p_prop_name, t_getter, t_setter))
+    if (m_instance == nil || !MCNameIsEmpty(p_set_name) || !MCScriptQueryPropertyOfInstance(m_instance, p_prop_name, t_getter, t_setter))
         return MCObject::getcustomprop(ctxt, p_set_name, p_prop_name, r_value);
     
     if (CallGetProp(ctxt, p_prop_name, nil, r_value.valueref_value))
@@ -589,7 +589,7 @@ bool MCWidget::setcustomprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRe
 {
     // Treat as a normal custom property if not a widget property
     MCTypeInfoRef t_getter, t_setter;
-    if (m_instance == nil || !MCNameIsEmpty(p_set_name) || !MCScriptQueryPropertyOfModule(MCScriptGetModuleOfInstance(m_instance), p_prop_name, t_getter, t_setter))
+    if (m_instance == nil || !MCNameIsEmpty(p_set_name) || !MCScriptQueryPropertyOfInstance(m_instance, p_prop_name, t_getter, t_setter))
         return MCObject::setcustomprop(ctxt, p_set_name, p_prop_name, p_value);
     
     MCAutoValueRef t_value;
@@ -1412,7 +1412,7 @@ bool MCWidget::CallSetProp(MCExecContext& ctxt, MCNameRef p_property, MCNameRef 
     
     // Convert to the appropriate type
     MCTypeInfoRef t_gettype, t_settype;
-    if (!MCScriptQueryPropertyOfModule(MCScriptGetModuleOfInstance(m_instance), p_property, t_gettype, t_settype))
+    if (!MCScriptQueryPropertyOfInstance(m_instance, p_property, t_gettype, t_settype))
         return false;
     
     // TODO: Fix this - we should really throw a read-only property error here, but

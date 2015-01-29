@@ -61,6 +61,8 @@ struct MCScriptObject
     MCScriptObjectKind kind;
 };
 
+typedef MCScriptObject *MCScriptObjectRef;
+
 bool MCScriptCreateObject(MCScriptObjectKind kind, size_t size, MCScriptObject*& r_object);
 void MCScriptDestroyObject(MCScriptObject *object);
 
@@ -194,7 +196,7 @@ struct MCScriptDependency
     uindex_t version;
     
     // The resolved instance - not pickled
-    MCScriptInstanceRef instance;
+    MCScriptModuleRef module;
 };
 
 struct MCScriptSyntaxMethod
@@ -373,8 +375,8 @@ struct MCScriptModule: public MCScriptObject
     // (computed) The number of slots needed by an instance - not pickled
     uindex_t slot_count;
     
-    // If this is a non-widget module, then it only has one instance - not pickled
-    MCScriptInstanceRef shared_instance;
+    // The slots of the module - not pickled.
+    MCValueRef *slots;
     
     // This is the module-chain link. We keep a linked list of all modules in memory
     // with unique names -- not pickled.
@@ -401,8 +403,8 @@ MCNameRef MCScriptGetNameOfGlobalVariableInModule(MCScriptModuleRef module, uind
 
 struct MCScriptInstance: public MCScriptObject
 {
-    // The module defining the instance.
-    MCScriptModuleRef module;
+    // The definition defining the instance.
+    MCScriptDefinition *definition;
     
     // The module's array of slots (module -> slot_count in length).
     MCValueRef *slots;

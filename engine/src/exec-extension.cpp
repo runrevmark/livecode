@@ -57,7 +57,6 @@ struct MCLoadedExtension
     MCLoadedExtension *next;
     MCStringRef filename;
     MCScriptModuleRef module;
-    MCScriptInstanceRef instance;
 };
 
 MCLoadedExtension *MCextensions = nil;
@@ -74,24 +73,23 @@ static void __rebuild_library_handler_list(void)
     MCArrayCreateMutable(MCextensionshandlermap);
     
     for(MCLoadedExtension *t_ext = MCextensions; t_ext != nil; t_ext = t_ext -> next)
-        if (MCScriptIsModuleALibrary(t_ext -> module))
+    {
+        MCAutoProperListRef t_handlers;
+        MCScriptCopyHandlersOfModule(t_ext -> module, &t_handlers);
+        for(uindex_t i = 0; i < MCProperListGetLength(*t_handlers); i++)
         {
-            MCAutoProperListRef t_handlers;
-            MCScriptCopyHandlersOfModule(t_ext -> module, &t_handlers);
-            for(uindex_t i = 0; i < MCProperListGetLength(*t_handlers); i++)
-            {
-                MCNameRef t_name;
-                t_name = (MCNameRef)MCProperListFetchElementAtIndex(*t_handlers, i);
-                
-                MCValueRef t_value;
-                if (MCArrayFetchValue(MCextensionshandlermap, false, t_name, t_value))
-                    continue;
-                
-                MCAutoValueRef t_ptr;
-                MCForeignValueCreate(kMCPointerTypeInfo, &t_ext, (MCForeignValueRef&)t_ptr);
-                MCArrayStoreValue(MCextensionshandlermap, false, t_name, *t_ptr);
-            }
+            MCNameRef t_name;
+            t_name = (MCNameRef)MCProperListFetchElementAtIndex(*t_handlers, i);
+            
+            MCValueRef t_value;
+            if (MCArrayFetchValue(MCextensionshandlermap, false, t_name, t_value))
+                continue;
+            
+            MCAutoValueRef t_ptr;
+            MCForeignValueCreate(kMCPointerTypeInfo, &t_ext, (MCForeignValueRef&)t_ptr);
+            MCArrayStoreValue(MCextensionshandlermap, false, t_name, *t_ptr);
         }
+    }
 }
 
 bool MCEngineAddExtensionFromModule(MCStringRef p_filename, MCScriptModuleRef p_module)
@@ -102,23 +100,11 @@ bool MCEngineAddExtensionFromModule(MCStringRef p_filename, MCScriptModuleRef p_
         return false;
     }
     
-    MCScriptInstanceRef t_instance;
-    t_instance = nil;
-    if (MCScriptIsModuleALibrary(p_module))
-    {
-        if (!MCScriptCreateInstanceOfModule(p_module, t_instance))
-        {
-            MCresult -> sets("could not instantiate module");
-            return false;
-        }
-    }
-    
     MCLoadedExtension *t_ext;
     /* UNCHECKED */ MCMemoryNew(t_ext);
     
     t_ext -> filename = MCValueRetain(p_filename);
     t_ext -> module = MCScriptRetainModule(p_module);
-    t_ext -> instance = t_instance;
     
     t_ext -> next = MCextensions;
     MCextensions = t_ext;
@@ -169,8 +155,6 @@ void MCEngineExecUnloadExtension(MCExecContext& ctxt, MCStringRef p_filename)
     for(MCLoadedExtension *t_previous = nil, *t_ext = MCextensions; t_ext != nil; t_previous = t_ext, t_ext = t_ext -> next)
         if (MCStringIsEqualTo(t_ext -> filename, *t_resolved_filename, kMCStringOptionCompareCaseless))
         {
-            if (t_ext -> instance != nil)
-                MCScriptReleaseInstance(t_ext -> instance);
             MCScriptReleaseModule(t_ext -> module);
             MCValueRelease(t_ext -> filename);
             if (t_previous != nil)
@@ -297,7 +281,7 @@ Exec_stat MCEngineHandleLibraryMessage(MCNameRef p_message, MCParameter *p_param
     
     MCValueRef t_result;
     t_result = nil;
-    if (MCScriptCallHandlerOfInstance(t_ext -> instance, p_message, t_arguments . Ptr(), t_arguments . Size(), t_result))
+    if (MCScriptCallHandlerOfModule(t_ext -> module, p_message, t_arguments . Ptr(), t_arguments . Size(), t_result))
     {
         MCParameter *t_param;
         t_param = p_parameters;

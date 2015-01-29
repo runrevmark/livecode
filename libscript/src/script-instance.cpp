@@ -46,63 +46,9 @@ void __MCScriptHandlerRelease(void *context);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool MCScriptCreateInstanceOfModule(MCScriptModuleRef p_module, MCScriptInstanceRef& r_instance)
-{
-    bool t_success;
-    t_success = true;
-    
-    MCScriptInstanceRef t_instance;
-    t_instance = nil;
-    
-    // If the module is not usable, then we cannot create an instance.
-    if (t_success)
-        if (!p_module -> is_usable)
-            return false;
-    
-    // If this is a module which shares a single instance, then return that if we have
-    // one.
-    if (p_module -> module_kind != kMCScriptModuleKindWidget &&
-        p_module -> shared_instance != nil)
-    {
-        r_instance = MCScriptRetainInstance(p_module -> shared_instance);
-        return true;
-    }
-    
-    // Attempt to create a script object.
-    if (t_success)
-        t_success = MCScriptCreateObject(kMCScriptObjectKindInstance, sizeof(MCScriptInstance), (MCScriptObject*&)t_instance);
-
-    // Now associate the script object with the module (so the 'slots' field make sense).
-    if (t_success)
-    {
-        t_instance -> module = MCScriptRetainModule(p_module);
-    }
-    
-    // Now allocate the slots field.
-    if (t_success)
-        t_success = MCMemoryNewArray(p_module -> slot_count, t_instance -> slots);
-    
-    if (t_success)
-    {
-        for(uindex_t i = 0; i < p_module -> slot_count; i++)
-            t_instance -> slots[i] = MCValueRetain(kMCNull);
-
-        // If this is a module which shares its instance, then add a link to it.
-        // (Note this is weak reference - we don't retain, otherwise we would have
-        //  a cycle!).
-        if (p_module -> module_kind != kMCScriptModuleKindWidget)
-            p_module -> shared_instance = t_instance;
-        
-        r_instance = t_instance;
-    }
-    else
-        MCScriptDestroyObject(t_instance);
-    
-    return t_success;
-}
-
 void MCScriptDestroyInstance(MCScriptInstanceRef self)
 {
+#if 0
     __MCScriptValidateObjectAndKind__(self, kMCScriptObjectKindInstance);
     
     // If the object had slots initialized, then free them.
@@ -124,6 +70,7 @@ void MCScriptDestroyInstance(MCScriptInstanceRef self)
         MCScriptReleaseModule(self -> module);
     
     // The rest of the deallocation is handled by MCScriptDestroyObject.
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,13 +87,6 @@ void MCScriptReleaseInstance(MCScriptInstanceRef self)
     __MCScriptValidateObjectAndKind__(self, kMCScriptObjectKindInstance);
     
     MCScriptReleaseObject(self);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-MCScriptModuleRef MCScriptGetModuleOfInstance(MCScriptInstanceRef self)
-{
-    return self -> module;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -306,6 +246,7 @@ MCScriptDefinitionGroupDefinition *MCScriptDefinitionAsDefinitionGroup(MCScriptD
 
 ///////////
 
+#if 0
 bool MCScriptGetPropertyOfInstance(MCScriptInstanceRef self, MCNameRef p_property, MCValueRef& r_value)
 {
     __MCScriptValidateObjectAndKind__(self, kMCScriptObjectKindInstance);
@@ -512,6 +453,7 @@ bool MCScriptCallHandlerOfInstanceIfFound(MCScriptInstanceRef self, MCNameRef p_
     
     return MCScriptCallHandlerOfInstanceDirect(self, t_definition, p_arguments, p_argument_count, r_value);
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -521,8 +463,8 @@ struct MCScriptFrame
     // The calling frame.
     MCScriptFrame *caller;
     
-    // The instance we are executing within.
-    MCScriptInstanceRef instance;
+    // The context of the frame - this could be either a module or an instance.
+    MCScriptObject *context;
     
     // The handler of the instance's module being run right now.
     MCScriptHandlerDefinition *handler;
@@ -544,6 +486,14 @@ struct MCScriptFrame
 	uindex_t *mapping;
 };
 
+static inline MCScriptModuleRef MCScriptGetModuleInFrame(MCScriptFrame *p_frame)
+{
+    if (p_frame -> context -> kind == kMCScriptObjectKindModule)
+        return (MCScriptModuleRef)(p_frame -> context);
+    
+    return nil;
+}
+
 static inline bool MCScriptIsRegisterValidInFrame(MCScriptFrame *p_frame, int p_register)
 {
     return p_register >= 0 && p_register < p_frame -> handler -> slot_count;
@@ -551,10 +501,10 @@ static inline bool MCScriptIsRegisterValidInFrame(MCScriptFrame *p_frame, int p_
 
 static inline bool MCScriptIsConstantValidInFrame(MCScriptFrame *p_frame, int p_constant)
 {
-    return p_constant >= 0 && p_constant < p_frame -> instance -> module -> value_count;
+    return p_constant >= 0 && p_constant < MCScriptGetModuleInFrame(p_frame) -> value_count;
 }
 
-static bool MCScriptCreateFrame(MCScriptFrame *p_caller, MCScriptInstanceRef p_instance, MCScriptHandlerDefinition *p_handler, MCScriptFrame*& r_frame)
+static bool MCScriptCreateFrame(MCScriptFrame *p_caller, MCScriptObject *p_context, MCScriptHandlerDefinition *p_handler, MCScriptFrame*& r_frame)
 {
     MCScriptFrame *self;
     self = nil;
@@ -569,7 +519,7 @@ static bool MCScriptCreateFrame(MCScriptFrame *p_caller, MCScriptInstanceRef p_i
         self -> slots[i] = MCValueRetain(kMCNull);
     
     self -> caller = p_caller;
-    self -> instance = MCScriptRetainInstance(p_instance);
+    self -> context = MCScriptRetainObject(p_context);
     self -> handler = p_handler;
     self -> address = p_handler -> start_address;
     
@@ -586,7 +536,7 @@ static MCScriptFrame *MCScriptDestroyFrame(MCScriptFrame *self)
     for(int i = 0; i < self -> handler -> slot_count; i++)
         MCValueRelease(self -> slots[i]);
     
-    MCScriptReleaseInstance(self -> instance);
+    MCSCriptReleaseObject(self -> context);
     MCMemoryDeleteArray(self -> slots);
     MCMemoryDeleteArray(self -> mapping);
     MCMemoryDelete(self);
@@ -634,7 +584,7 @@ static inline uindex_t MCScriptBytecodeDecodeArgument(byte_t*& x_bytecode_ptr)
     return t_value;
 }
 
-static inline void MCScriptResolveDefinitionInFrame(MCScriptFrame *p_frame, uindex_t p_index, MCScriptInstanceRef& r_instance, MCScriptDefinition*& r_definition)
+static inline void MCScriptResolveDefinitionInFrame(MCScriptFrame *p_frame, uindex_t p_index, uindex_t p_level, MCScriptObject*& r_context, MCScriptDefinition*& r_definition)
 {
     MCScriptInstanceRef t_instance;
     t_instance = p_frame -> instance;

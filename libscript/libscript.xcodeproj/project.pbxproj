@@ -16,6 +16,7 @@
 		4D44E3641A139F460073FFA2 /* libscript.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D322F1619DD945E008476D3 /* libscript.a */; };
 		4D44E3651A139F480073FFA2 /* libfoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D44E35F1A139D8F0073FFA2 /* libfoundation.a */; };
 		4D44E3671A139F590073FFA2 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D44E3661A139F590073FFA2 /* CoreFoundation.framework */; };
+		4D7060BF1A7BCD2900415A88 /* script-loader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D7060BE1A7BCD2900415A88 /* script-loader.cpp */; };
 		4D79B6801A273BA000DD750C /* module-arithmetic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D79B6591A273BA000DD750C /* module-arithmetic.cpp */; };
 		4D79B6811A273BA000DD750C /* module-binary.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D79B65A1A273BA000DD750C /* module-binary.cpp */; };
 		4D79B6821A273BA000DD750C /* module-bitwise.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4D79B65B1A273BA000DD750C /* module-bitwise.cpp */; };
@@ -174,6 +175,7 @@
 		4D44E3591A139D510073FFA2 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = ../rules/Release.xcconfig; sourceTree = "<group>"; };
 		4D44E35A1A139D8F0073FFA2 /* libfoundation.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = libfoundation.xcodeproj; path = ../libfoundation/libfoundation.xcodeproj; sourceTree = "<group>"; };
 		4D44E3661A139F590073FFA2 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
+		4D7060BE1A7BCD2900415A88 /* script-loader.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "script-loader.cpp"; path = "src/script-loader.cpp"; sourceTree = "<group>"; };
 		4D79B6541A273B6900DD750C /* libstdscript.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libstdscript.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D79B6591A273BA000DD750C /* module-arithmetic.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "module-arithmetic.cpp"; path = "src/module-arithmetic.cpp"; sourceTree = "<group>"; };
 		4D79B65A1A273BA000DD750C /* module-binary.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = "module-binary.cpp"; path = "src/module-binary.cpp"; sourceTree = "<group>"; };
@@ -300,6 +302,7 @@
 				4D21B60219E3DFF800B64BEF /* script-instance.cpp */,
 				4DDA20441A136FF4001B0CA2 /* script-builder.cpp */,
 				4D184CB81A7A2BA600AF2236 /* script-machine.cpp */,
+				4D7060BE1A7BCD2900415A88 /* script-loader.cpp */,
 			);
 			name = Source;
 			sourceTree = "<group>";
@@ -551,6 +554,7 @@
 				4D21B60119E3DFED00B64BEF /* script-package.cpp in Sources */,
 				4D79B68F1A273BA000DD750C /* module-type.cpp in Sources */,
 				766113891A31FB640042DE7F /* module-array.cpp in Sources */,
+				4D7060BF1A7BCD2900415A88 /* script-loader.cpp in Sources */,
 				4D79B6811A273BA000DD750C /* module-binary.cpp in Sources */,
 				4D79B6841A273BA000DD750C /* module-char.cpp in Sources */,
 				4D79B68A1A273BA000DD750C /* module-math_foundation.cpp in Sources */,

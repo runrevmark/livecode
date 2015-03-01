@@ -417,6 +417,28 @@ bool MCStringCreateWithChars(const unichar_t *p_chars, uindex_t p_char_count, MC
 	return t_success;
 }
 
+bool MCStringCreateWithCharsAndReleaseFast(unichar_t *p_chars, uindex_t p_char_count, MCStringRef& r_string)
+{
+	bool t_success;
+	t_success = true;
+    
+	__MCString *self;
+	self = nil;
+	if (t_success)
+		t_success = __MCValueCreate(kMCValueTypeCodeString, self);
+    
+    if (t_success)
+    {
+        self -> flags |= kMCStringFlagIsNotNative;
+        self -> chars = p_chars;
+        self -> char_count = p_char_count;
+    }
+    
+    r_string = self;
+    
+    return true;
+}
+
 bool MCStringCreateWithCharsAndRelease(unichar_t *p_chars, uindex_t p_char_count, MCStringRef& r_string)
 {
     if (MCStringCreateWithChars(p_chars, p_char_count, r_string))
@@ -515,6 +537,26 @@ bool MCStringCreateWithNativeCharsAndRelease(char_t *p_chars, uindex_t p_char_co
     else
         MCMemoryDelete(self);
     
+    return t_success;
+}
+
+bool MCStringCreateWithNativeCharsAndReleaseFast(char_t *p_native_chars, uindex_t p_char_count, MCStringRef& r_string)
+{
+	bool t_success;
+	t_success = true;
+    
+	__MCString *self;
+	self = nil;
+	if (t_success)
+		t_success = __MCValueCreate(kMCValueTypeCodeString, self);
+    
+    if (t_success)
+    {
+        self -> native_chars = p_native_chars;
+        self -> char_count = p_char_count;
+        r_string = self;
+    }
+
     return t_success;
 }
 
@@ -1068,6 +1110,17 @@ const unichar_t *MCStringGetCharPtr(MCStringRef self)
 	return self -> chars;
 }
 
+const unichar_t *MCStringGetCharPtrFast(MCStringRef self)
+{
+    if (__MCStringIsIndirect(self))
+        self = self -> string;
+    
+    if (__MCStringIsNative(self))
+        return nil;
+    
+    return self -> chars;
+}
+
 const char_t *MCStringGetNativeCharPtr(MCStringRef self)
 {
     if (MCStringIsNative(self))
@@ -1080,6 +1133,17 @@ const char_t *MCStringGetNativeCharPtr(MCStringRef self)
     }
     
     return nil;
+}
+
+const char_t *MCStringGetNativeCharPtrFast(MCStringRef self)
+{
+    if (__MCStringIsIndirect(self))
+        self = self -> string;
+    
+    if (__MCStringIsNative(self))
+        return nil;
+    
+    return self -> native_chars;
 }
 
 const char_t *MCStringGetNativeCharPtrAndLength(MCStringRef self, uindex_t& r_char_count)

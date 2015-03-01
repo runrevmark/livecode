@@ -1280,22 +1280,151 @@ bool MCArrayIsSequence(MCArrayRef self)
 			(ctxt . maximum - ctxt . minimum + 1) == MCArrayGetCount(self);
 }
 
+//////////
+
 static bool list_keys(void *p_context, MCArrayRef p_array, MCNameRef p_key, MCValueRef p_value)
 {
 	MCListRef t_list = (MCListRef)p_context;
-
+    
 	return MCListAppend(t_list, p_key);
 }
 
-bool MCArrayListKeys(MCArrayRef self, char p_delimiter, MCStringRef& r_list)
+bool MCArrayListKeysOld(MCArrayRef self, char p_delimiter, MCStringRef& r_list)
 {
 	MCAutoListRef t_list;
 	if (!MCListCreateMutable(p_delimiter, &t_list))
 		return false;
-
+    
 	return MCArrayApply(self, list_keys, *t_list) &&
-		MCListCopyAsString(*t_list, r_list);
+    MCListCopyAsString(*t_list, r_list);
 }
+
+//////////
+
+struct MCArrayListKeys_Analyse_Context
+{
+    uindex_t length;
+    bool is_unicode;
+};
+
+static bool MCArrayListKeys_Analyse(void *p_context, MCArrayRef p_array, MCNameRef p_key, MCValueRef p_value)
+{
+    MCArrayListKeys_Analyse_Context *ctxt = (MCArrayListKeys_Analyse_Context *)p_context;
+    
+    MCStringRef t_key_string;
+    t_key_string = MCNameGetString(p_key);
+    
+    ctxt -> length += MCStringGetLength(t_key_string);
+    ctxt -> length += 1;
+    if (!ctxt -> is_unicode)
+        if (MCStringGetCharPtrFast(t_key_string) != nil)
+            ctxt -> is_unicode = true;
+
+    return true;
+}
+
+struct MCArrayListKeys_Accumulate_Context
+{
+    char delimiter;
+    bool need_delimiter;
+    union
+    {
+        void *ptr;
+        byte_t *byte_ptr;
+        char_t *char_ptr;
+        unichar_t *unichar_ptr;
+    };
+};
+
+template
+<
+    typename Char,
+    uindex_t (*GetChars)(MCStringRef, MCRange, Char *)
+>
+static bool MCArrayListKeys_Accumulate(void *p_context, MCArrayRef p_array, MCNameRef p_key, MCValueRef p_value)
+{
+    MCArrayListKeys_Accumulate_Context *ctxt = (MCArrayListKeys_Accumulate_Context *)p_context;
+    
+    if (ctxt -> need_delimiter)
+    {
+       *(Char *)(ctxt -> ptr) = (Char)ctxt -> delimiter;
+        ctxt -> byte_ptr += sizeof(Char);
+    }
+    else
+        ctxt -> need_delimiter = true;
+    
+    MCStringRef t_key_string;
+    t_key_string = MCNameGetString(p_key);
+    
+    uindex_t t_key_string_length;
+    t_key_string_length = GetChars(t_key_string, MCRangeMake(0, UINDEX_MAX), (Char *)(ctxt -> ptr));
+    ctxt -> byte_ptr += t_key_string_length * sizeof(Char);
+    
+    return true;
+}
+
+bool MCArrayListKeys_Revised(MCArrayRef self, char p_delimiter, MCStringRef& r_keys)
+{
+    MCArrayListKeys_Analyse_Context t_analyse;
+    t_analyse . length = 0;
+    t_analyse . is_unicode = false;
+    /* always succeeds */ MCArrayApply(self, MCArrayListKeys_Analyse, &t_analyse);
+    
+    MCArrayListKeys_Accumulate_Context t_accumulate;
+    t_accumulate . delimiter = p_delimiter;
+    t_accumulate . need_delimiter = false;
+    
+    if (!t_analyse . is_unicode)
+    {
+        char_t *t_buffer;
+        if (!MCMemoryNewArray(t_analyse . length + 1, t_buffer))
+            return false;
+        
+        t_accumulate . ptr = t_buffer;
+        
+        /* always succeeds */ MCArrayApply(self, 
+                                           MCArrayListKeys_Accumulate<char_t, MCStringGetNativeChars>,
+                                           &t_accumulate);
+        
+        t_accumulate . char_ptr[-1] = '\0';
+        
+        if (!MCStringCreateWithNativeCharsAndReleaseFast(t_buffer, t_analyse . length, r_keys))
+        {
+            MCMemoryDeleteArray(t_buffer);
+            return false;
+        }
+    }
+    else
+    {
+        unichar_t *t_buffer;
+        if (!MCMemoryNewArray(t_analyse . length + 1, t_buffer))
+            return false;
+        
+        t_accumulate . ptr = t_buffer;
+        
+        /* always succeeds */ MCArrayApply(self,
+                                           MCArrayListKeys_Accumulate<unichar_t, MCStringGetChars>,
+                                           &t_accumulate);
+        
+        t_accumulate . unichar_ptr[-1] = '\0';
+        
+        if (!MCStringCreateWithCharsAndReleaseFast(t_buffer, t_analyse . length, r_keys))
+        {
+            MCMemoryDeleteArray(t_buffer);
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+bool MCArrayListKeys(MCArrayRef p_array, char p_delimiter, MCStringRef& r_string)
+{
+    extern bool MCArrayListKeysAsString(MCArrayRef, char, MCStringRef&);
+    return MCArrayListKeysAsString(p_array, p_delimiter, r_string);
+}
+
+//////////
 
 struct measure_array_context_t
 {

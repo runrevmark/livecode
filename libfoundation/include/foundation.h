@@ -1420,6 +1420,10 @@ bool MCStringCreateWithBytesAndRelease(byte_t *bytes, uindex_t byte_count, MCStr
 bool MCStringCreateWithChars(const unichar_t *chars, uindex_t char_count, MCStringRef& r_string);
 bool MCStringCreateWithCharsAndRelease(unichar_t *chars, uindex_t char_count, MCStringRef& r_string);
 
+// Creates an immutable string using the given buffer. It is assumed there is an
+// implicit NUL beyond char_count, char_count >= 1, and it cannot be native.
+bool MCStringCreateWithCharsAndReleaseFast(unichar_t *chars, uindex_t char_count, MCStringRef& r_string);
+
 // Create an immutable string from the given NUL terminated unicode char sequence.
 bool MCStringCreateWithWString(const unichar_t *wstring, MCStringRef& r_string);
 bool MCStringCreateWithWStringAndRelease(unichar_t *wstring, MCStringRef& r_string);
@@ -1427,6 +1431,10 @@ bool MCStringCreateWithWStringAndRelease(unichar_t *wstring, MCStringRef& r_stri
 // Create an immutable string from the given native char sequence.
 bool MCStringCreateWithNativeChars(const char_t *chars, uindex_t char_count, MCStringRef& r_string);
 bool MCStringCreateWithNativeCharsAndRelease(char_t *chars, uindex_t char_count, MCStringRef& r_string);
+
+// Creates an immutable string using the given buffer. It is assumed there is an
+// implicit NUL beyond char_count and char_count >= 1.
+bool MCStringCreateWithNativeCharsAndReleaseFast(char_t *chars, uindex_t char_count, MCStringRef& r_string);
 
 // Create an immutable string from the given (native) c-string.
 bool MCStringCreateWithCString(const char *cstring, MCStringRef& r_string);
@@ -1538,6 +1546,14 @@ const unichar_t *MCStringGetCharPtr(MCStringRef string);
 const char_t *MCStringGetNativeCharPtr(MCStringRef string);
 // The native length may be different from the string char count.
 const char_t *MCStringGetNativeCharPtrAndLength(MCStringRef self, uindex_t& r_native_length);
+
+// Returns a pointer to the native char backing-store if it is a native string.
+// If it is not a native string, it returns nil.
+const char_t *MCStringGetNativeCharPtrFast(MCStringRef string);
+
+// Returns a pointer to the unicode char backing-store if it is a unicode string.
+// If it is not a unicode string, it returns nil.
+const unichar_t *MCStringGetCharPtrFast(MCStringRef string);
 
 // Returns the Unicode codepoint at the given codepoint index
 codepoint_t MCStringGetCodepointAtIndex(MCStringRef string, uindex_t index);

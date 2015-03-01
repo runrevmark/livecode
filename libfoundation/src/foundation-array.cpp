@@ -209,6 +209,54 @@ bool MCArrayMutableCopyAndRelease(MCArrayRef self, MCArrayRef& r_new_array)
 	return true;
 }
 
+//////////
+
+struct MCArrayIterator
+{
+    __MCArrayKeyValue *key_values;
+    uindex_t count;
+    uindex_t used;
+    uindex_t index;
+};
+
+static __attribute__((always_inline)) void MCArrayIteratorSetup(MCArrayRef p_array, MCArrayIterator& r_iterator)
+{
+    if (!__MCArrayIsIndirect(p_array))
+        r_iterator . key_values = p_array -> key_values;
+    else
+        r_iterator . key_values = p_array -> contents -> key_values;
+ 
+    r_iterator . count = __MCArrayGetTableSize(p_array);
+    r_iterator . index = 0;
+}
+
+static __attribute__((always_inline)) bool MCArrayIteratorStep(MCArrayIterator& self, MCNameRef& r_key, MCValueRef& r_value)
+{
+    if (self . count == self . index)
+        return false;
+    
+    while(self . index < self . count)
+    {
+        self . index += 1;
+        
+        __MCArrayKeyValue *t_key_value;
+        t_key_value = &self . key_values[self . index];
+        
+        if (t_key_value -> value == UINTPTR_MIN)
+            continue;
+        
+        if (t_key_value -> value == UINTPTR_MAX)
+            continue;
+        
+        r_key = t_key_value -> key;
+        r_value = (MCValueRef)t_key_value -> value;
+        
+        return true;
+    }
+    
+    return false;
+}
+
 bool MCArrayApply(MCArrayRef self, MCArrayApplyCallback p_callback, void *p_context)
 {
 	// Make sure we are iterating over the correct contents.
@@ -513,6 +561,78 @@ bool MCArrayStoreValueAtIndex(MCArrayRef self, index_t p_index, MCValueRef p_val
 bool MCArrayIsEmpty(MCArrayRef self)
 {
 	return MCArrayGetCount(self) == 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template
+<
+bool IsUniform,
+typename Char,
+uindex_t (*GetChars)(MCStringRef, MCRange, Char *),
+bool (*CreateWithCharsAndReleaseFast)(Char *, uindex_t, MCStringRef&)
+>
+static bool MCArrayListKeysAsString_Build(MCArrayIterator& iterator, char p_delimiter, uindex_t p_keys_length, MCStringRef& r_keys)
+{
+    Char *t_chars;
+    if (!MCMemoryNewArray(p_keys_length + 1, t_chars))
+        return false;
+    
+    MCNameRef t_key;
+    MCValueRef t_value;
+    Char *t_ptr;
+    t_ptr = t_chars;
+    while(MCArrayIteratorStep(iterator, t_key, t_value))
+    {
+        if (IsUniform)
+        {
+            memcpy(t_ptr, (Char *)t_key -> string -> chars, t_key -> string -> char_count * sizeof(Char));
+            t_ptr += t_key -> string -> char_count;
+        }
+        else
+        {
+            t_ptr += GetChars(t_key -> string, MCRangeMake(0, UINDEX_MAX), t_ptr);
+        }
+        
+        *t_ptr++ = (Char)p_delimiter;
+    }
+    
+    t_ptr[-1] = 0;
+    
+    if (!CreateWithCharsAndReleaseFast(t_chars, p_keys_length, r_keys))
+    {
+        MCMemoryDeleteArray(t_chars);
+        return false;
+    }
+    
+    return true;
+}
+
+bool MCArrayListKeysAsString(MCArrayRef self, char p_delimiter, MCStringRef& r_string)
+{
+    uindex_t t_keys_length;
+    bool t_keys_unicode;
+    t_keys_length = 0;
+    t_keys_unicode = false;
+    
+    MCArrayIterator iterator;
+    MCArrayIteratorSetup(self, iterator);
+    
+    MCNameRef t_key;
+    MCValueRef t_value;
+    while(MCArrayIteratorStep(iterator, t_key, t_value))
+    {
+        t_keys_length += t_key -> string -> char_count;
+        t_keys_length += 1;
+        if ((t_key -> string -> flags & kMCStringFlagIsNotNative) != 0)
+            t_keys_unicode = true;
+    }
+    
+    MCArrayIteratorSetup(self, iterator);
+    if (t_keys_unicode)
+        return MCArrayListKeysAsString_Build<false, unichar_t, MCStringGetChars, MCStringCreateWithCharsAndReleaseFast>(iterator, p_delimiter, t_keys_length, r_string);
+    
+    return MCArrayListKeysAsString_Build<true, char_t, MCStringGetNativeChars, MCStringCreateWithNativeCharsAndReleaseFast>(iterator, p_delimiter, t_keys_length, r_string);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

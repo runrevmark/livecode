@@ -2520,10 +2520,17 @@ bool MCStringFirstIndexOf(MCStringRef self, MCStringRef p_needle, uindex_t p_aft
     if (__MCStringIsIndirect(p_needle))
         p_needle = p_needle -> string;
     
+    if (p_needle -> char_count == 1)
+    {
+        if (!__MCStringIsNative(p_needle))
+            return MCStringFirstIndexOfChar(self, p_needle -> chars[0], p_after, p_options, r_offset);
+            
+        return MCStringFirstIndexOfChar(self, MCUnicodeCharMapFromNative(p_needle -> native_chars[0]), p_after, p_options, r_offset);
+    }
+        
 	// Make sure we are not looking after the string length
 	if (p_after > self -> char_count)
         return false;
-        
     
     bool self_native = __MCStringIsNative(self);
     if (self_native)
@@ -2583,11 +2590,15 @@ bool MCStringFirstIndexOfCharInRange(MCStringRef self, codepoint_t p_needle, MCR
     
     if (__MCStringIsNative(self))
     {
-        if (p_needle >= 0xFF)
+        // If the needle is not in the BMP, it can't be in a native string.
+        if (p_needle > 65535)
             return false;
         
+        // If the needle does not map to native, it can't be in a native string.
         char_t t_char;
-        t_char = (char_t)p_needle;
+        if (!MCUnicodeCharMapToNative(p_needle, t_char))
+            return false;
+        
         if (p_options == kMCStringOptionCompareCaseless || p_options == kMCStringOptionCompareFolded)
             t_char = MCNativeCharFold(t_char);
         
@@ -2604,6 +2615,7 @@ bool MCStringFirstIndexOfCharInRange(MCStringRef self, codepoint_t p_needle, MCR
                 return true;
             }
         }
+        
         return false;
     }
     
@@ -2624,6 +2636,14 @@ bool MCStringLastIndexOf(MCStringRef self, MCStringRef p_needle, uindex_t p_befo
     
     if (__MCStringIsIndirect(p_needle))
         p_needle = p_needle -> string;
+    
+    if (p_needle -> char_count == 1)
+    {
+        if (!__MCStringIsNative(p_needle))
+            return MCStringLastIndexOfChar(self, p_needle -> chars[0], p_before, p_options, r_offset);
+        
+        return MCStringLastIndexOfChar(self, MCUnicodeCharMapFromNative(p_needle -> native_chars[0]), p_before, p_options, r_offset);
+    }
     
 	// Make sure the before index is in range.
 	p_before = MCMin(p_before, self -> char_count);
@@ -2669,11 +2689,15 @@ bool MCStringLastIndexOfChar(MCStringRef self, codepoint_t p_needle, uindex_t p_
     
     if (__MCStringIsNative(self))
     {
-        if (p_needle >= 0xFF)
+        // If the needle is not in the BMP, it can't be in a native string.
+        if (p_needle > 65535)
             return false;
         
+        // If the needle does not map to native, it can't be in a native string.
         char_t t_char;
-        t_char = (char_t)p_needle;
+        if (!MCUnicodeCharMapToNative(p_needle, t_char))
+            return false;
+        
         if (p_options == kMCStringOptionCompareCaseless || p_options == kMCStringOptionCompareFolded)
             t_char = MCNativeCharFold(t_char);
         

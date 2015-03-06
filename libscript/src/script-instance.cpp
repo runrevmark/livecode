@@ -1067,6 +1067,84 @@ static bool MCScriptResolveForeignFunctionBinding(MCScriptForeignHandlerDefiniti
     return true;
 }
 
+// Take an input value of the given type which is 'unboxed', and box into a valueref.
+// Note: ValueRef's are considered self-boxing.
+static bool MCScriptBoxValue(MCResolvedTypeInfo& p_input_type, MCResolvedTypeInfo& p_output_type, void *p_input, bool p_release, MCValueRef& r_output)
+{
+    if (MCTypeInfoIsForeign(p_input_type . type))
+    {
+        const MCForeignTypeDescriptor *t_desc;
+        t_desc = MCForeignTypeInfoGetDescriptor(p_input_type . type);
+        
+        // If the foreign input type has 'defined' then map to NULL if needed.
+        if (t_desc -> defined != nil &&
+            t_desc -> defined(p_input))
+        {
+            r_output = MCValueRetain(kMCNull);
+            return true;
+        }
+        
+        if (MCTypeInfoIsForeign(p_output_type . type))
+        {
+            // Foreign -> Foreign - the input and output types must be the same.
+            MCAssert(p_input_type . type == p_output_type . type);
+            
+            // Otherwise we must box the foreign value.
+            if (p_release)
+            {
+                if (!MCForeignValueCreateAndRelease(p_input_type . type, p_input, (MCForeignValueRef&)r_output))
+                    return false;
+            }
+            else
+            {
+                if (!MCForeignValueCreate(p_input_type . type, p_input, (MCForeignValueRef&)r_output))
+                    return false;
+            }
+        }
+        else
+        {
+            // Foreign -> Non-Foreign - the input must bridge to the output.
+            
+            if (!t_desc -> doimport(p_input, p_release, r_output))
+                return false;
+        }
+    }
+    else
+    {
+        MCValueRef t_actual_input;
+        t_actual_input = *(MCValueRef *)t_actual_input;
+        
+        // If the input value is nil, then so is the output.
+        if (t_actual_input == nil)
+        {
+            r_output = MCValueRetain(kMCNull);
+            return true;
+        }
+        
+        if (MCTypeInfoIsForeign(p_output_type . type))
+        {
+            // Non-Foreign -> Foreign - input must be the bridge type.
+            
+            const MCForeignTypeDescriptor *t_desc;
+            t_desc = MCForeignTypeInfoGetDescriptor(p_output_type . type);
+            
+            if (!t_desc -> doexport(t_actual_input, p_release, r_output))
+                return false;
+        }
+        else
+        {
+            // Non-Foreign -> Non-Foreign - input must be 'equal' to output.
+        
+            if (!p_release)
+                r_output = t_actual_input;
+            else
+                r_output = MCValueRetain(t_actual_input);
+        }
+    }
+    
+    return true;
+}
+
 // If p_throw is true, then this function throws an error if resolution fails.
 // If p_throw is false, then this function does not throw errors related to being
 // unable to bind. Instead it returns true, and indicates binding success in r_bound.
@@ -1166,6 +1244,113 @@ static bool MCScriptPrepareForeignFunction(MCScriptFrame *p_frame, MCScriptInsta
         r_bound = true;
     
     return true;
+}
+
+static bool MCScriptProcessForeignReturnValue(MCScriptFrame*& x_frame, uindex_t p_register, MCTypeInfoRef p_value_type, void *p_value, MCValueRef& r_boxed_value)
+{
+    MCResolvedTypeInfo t_resolved_value_type;
+    if (!MCTypeInfoResolve(p_value_type, t_resolved_value_type))
+        return false;
+    
+    // If there is no return register, we just free the return value.
+    if (p_register == UINDEX_MAX)
+    {
+        if (MCTypeInfoIsForeign(t_resolved_value_type . type))
+            MCForeignTypeInfoGetDescriptor(t_resolved_value_type . type) -> finalize(p_value);
+        else
+            MCValueRelease(p_value);
+        
+        return true;
+    }
+    
+    // We must build an appropriate valueref.
+    MCValueRef t_slot_value;
+    
+    MCTypeInfoRef t_slot_type;
+    t_slot_type = MCScriptGetRegisterTypeInFrame(x_frame, p_register);
+    if (t_slot_type != nil)
+    {
+        MCResolvedTypeInfo t_resolved_slot_type;
+        if (!MCTypeInfoResolve(t_slot_type, t_resolved_slot_type))
+            goto error_exit;
+        
+        if (!MCResolvedTypeInfoConforms(t_resolved_value_type, t_resolved_slot_type))
+        {
+            MCAutoValueRef t_temp_value;
+            if (!MCScriptBoxValue(t_resolved_value_type, t_resolved_value_type, p_value, true, &t_temp_value))
+                goto error_exit;
+            
+            return MCScriptThrowInvalidValueForResultError(x_frame -> instance -> module, x_frame -> handler, t_slot_type, *t_temp_value);
+        }
+        
+        if (!MCScriptBoxValue(t_resolved_value_type, t_resolved_slot_type, p_value, true, t_slot_value))
+            goto error_exit;
+    }
+    else
+    {
+        // If the return register is untyped, then we box relative to the value type info.
+        if (!MCScriptBoxValue(t_resolved_value_type, t_resolved_value_type, p_value, true, t_slot_value))
+            goto error_exit;
+    }
+    
+    r_boxed_value = t_slot_value;
+    
+    return true;
+    
+error_exit:
+    if (MCTypeInfoIsForeign(t_resolved_value_type . type))
+        MCForeignTypeInfoGetDescriptor(t_resolved_value_type . type) -> finalize(p_value);
+    else
+        MCValueRelease(p_value);
+    return false;
+}
+
+static bool MCScriptProcessForeignOutValue(MCScriptFrame*& x_frame, uindex_t p_register, MCTypeInfoRef p_value_type, void *p_value, MCValueRef& r_boxed_value)
+{
+    MCResolvedTypeInfo t_resolved_value_type;
+    if (!MCTypeInfoResolve(p_value_type, t_resolved_value_type))
+            goto error_exit;
+    
+    // We must build an appropriate valueref.
+    MCValueRef t_slot_value;
+    
+    MCTypeInfoRef t_slot_type;
+    t_slot_type = MCScriptGetRegisterTypeInFrame(x_frame, p_register);
+    if (t_slot_type != nil)
+    {
+        MCResolvedTypeInfo t_resolved_slot_type;
+        if (!MCTypeInfoResolve(t_slot_type, t_resolved_slot_type))
+            goto error_exit;
+        
+        if (!MCResolvedTypeInfoConforms(t_resolved_value_type, t_resolved_slot_type))
+        {
+            MCAutoValueRef t_temp_value;
+            if (!MCScriptBoxValue(t_resolved_value_type, t_resolved_value_type, p_value, true, &t_temp_value))
+                goto error_exit;
+            
+            return MCScriptThrowInvalidValueForLocalVariableError(x_frame -> instance -> module, x_frame -> handler, p_register, t_slot_type, *t_temp_value);
+        }
+        
+        if (!MCScriptBoxValue(t_resolved_value_type, t_resolved_slot_type, p_value, true, t_slot_value))
+            goto error_exit;
+    }
+    else
+    {
+        // If the return register is untyped, then we box relative to the value type info.
+        if (!MCScriptBoxValue(t_resolved_value_type, t_resolved_value_type, p_value, true, t_slot_value))
+            goto error_exit;
+    }
+    
+    r_boxed_value = t_slot_value;
+    
+    return true;
+    
+error_exit:
+    if (MCTypeInfoIsForeign(t_resolved_value_type . type))
+        MCForeignTypeInfoGetDescriptor(t_resolved_value_type . type) -> finalize(p_value);
+    else
+        MCValueRelease(p_value);
+    return false;
 }
 
 static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstanceRef p_instance, MCScriptForeignHandlerDefinition *p_handler, uindex_t *p_arguments, uindex_t p_arity)
@@ -1439,43 +1624,8 @@ static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstan
         // If no error is pending then do the copyback of the result, and then
         // arguments. Otherwise we just continue the throw.
         if (!MCErrorIsPending())
-        {
-            MCTypeInfoRef t_return_type;
-            MCResolvedTypeInfo t_resolved_return_type;
-            t_return_type = MCHandlerTypeInfoGetReturnType(t_signature);
-            if (!MCTypeInfoResolve(t_return_type, t_resolved_return_type))
+            if (!MCScriptProcessForeignReturnValue(x_frame, t_result_reg, MCHandlerTypeInfoGetReturnType(t_signature), t_result, t_result_value))
                 t_success = false;
-            
-            if (t_success)
-            {
-                if (t_resolved_return_type . named_type != kMCNullTypeInfo)
-                {
-                    if (MCTypeInfoIsForeign(t_resolved_return_type . type))
-                    {
-                        const MCForeignTypeDescriptor *t_descriptor;
-                        t_descriptor = MCForeignTypeInfoGetDescriptor(t_resolved_return_type . type);
-                        
-                        // If the foreign value has a bridge type, then import.
-                        if (t_descriptor -> bridgetype != kMCNullTypeInfo)
-                            t_success = t_descriptor -> doimport(t_result, true, t_result_value);
-                        else if (!MCForeignValueCreateAndRelease(t_resolved_return_type . named_type, t_result, (MCForeignValueRef&)t_result_value))
-                            t_success = false;
-                    }
-                    else
-                    {
-                        t_result_value = *(MCValueRef *)t_result;
-                        
-                        // If the return value is nil, then map to null.
-                        if (t_result_value == nil)
-                            t_result_value = MCValueRetain(kMCNull);
-                    }
-                }
-                else
-                    t_result_value = MCValueRetain(kMCNull);
-            }
-        }
-        else
-            t_success = false;
     }
     
     MCValueRef t_out_values[16];
@@ -1483,87 +1633,18 @@ static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstan
     t_out_arg_index = 0;
     for(uindex_t i = 0; i < t_arg_index; i++)
     {
-        // Target foreign descriptor.
-        const MCForeignTypeDescriptor *t_descriptor;
-        if (MCTypeInfoIsForeign(t_types[i] . type))
-            t_descriptor = MCForeignTypeInfoGetDescriptor(t_types[i] . type);
-        else
-            t_descriptor = nil;
-     
-        if (t_modes[i] == kMCHandlerTypeFieldModeIn)
+        if (t_success && t_modes[i] != kMCHandlerTypeFieldModeIn)
         {
-            // In mode parameters we just free the values that need freed.
-            if (t_descriptor != nil)
-            {
-                if (t_arg_new[i])
-                    t_descriptor -> finalize(t_args[i]);
-            }
-            else
-            {
-                if (t_arg_new[i])
-                    MCValueRelease((MCValueRef)t_args[i]);
-            }
-            
-            t_out_values[i] = nil;
-        }
-        else if (t_success)
-        {
-            // Out mode parameters we must do something with the value - but only if
-            // things succeeded (i.e. arity == arg_index).
-            if (t_descriptor != nil)
-            {
-                // If the foreign value has a notion of defined, then we check that.
-                // If the value isn't defined, we return null.
-                if (t_descriptor -> defined != nil &&
-                    !t_descriptor -> defined(t_args[i]))
-                    t_out_values[i] = MCValueRetain(kMCNull);
-                else
-                {
-                    // Otherwise, we build a foreign value out of it.
-                    // Foreign out or in-out parameters are indirect...
-                    
-                    // If the foreign value has a bridge type, then import.
-                    if (t_descriptor -> bridgetype != kMCNullTypeInfo)
-                    {
-                        if (!t_descriptor -> doimport(*(void**)t_args[i], true, t_out_values[i]))
-                        {
-                            // If that failed, finalize the contents.
-                            t_descriptor -> finalize(t_args[i]);
-                            t_success = false;
-                            t_out_arg_index = i;
-                        }
-                    }
-                    else
-                    {
-                        if (!MCForeignValueCreateAndRelease(t_types[i] . named_type, *(void**)t_args[i], (MCForeignValueRef&)t_out_values[i]))
-                        {
-                            // If that failed, finalize the contents.
-                            t_descriptor -> finalize(t_args[i]);
-                            t_success = false;
-                            t_out_arg_index = i;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // It's just a valueref - nice and easy to do something with.
-                
-                // If it is non-nil then just take the value; otherwise take kMCNull.
-                if (*(MCValueRef *)t_args[i] != nil)
-                    t_out_values[i] = **(MCValueRef **)t_args[i];
-                else
-                    t_out_values[i] = MCValueRetain(kMCNull);
-            }
+            t_success = MCScriptProcessForeignOutValue(x_frame, p_arguments[i], t_types[i] . type, *(void **)t_args[i], t_out_values[i]);
         }
         else
         {
             // Clean up out mode parameters - we get here if something failed along
             // the way, including during out mode processing.
-            if (t_descriptor != nil)
+            if (MCTypeInfoIsForeign(t_types[i] . type))
             {
                 if (t_arg_new[i])
-                    t_descriptor -> finalize(t_args[i]);
+                    MCForeignTypeInfoGetDescriptor(t_types[i] . type) -> finalize(t_args[i]);
             }
             else
             {
@@ -1571,31 +1652,6 @@ static bool MCScriptPerformForeignInvoke(MCScriptFrame*& x_frame, MCScriptInstan
                     *(MCValueRef *)t_args[i] != nil)
                     MCValueRelease(*(MCValueRef *)t_args[i]);
             }
-        }
-    }
-    
-    // Check that the out values conform to register types.
-    if (t_success)
-    {
-        for(uindex_t i = 0; t_success && i < p_arity; i++)
-            if (t_out_values[i] != nil)
-            {
-                MCTypeInfoRef t_type;
-                t_type = MCScriptGetRegisterTypeInFrame(x_frame, p_arguments[i]);
-                
-                if (t_type != nil &&
-                    !MCTypeInfoConforms(MCValueGetTypeInfo(t_out_values[i]), t_type))
-                    t_success = MCScriptThrowInvalidValueForLocalVariableError(x_frame -> instance -> module, x_frame -> handler, p_arguments[i], t_type, t_out_values[i]);
-            }
-        
-        if (t_result_reg != UINDEX_MAX)
-        {
-            MCTypeInfoRef t_type;
-            t_type = MCScriptGetRegisterTypeInFrame(x_frame, t_result_reg);
-            
-            if (t_type != nil &&
-                !MCTypeInfoConforms(MCValueGetTypeInfo(t_result_value), t_type))
-                t_success = MCScriptThrowInvalidValueForResultError(x_frame -> instance -> module, x_frame -> handler, t_type, t_result_value);
         }
     }
     

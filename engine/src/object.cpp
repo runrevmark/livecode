@@ -4584,7 +4584,8 @@ void MCObject::relayercontrol_insert(MCControl *p_control, MCControl *p_target)
 
 void MCObject::scheduledelete(void)
 {
-	appendto(MCtodelete);
+    MCDeletedObjectsAdd(this);
+ 
 	if (m_weak_handle != nil)
 	{
 		m_weak_handle -> Clear();
@@ -4755,3 +4756,39 @@ bool MCObjectHandle::Exists(void)
 {
 	return m_object != NULL;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct MCDeletedObjectPool
+{
+};
+
+MCDeletedObjectPool *MCdeletedobjectpool = nil;
+
+void MCDeletedObjectsSetup(void)
+{
+}
+
+void MCDeletedObjectsTeardown(void)
+{
+}
+
+void MCDeletedObjectsEnterWait(bool p_dispatching)
+{
+}
+
+void MCDeletedObjectsLeaveWait(bool p_dispatching)
+{
+}
+
+void MCDeletedObjectsDrain(void)
+{
+}
+
+void MCDeletedObjectsAdd(MCObject *object)
+{
+}
+
+MCDeletedObjectPool *MCDeletedObjectsCreate(MCObject *object)
+
+///////////////////////////////////////////////////////////////////////////////

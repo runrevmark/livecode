@@ -166,6 +166,14 @@ struct MCObjectFontAttrs
 	uint2 size;
 };
 
+struct MCDeletedObjectPool;
+void MCDeletedObjectsSetup(void);
+void MCDeletedObjectsTeardown(void);
+void MCDeletedObjectsEnterWait(bool p_dispatching);
+void MCDeletedObjectsLeaveWait(bool p_dispatching);
+void MCDeletedObjectsDrain(void);
+void MCDeletedObjectsAdd(MCObject *object);
+
 struct MCPatternInfo
 {
 	uint32_t id;
@@ -237,6 +245,8 @@ protected:
 
 	// MW-2012-02-16: [[ LogFonts ]] The object's logical font attrs.
 	MCObjectFontAttrs *m_font_attrs;
+    
+    MCDeletedObjectPool *m_pool;
 
 	static uint1 dashlist[2];
 	static uint1 dotlist[2];

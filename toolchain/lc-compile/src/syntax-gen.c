@@ -1857,6 +1857,36 @@ void GenerateSyntaxRules(void)
     GenerateTokenList();
 }
 
+void PrintOperatorInfo(void)
+{
+	SyntaxRuleGroupRef t_group;
+    SyntaxRuleRef t_rule;
+    for(t_group = s_groups; t_group != NULL; t_group = t_group -> next)
+    {
+        for(t_rule = t_group -> rules; t_rule != NULL; t_rule = t_rule -> next)
+        {
+            const char *t_name_string, *t_module_string;
+            static const char *s_operator_names[] =
+            {
+                "", "", "", "", "",
+                "prefix", "postfix", "left binary", "right binary", "neutral binary",
+            };
+            
+            if (t_rule -> kind < kSyntaxRuleKindPrefixOperator)
+                continue;
+            
+            GetStringOfNameLiteral(t_rule -> module, &t_module_string);
+            GetStringOfNameLiteral(t_rule -> name, &t_name_string);
+            fprintf(stderr,
+                    "%s.%s is %s operator with precedence %ld\n",
+                    t_module_string,
+                    t_name_string,
+                    s_operator_names[t_rule -> kind],
+                    t_rule -> precedence);
+        }
+    }
+}
+
 void DumpSyntaxRules(void)
 {
     int t_gindex;

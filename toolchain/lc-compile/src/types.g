@@ -313,6 +313,55 @@
 
 --------------------------------------------------------------------------------
 
+-- All operators are classified as particular types representing their syntactic
+-- structure. These patterns have fixed precedence when used in expressions to
+-- ensure consistent interpretation.
+--
+-- These classifications easy syntactic description and ensure consistency. The
+-- parser maps them to concrete operator type and precedence level before
+-- building the AST.
+--
+-- Some classifications have the same underlying syntactic pattern but distinction
+-- is made to make it clear what the intent of the syntax is. Generally, if two
+-- classifications share a syntax pattern, then they must share the same precedence
+-- and operator type to ensure the principal of least surprise is enforced.
+--
+'type' OPERATORCLASS
+    -- E is a foo
+    classification,
+    -- the foo of E (where foo() is also syntax)
+    function,
+    -- foo ...... of E
+    chunk,
+    -- the foo of E (where foo is property-like)
+    property,
+    -- foo ... (where foo is a type, syntax is a constructor)
+    construction,
+    -- x :: y (namespace scoping)
+    scope,
+    -- x[...] (access)
+    access,
+    -- +x, -y (modifier)
+    modifier,
+    -- x*y
+    multiplicative,
+    -- x+y
+    additive,
+    -- x >> y, x | y, x & y
+    bitwise,
+    -- x < y
+    comparison,
+    -- x is y, x == y
+    equality,
+    -- x and y
+    conjunctive
+    -- x or y
+    disjunctive
+    -- x ; y
+    sequence
+
+--------------------------------------------------------------------------------
+
 'type' NAME
 'type' DOUBLE
 

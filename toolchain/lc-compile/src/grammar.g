@@ -102,6 +102,10 @@
                     (|
                         ErrorsDidOccur()
                     ||
+                        [|
+                            IsOperatorInfoCompile()
+                            PrintOperatorInfo()
+                        |]
                         GenerateSyntaxRules()
                         GenerateModules(Modules)
                     |)

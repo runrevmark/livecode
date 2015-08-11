@@ -28,6 +28,7 @@ extern void yyExtend(void);
 extern void InitializeCustomInvokeLists(void);
 
 static int s_is_bootstrap = 0;
+static int s_wants_operator_info = 0;
 
 extern enum DependencyModeType DependencyMode;
 extern int OutputFileAsC;
@@ -41,6 +42,11 @@ int IsBootstrapCompile(void)
 int IsDependencyCompile(void)
 {
     return DependencyMode != kDependencyModeNone;
+}
+
+int IsOperatorInfoCompile(void)
+{
+    return s_wants_operator_info;
 }
 
 void bootstrap_main(int argc, char *argv[])
@@ -70,6 +76,8 @@ void bootstrap_main(int argc, char *argv[])
         }
         else if (strcmp(argv[i], "--outputi") == 0 && i + 1 < argc)
             AddImportedModuleDir(argv[++i]);
+        else if (strcmp(argv[i], "--operator-info") == 0)
+            s_wants_operator_info = 1;
         else
             AddFile(argv[i]);
     }

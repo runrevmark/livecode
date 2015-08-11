@@ -129,6 +129,9 @@
     DependDefineMapping
     DependDefineDependency
 
+    IsOperatorInfoCompile
+    PrintOperatorInfo
+
     EmitStart
     EmitFinish
     EmitBeginModule
@@ -477,6 +480,11 @@
 'action' DependFinish()
 'action' DependDefineMapping(ModuleName: NAME, SourceFile: STRING)
 'action' DependDefineDependency(ModuleName: NAME, RequiredModuleName: NAME)
+
+--------------------------------------------------------------------------------
+
+'condition' IsOperatorInfoCompile()
+'action' PrintOperatorInfo()
 
 --------------------------------------------------------------------------------
 

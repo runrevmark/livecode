@@ -75,6 +75,8 @@ protected:
     // MW-2012-02-14: [[ FontRefs ]] The concrete font to use for the block.
 	//   (only valid when the block is open).
 	MCFontRef m_font;
+	
+	bool is_soft_break : 1;
 public:
 	MCBlock();
 	MCBlock(const MCBlock &bref);
@@ -209,6 +211,8 @@ public:
 		flags &= ~F_VISITED;
 	}
 
+	void setisbreak(void) { is_soft_break = true; }
+	
 	Boolean islink() const
 	{
 		// MW-2012-02-17: [[ SplitTextAttrs ]] We are a link if we have a font

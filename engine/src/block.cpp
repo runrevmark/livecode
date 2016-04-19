@@ -1877,7 +1877,13 @@ coord_t MCBlock::getsubwidth(MCDC *dc, coord_t x /* IGNORED */, findex_t i, find
         // SN-2014-07-24: [[ Bug 12948 ]] Fix for the crash (negative length possible)
         if (l && parent->GetCodepointAtIndex(sptr + l - 1) == '\t')
 			l--;
-
+		
+		if (is_soft_break)
+		{
+			while(l && parent -> GetCodepointAtIndex(sptr + l - 1) == ' ')
+				l--;
+		}
+		
 		// MW-2012-08-29: [[ Bug 10325 ]] Use 32-bit int to compute the width, then clamp
 		//   to 65535 - this means that we force wrapping when the line is too long.
 		// MW-2013-08-08: [[ Bug 10654 ]] Make sure we use a signed integer here, otherwise
@@ -1931,6 +1937,7 @@ coord_t MCBlock::getwidth(MCDC *dc, coord_t x)
 void MCBlock::reset()
 {
 	width = 0;
+	is_soft_break = false;
 }
 
 coord_t MCBlock::GetAscent() const

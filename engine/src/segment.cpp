@@ -237,6 +237,9 @@ MCLine *MCSegment::Fit(coord_t p_max_width)
 		t_break_block = t_next_block;
 		t_break_index = t_break_block -> GetOffset();
 	}
+	
+	if (t_break_block != nil)
+		t_break_block -> setisbreak();
     
     // MW-2012-02-21: [[ LineBreak ]] Check to see if there is a vtab char before the
 	//   break index.

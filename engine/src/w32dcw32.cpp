@@ -746,6 +746,17 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 		//   If we have Ctrl+Alt set, we discard the modifiers
 		if ((MCmodifierstate & (MS_CONTROL | MS_ALT)) == (MS_CONTROL | MS_ALT))
 			MCmodifierstate = 0;
+		
+
+			// Take a note of what MCmodifierstate is before we dispatch the first key
+			// press so we can reset it before each key dispatch otherwise anything in
+			// the engine which queries mods during processing can cause subsequent
+			// key presses to be interpreted wrongly.
+			uint2 t_first_press_modifierstate;
+			t_first_press_modifierstate = MCmodifierstate;
+
+		//if (t_char < 32 && (MCmodifierstate & MS_CONTROL) == 0)
+		//	break;
 
 		if (IsWindowUnicode(hwnd))
 		{
@@ -808,6 +819,12 @@ LRESULT CALLBACK MCWindowProc(HWND hwnd, UINT msg, WPARAM wParam,
 
 			while (count--)
 			{
+				MCLog("%d, %d, %d", count, t_keysym, MCmodifierstate);
+
+				// Make sure we use the modifier state applicable to the first key
+				// press in a repeat.
+				MCmodifierstate = t_first_press_modifierstate;
+				
 				// SN-2014-09-05: [[ Bug 13348 ]] Call the appropriate message
 				//	 [[ MERGE-6_7_RC_2 ]] and add the KeyDown/Up in case we follow
 				//   a dead-key started sequence

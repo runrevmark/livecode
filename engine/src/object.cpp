@@ -2096,7 +2096,8 @@ Exec_stat MCObject::message(MCNameRef mess, MCParameter *paramptr, Boolean chang
 	void *t_deletion_cookie;
 	MCDeletedObjectsOnObjectSuspendDeletion(this, t_deletion_cookie);
 	
-	MCStack *oldstackptr = MCdefaultstackptr;
+	MCStack *t_old_stack = MCdefaultstackptr;
+	MCObjectHandle oldstackptr = MCdefaultstackptr->GetHandle();
 	MCObjectPtr oldtargetptr = MCtargetptr;
 	if (changedefault)
 	{
@@ -2130,7 +2131,17 @@ Exec_stat MCObject::message(MCNameRef mess, MCParameter *paramptr, Boolean chang
 		}
 	}
 	if (!send || !changedefault || MCdefaultstackptr == mystack)
-		MCdefaultstackptr = oldstackptr;
+	{
+		if (oldstackptr.IsValid())
+		{
+			MCLog("Resetting default stack ptr to %p", oldstackptr.Get());
+			MCdefaultstackptr = oldstackptr.GetAs<MCStack>();
+		}
+		else
+		{
+			MCLog("Not resetting default stack ptr to %p as it is no longer valid", t_old_stack);
+		}
+	}
 	MCtargetptr = oldtargetptr;
 	MCdynamicpath = olddynamic;
 	

@@ -1439,7 +1439,7 @@ public:
     {
         return m_proxy != NULL && m_proxy->ObjectExists();
     }
-    operator bool() const
+    explicit operator bool() const
     {
         return IsValid();
     }
@@ -1454,7 +1454,7 @@ public:
     {
         return Get();
     }
-    operator MCObject* ()
+	operator MCObject* ()
     {
         return Get();
     }

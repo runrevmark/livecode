@@ -161,6 +161,7 @@
 								'OTHER_LDFLAGS':
 								[
                                     '-weak_framework AVFoundation',
+                                    '-force_load <(PRODUCT_DIR)/libengine_lcb_modules.a',
 								]
 							},
                         },

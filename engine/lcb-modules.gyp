@@ -47,7 +47,7 @@
 					
 					'outputs':
 					[
-						'<(INTERMEDIATE_DIR)/engine_lcb_modules.c',
+						'<(INTERMEDIATE_DIR)/engine_lcb_modules.cpp',
                         
   						# A specific output file is required here to ensure that
   						# all build systems create the output directory while
@@ -62,7 +62,7 @@
 						'--bootstrap',
 						'--inputg', '../toolchain/lc-compile/src/grammar.g',
 						'--outputi', '<(PRODUCT_DIR)/modules/lci',
-						'--outputc', '<(INTERMEDIATE_DIR)/engine_lcb_modules.c',
+						'--outputc', '<(INTERMEDIATE_DIR)/engine_lcb_modules.cpp',
 						'<@(_inputs)',
 					],
 				},

@@ -11,6 +11,7 @@
 			'test/environment.cpp',
 			'test/test_string.cpp',
 			'test/test_typeconvert.cpp',
+            'test/test_system-library.cpp',
 		],
 	},
 
@@ -63,6 +64,7 @@
 				'include/system-commandline.h',
 				'include/system-file.h',
 				'include/system-init.h',
+                'include/system-library.h',
 				'include/system-random.h',
 				'include/system-stream.h',
 				
@@ -106,7 +108,8 @@
 				'src/system-file.cpp',
 				'src/system-file-posix.cpp',
 				'src/system-file-w32.cpp',
-				'src/system-init.cpp',
+                'src/system-init.cpp',
+                'src/system-library.cpp',
 				'src/system-random.cpp',
 				'src/system-stream.cpp',
 			],

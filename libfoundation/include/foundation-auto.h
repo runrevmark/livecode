@@ -940,8 +940,13 @@ public:
 	{
 	}
     
-    MCAutoCustomPointer(T*&& take) :
-      m_ptr(take)
+    MCAutoCustomPointer(pointer value) :
+        m_ptr(value)
+    {
+    }
+    
+    MCAutoCustomPointer(MCAutoCustomPointer&& take) :
+      m_ptr(take.Release())
     {
     }
     

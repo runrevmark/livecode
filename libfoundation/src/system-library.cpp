@@ -19,6 +19,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include <foundation-auto.h>
 
+#include <utility>
+
 /* ---------------------------------------------------------------- */
 
 #if defined(__WINDOWS__)
@@ -152,9 +154,9 @@ __MCSLibraryFinalize(void)
     MCValueRelease(kMCSLibraryTypeInfo);
 }
 
-template<typename Impl, typename HandleType>
+template<typename Impl>
 static inline bool
-__MCSLibraryCreateRef(HandleType p_handle,
+__MCSLibraryCreateRef(typename Impl::Handle&& p_handle,
                       MCSLibraryRef& r_library)
 {
     MCSLibraryRef t_library;
@@ -165,7 +167,7 @@ __MCSLibraryCreateRef(HandleType p_handle,
         return false;
     }
     
-    new (MCValueGetExtraBytesPtr(t_library)) Impl(p_handle);
+    new (MCValueGetExtraBytesPtr(t_library)) Impl(static_cast<typename Impl::Handle&&>(p_handle));
     
     r_library = t_library;
     
@@ -405,14 +407,14 @@ __MCSDlHandleGetImageName(void *p_dl_handle,
     {
         // Fetch the image name
         const char *t_image_name =
-        _dyld_get_image_name(i);
+                _dyld_get_image_name(i);
         
         // Now dlopen the image with RTLD_NOLOAD so that we only get a handle
         // if it is already loaded and (critically) means it is unaffected by
         // RTLD_GLOBAL (the default mode).
         void *t_image_dl_handle =
-        dlopen(t_image_name,
-               RTLD_NOLOAD);
+                dlopen(t_image_name,
+                       RTLD_NOLOAD);
         
         // If the handle matches the one we are looking for, we are done.
         if (t_image_dl_handle == p_dl_handle)
@@ -442,25 +444,28 @@ __MCSDlHandleGetImageName(void *p_dl_handle,
 #define __MCSLIBRARY_HAS_DLHANDLE_IMPL
 class __MCSDlHandleLibraryImpl: public __MCSLibraryImpl
 {
-public:
-    __MCSDlHandleLibraryImpl(void *p_handle)
-        : m_handle(p_handle)
+    static void DlHandleClose(void *p_handle)
     {
+        dlclose(p_handle);
     }
     
-    ~__MCSDlHandleLibraryImpl(void)
+public:
+    typedef MCAutoCustomPointer<void, DlHandleClose> Handle;
+    
+    __MCSDlHandleLibraryImpl(Handle&& p_handle)
+        : m_handle(static_cast<Handle&&>(p_handle))
     {
-        dlclose(m_handle);
+        MCAssert(m_handle);
     }
     
     const void *Pointer(void) const
     {
-        return m_handle;
+        return *m_handle;
     }
     
     bool CopyNativePath(MCStringRef& r_path) const
     {
-        return __MCSDlHandleGetImageName(m_handle,
+        return __MCSDlHandleGetImageName(*m_handle,
                                          r_path);
     }
     
@@ -474,7 +479,7 @@ public:
         }
         
         void *t_address =
-                dlsym(m_handle,
+                dlsym(*m_handle,
                       *t_cstring_symbol);
         
         return t_address;
@@ -489,23 +494,17 @@ public:
             return false;
         }
         
-        void *t_dl_handle =
+        Handle t_dl_handle =
                 dlopen(*t_sys_path,
                        RTLD_LAZY);
-        if (t_dl_handle == nullptr)
+        if (!t_dl_handle)
         {
             /* TODO: Use dlerror */
             return __MCSLibraryThrowCreateWithNativePathFailedError(p_native_path);
         }
         
-        if (!__MCSLibraryCreateRef<__MCSDlHandleLibraryImpl>(t_dl_handle,
-                                                             r_library))
-        {
-            dlclose(t_dl_handle);
-            return false;
-        }
-        
-        return true;
+        return __MCSLibraryCreateRef<__MCSDlHandleLibraryImpl>(t_dl_handle.Release(),
+                                                               r_library);
     }
     
     static bool CreateWithAddress(void *p_address,
@@ -526,19 +525,12 @@ public:
             return __MCSLibraryThrowCreateWithAddressFailedError(p_address);
         }
         
-        if (!__MCSLibraryCreateRef<__MCSDlHandleLibraryImpl>(t_dl_handle,
-                                                             r_library))
-        {
-            dlclose(t_dl_handle);
-            return false;
-        }
-        
-        return true;
+        return __MCSLibraryCreateRef<__MCSDlHandleLibraryImpl>(t_dl_handle,
+                                                               r_library);
     }
     
-    
 private:
-    void *m_handle;
+    Handle m_handle;
 };
 
 #endif
@@ -549,23 +541,32 @@ private:
 
 #if defined(__MAC__)
 
+#include <sys/stat.h>
+
 #define __MCSLIBRARY_HAS_CFBUNDLEREF_IMPL
 class __MCSCFBundleRefLibraryImpl: public __MCSLibraryImpl
 {
-public:
-    __MCSCFBundleRefLibraryImpl(CFBundleRef p_handle)
-        : m_handle(p_handle)
+    static void CFBundleRelease(CFBundleRef ref)
     {
+        CFRelease(ref);
     }
     
-    ~__MCSCFBundleRefLibraryImpl(void)
+    static void CFURLRelease(CFURLRef ref)
     {
-        CFRelease(m_handle);
+        CFRelease(ref);
+    }
+    
+public:
+    typedef MCAutoCustomPointer<struct __CFBundle, CFBundleRelease> Handle;
+    
+    __MCSCFBundleRefLibraryImpl(Handle&& p_handle)
+        : m_handle(static_cast<Handle&&>(p_handle))
+    {
     }
     
     const void *Pointer(void) const
     {
-        return static_cast<const void *>(m_handle);
+        return static_cast<const void *>(*m_handle);
     }
     
     bool CopyNativePath(MCStringRef& r_path) const
@@ -581,12 +582,44 @@ public:
     static bool CreateWithNativePath(MCStringRef p_native_path,
                                      MCSLibraryRef& r_library)
     {
-        r_library = nullptr;
+        MCAutoStringRefAsSysString t_sys_path;
+        if (!t_sys_path.Lock(p_native_path))
+        {
+            return false;
+        }
+        
+        struct stat t_sys_info;
+        if (stat(*t_sys_path,
+                 &t_sys_info) == -1 ||
+            !S_ISDIR(t_sys_info.st_mode))
+        {
+            r_library = nullptr;
+            return true;
+        }
+        
+        MCAutoCustomPointer<const struct __CFURL, CFURLRelease> t_url =
+                CFURLCreateFromFileSystemRepresentation(nullptr,
+                                                        (const UInt8 *)*t_sys_path,
+                                                        t_sys_path.Size(),
+                                                        true);
+        if (!t_url)
+        {
+            return false;
+        }
+        
+        Handle t_bundle =
+                CFBundleCreate(nullptr,
+                               *t_url);
+        if (!t_bundle)
+        {
+            return __MCSLibraryThrowCreateWithNativePathFailedError(p_native_path);
+        }
+        
         return true;
     }
     
 private:
-    CFBundleRef m_handle;
+    Handle m_handle;
 };
 #endif
 
@@ -625,19 +658,19 @@ MCSLibraryCreateWithPath(MCStringRef p_path,
     }
 #endif
     
-#if defined(__MCSLIBRARY_HAS_DLHANDLE_IMPL)
+#if defined(__MCSLIBRARY_HAS_CFBUNDLEREF_IMPL)
     if (!t_new_library.IsSet() &&
-        !__MCSDlHandleLibraryImpl::CreateWithNativePath(*t_native_path,
-                                                        &t_new_library))
+        !__MCSCFBundleRefLibraryImpl::CreateWithNativePath(*t_native_path,
+                                                           &t_new_library))
     {
         return false;
     }
 #endif
     
-#if defined(__MCSLIBRARY_HAS_CFBUNDLEREF_IMPL)
+#if defined(__MCSLIBRARY_HAS_DLHANDLE_IMPL)
     if (!t_new_library.IsSet() &&
-        !__MCSCFBundleRefLibraryImpl::CreateWithNativePath(*t_native_path,
-                                                           &t_new_library))
+        !__MCSDlHandleLibraryImpl::CreateWithNativePath(*t_native_path,
+                                                        &t_new_library))
     {
         return false;
     }

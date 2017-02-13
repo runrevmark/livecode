@@ -2881,129 +2881,272 @@ uint32_t MCDictionary::Checksum(const void *p_data, uint32_t p_length)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// SN-2015-04-07: [[ Bug 15164 ]] MCU_loadmodule is now a wrapper of MCU_loadmodule_stringref
-//  to keep consistent its use from the externals.
-void* MCU_loadmodule(const char* p_module)
+static bool
+MCU_path_is_absolute(MCStringRef p_path)
 {
-    MCAutoStringRef t_module;
-    if (!MCStringCreateWithCString(p_module, &t_module))
-        return NULL;
-
-    return MCU_loadmodule_stringref(*t_module);
+#ifdef __WINDOWS__
+    if ((MCStringGetLength(p_path) > 1 && MCStringGetCharAtIndex(p_path, 1) == ':') ||
+        (MCStringGetLength(p_path) > 2 && MCStringGetCharAtIndex(p_path, 0) == '/' && MCStringGetCharAtIndex(p_path, 1) == '/'))
+    {
+        return true;
+    }
+#endif
+    
+    return MCStringGetCharAtIndex(p_path,
+                                  0) == '/';
 }
 
-// AL-2015-02-06: [[ SB Inclusions ]] Add utility functions for module loading where
-//  p_module can be a universal module name, where a mapping from module names to
-// relative paths has been provided.
-// SN-2015-02-23: [[ Broken Win Compilation ]] Use void*, as the function is imported
-//  as extern in revbrowser/src/cefshared.h - where MCSysModuleHandle does not exist
-void* MCU_loadmodule_stringref(MCStringRef p_module)
+static bool
+MCU_path_has_extension(MCStringRef p_path)
 {
-    MCSysModuleHandle t_handle;
-    t_handle = nil;
-#if defined(_MACOSX)
-    MCAutoPointer<char> t_module_cstring;
-    // SN-2015-04-07: [[ Bug 15164 ]] NSAddImage understands UTF-8.
-    if (!MCStringConvertToUTF8String(p_module, &t_module_cstring))
-        return NULL;
-    t_handle = (MCSysModuleHandle)NSAddImage(*t_module_cstring, NSADDIMAGE_OPTION_RETURN_ON_ERROR | NSADDIMAGE_OPTION_WITH_SEARCHING);
-    if (t_handle != nil)
-        return t_handle;
-    // MM-2014-02-06: [[ LipOpenSSL 1.0.1e ]] On Mac, if module cannot be found then look relative to current executable.
-    uint32_t t_buffer_size;
-    t_buffer_size = 0;
-    _NSGetExecutablePath(NULL, &t_buffer_size);
-    char *t_module_path;
-    t_module_path = (char *) malloc(t_buffer_size + strlen(*t_module_cstring) + 1);
-    if (t_module_path != NULL)
+    uindex_t t_sep;
+    if (!MCStringLastIndexOfChar(p_path,
+                                 '/',
+                                 UINDEX_MAX,
+                                 kMCStringOptionCompareExact,
+                                 t_sep))
     {
-        if (_NSGetExecutablePath(t_module_path, &t_buffer_size) == 0)
+        t_sep = 0;
+    }
+    
+    uindex_t t_ext;
+    return MCStringFirstIndexOfChar(p_path,
+                                    '.',
+                                    t_sep,
+                                    kMCStringOptionCompareExact,
+                                    t_ext);
+}
+
+static bool
+__MCU_library_load_verbatim(MCStringRef p_path,
+                            MCSLibraryRef& r_library)
+{
+    MCAutoStringRef t_library_path;
+    if (MCU_path_is_absolute(p_path))
+    {
+        t_library_path = p_path;
+    }
+    else if (MCStringGetCharAtIndex(p_path,
+                                    0) == '$')
+    {
+        if (!MCStringCopySubstring(p_path,
+                                   MCRangeMake(1, UINDEX_MAX),
+                                   &t_library_path))
         {
-            char *t_last_slash;
-            t_last_slash = t_module_path + t_buffer_size;
-            for (uint32_t i = 0; i < t_buffer_size; i++)
-            {
-                if (*t_last_slash == '/')
-                {
-                    *(t_last_slash + 1) = '\0';
-                    break;
-                }
-                t_last_slash--;
-            }
-            strcat(t_module_path, *t_module_cstring);
-            t_handle = (MCSysModuleHandle)NSAddImage(t_module_path, NSADDIMAGE_OPTION_RETURN_ON_ERROR | NSADDIMAGE_OPTION_WITH_SEARCHING);
+            return false;
         }
-        free(t_module_path);
-        // AL-2015-02-17: [[ SB Inclusions ]] Return the handle if found here.
-        if (t_handle != nil)
-            return t_handle;
     }
-#endif
+    else
+    {
+        t_library_path = p_path;
+    }
 
+    MCLog("MCU_library_load %@ -> %@",
+          p_path,
+          *t_library_path);
+    if (!MCSLibraryCreateWithPath(*t_library_path,
+                                  r_library))
+    {
+        MCAutoErrorRef t_error;
+        MCErrorCatch(&t_error);
+        MCLog("MCU_library_load failed", *t_library_path);
+        return false;
+    }
+    
+    return true;
+}
+
+static bool
+__MCU_library_load_adding_extension(MCStringRef p_path,
+                                    const char *p_extension,
+                                    MCSLibraryRef& r_library)
+{
+    MCAutoStringRef t_library_path;
+    if (!MCStringFormat(&t_library_path,
+                        "%@.%s",
+                        p_path,
+                        p_extension))
+    {
+        return false;
+    }
+    return __MCU_library_load_verbatim(*t_library_path,
+                                       r_library);
+}
+
+MCSLibraryRef MCU_library_load(MCStringRef p_path)
+{
+    // If the path is not absolute, apply the internal mapping to the name.
+    // This uses any mapping section in the standalone capsule, and ensures
+    // that revsecurity and revpdfprinter map correctly.
+    MCAutoStringRef t_library_path;
+    if (!MCU_path_is_absolute(p_path))
+    {
+        // See if the library is mapped, or is one of the (legacy) extensions.
+        MCAutoStringRef t_mapped_path;
+        if (!MCdispatcher->fetchlibrarymapping(p_path,
+                                               &t_mapped_path))
+        {
+            if (MCStringIsEqualToCString(p_path, "revsecurity", kMCStringOptionCompareCaseless) ||
+                MCStringIsEqualToCString(p_path, "revpdfprinter", kMCStringOptionCompareCaseless) ||
+                MCStringIsEqualToCString(p_path, "CEF/libcef", kMCStringOptionCompareCaseless))
+            {
+                t_mapped_path = p_path;
+            }
+        }
+        
+        // If a mapping was found, prefix it by the engine folder.
+        if (t_mapped_path.IsSet())
+        {
+            uindex_t t_last_slash;
+            if (!MCStringLastIndexOfChar(MCcmd,
+                                         '/',
+                                         UINDEX_MAX,
+                                         kMCStringOptionCompareExact,
+                                         t_last_slash))
+                t_last_slash = MCStringGetLength(MCcmd);
+            
+            MCRange t_engine_folder =
+                    MCRangeMake(0, t_last_slash);
+            
+            // Concatenate the mapped path onto the engine path, and then resolve
+            // it to ensure that all '.' and '..' type components are removed.
+            // (otherwise things might go awry if we have a //?/ type path on
+            // Windows).
+            MCAutoStringRef t_unresolved_library_path;
+            if (!MCStringFormat(&t_unresolved_library_path,
+                                "%*@/%@",
+                                &t_engine_folder,
+                                MCcmd,
+                                *t_mapped_path) ||
+                !MCS_resolvepath(*t_unresolved_library_path,
+                                 &t_library_path))
+            {
+                MCAutoErrorRef t_error;
+                MCErrorCatch(&t_error);
+                return nullptr;
+            }
+            
+        }
+    }
+    
+    // If no mapping was found, we just use the path verbatim.
+    if (!t_library_path.IsSet())
+    {
+        t_library_path = p_path;
+    }
+    
+    MCSAutoLibraryRef t_library;
+    if (MCU_path_has_extension(*t_library_path))
+    {
+        __MCU_library_load_verbatim(*t_library_path,
+                                    &t_library);
+    }
+    else
+    {
+#if defined(__MAC__) || defined(__IOS__)
+        __MCU_library_load_adding_extension(*t_library_path,
+                                            "framework",
+                                            &t_library);
+        if (!t_library.IsSet())
+            __MCU_library_load_adding_extension(*t_library_path,
+                                                "bundle",
+                                                &t_library);
+        if (!t_library.IsSet())
+            __MCU_library_load_adding_extension(*t_library_path,
+                                                "dylib",
+                                                &t_library);
+#elif defined(__WINDOWS__)
+        __MCU_library_load_adding_extension(*t_library_path,
+                                            "dll",
+                                            &t_library);
+#elif defined(__LINUX__) || defined(__ANDROID__)
+        __MCU_library_load_adding_extension(*t_library_path,
+                                            "so",
+                                            &t_library);
+#else
+#       error MCU_library_load not implemented for this platform
+#endif
+    }
+    
+    return t_library.Take();
+}
+
+void MCU_library_unload(MCSLibraryRef p_module)
+{
+    if (p_module != nullptr)
+        MCValueRelease(p_module);
+}
+
+void *MCU_library_lookup(MCSLibraryRef p_module,
+                         MCStringRef p_symbol)
+{
+    return MCSLibraryLookupSymbol(p_module,
+                                  p_symbol);
+}
+
+//////////
+
+void *MCSupportLibraryLoad(const char *p_name_cstr)
+{
+    MCAutoStringRef t_name;
+    if (!MCStringCreateWithBytes(reinterpret_cast<const byte_t *>(p_name_cstr),
+                                 strlen(p_name_cstr),
+                                 kMCStringEncodingUTF8,
+                                 false,
+                                 &t_name))
+    {
+        return nullptr;
+    }
+
+    return MCU_library_load(*t_name);
+}
+
+void MCSupportLibraryUnload(void *p_handle)
+{
+    MCU_library_unload(static_cast<MCSLibraryRef>(p_handle));
+}
+
+char *MCSupportLibraryCopyNativePath(void *p_handle)
+{
     MCAutoStringRef t_path;
-    
-    if (!MCdispatcher || !MCdispatcher -> fetchlibrarymapping(p_module, &t_path))
+    if (!MCSLibraryCopyPath(static_cast<MCSLibraryRef>(p_handle),
+                            &t_path))
     {
-        if (!MCStringCopy(p_module, &t_path))
-            return nil;
+        return nullptr;
     }
 
-    t_handle = MCS_loadmodule(*t_path);
-    
-    if (t_handle != nil)
-        return t_handle;
-    
-    MCAutoStringRef t_filename;
-    if (MCStringGetCharAtIndex(*t_path ,0) == '/')
+    MCAutoStringRef t_native_path;
+    if (!MCS_pathtonative(*t_path,
+                          &t_native_path))
     {
-        if (!MCStringCopy(*t_path, &t_filename))
-            return nil;
-    }
-    else if (MCcmd)
-    {
-        uindex_t t_last_slash_index;
-        if (!MCStringLastIndexOfChar(MCcmd, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_last_slash_index))
-            t_last_slash_index = MCStringGetLength(MCcmd);
-
-        MCRange t_range;
-        t_range = MCRangeMake(0, t_last_slash_index);
-        if (!MCStringFormat(&t_filename, "%*@/%@", &t_range, MCcmd, *t_path))
-            return nil;
+        return nullptr;
     }
 
-	if (*t_filename != nil)
-    	t_handle = MCS_loadmodule(*t_filename);
-    
-    return t_handle;
+    char *t_path_str;
+    if (!MCStringConvertToUTF8String(*t_native_path,
+                                     t_path_str))
+    {
+        return nullptr;
+    }
+
+    return t_path_str;
 }
 
-// SN-2015-02-23: [[ Broken Win Compilation ]] Use void*, as the function is imported
-//  as extern in revbrowser/src/cefshared.h - where MCSysModuleHandle does not exist
-void MCU_unloadmodule(void *p_module)
+void *MCSupportLibraryLookupSymbol(void *p_handle,
+                                   const char *p_symbol_cstr)
 {
-    // SN-2015-03-04: [[ Broken module unloading ]] NSAddImage, used on Mac in
-    //  MCU_loadmodule, does not need any unloading of the module -
-    //  but the other platforms do.
-#if !defined(_MACOSX)
-    MCS_unloadmodule((MCSysModuleHandle)p_module);
-#endif
-}
-
-// SN-2015-02-23: [[ Broken Win Compilation ]] Use void*, as the function is imported
-//  as extern in revbrowser/src/cefshared.h - where MCSysModuleHandle does not exist
-void *MCU_resolvemodulesymbol(void* p_module, const char *p_symbol)
-{
-#if defined(_MACOSX)
-    NSSymbol t_symbol;
-    t_symbol = NSLookupSymbolInImage((mach_header *)p_module, p_symbol, NSLOOKUPSYMBOLINIMAGE_OPTION_BIND_NOW);
-    if (t_symbol != NULL)
-        return NSAddressOfSymbol(t_symbol);
-#endif
-    MCAutoStringRef t_symbol_str;
-    if (!MCStringCreateWithCString(p_symbol, &t_symbol_str))
-        return nil;
-
-    return MCS_resolvemodulesymbol((MCSysModuleHandle)p_module, *t_symbol_str);
+    MCAutoStringRef t_symbol;
+    if (!MCStringCreateWithBytes(reinterpret_cast<const byte_t *>(p_symbol_cstr),
+                                 strlen(p_symbol_cstr),
+                                 kMCStringEncodingUTF8,
+                                 false,
+                                 &t_symbol))
+    {
+        return nullptr;
+    }
+ 
+    return MCU_library_lookup(static_cast<MCSLibraryRef>(p_handle),
+                              *t_symbol);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

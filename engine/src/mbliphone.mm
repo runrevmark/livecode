@@ -731,41 +731,6 @@ Boolean MCIPhoneSystem::GetStandardFolder(MCNameRef p_type, MCStringRef& r_folde
     return True;
 }
 
-//////////
-
-MCSysModuleHandle MCIPhoneSystem::LoadModule(MCStringRef p_path)
-{
-    
-	void *t_module;
-    MCAutoPointer<char> t_path;
-    /* UNCHECKED */ MCStringConvertToCString(p_path, &t_path);
-	t_module = load_module(*t_path);
-	if (t_module != NULL)
-		return (MCSysModuleHandle)t_module;
-    
-    t_module = dlopen(*t_path, RTLD_LAZY);
-    
-	return (MCSysModuleHandle)t_module;
-}
-
-MCSysModuleHandle MCIPhoneSystem::ResolveModuleSymbol(MCSysModuleHandle p_module, MCStringRef p_symbol)
-{
-    MCAutoPointer<char> t_symbol;
-    /* UNCHECKED */ MCStringConvertToCString(p_symbol, &t_symbol);
-	if (is_static_module((void*)p_module))
-		return (MCSysModuleHandle)resolve_symbol((void*)p_module, *t_symbol);
-
-	return (MCSysModuleHandle)dlsym(p_module, *t_symbol);
-}
-
-void MCIPhoneSystem::UnloadModule(MCSysModuleHandle p_module)
-{
-	if (is_static_module((void*)p_module))
-		return;
-		
-	dlclose((void*)p_module);
-}
-
 ////
 
 bool MCIPhoneSystem::LongFilePath(MCStringRef p_path, MCStringRef& r_long_path)
@@ -776,11 +741,6 @@ bool MCIPhoneSystem::LongFilePath(MCStringRef p_path, MCStringRef& r_long_path)
 bool MCIPhoneSystem::ShortFilePath(MCStringRef p_path, MCStringRef& r_short_path)
 {
 	return MCStringCopy(p_path, r_short_path);
-}
-// ST-2014-12-18: [[ Bug 14259 ]] Not implemented / needed on iOS
-bool MCIPhoneSystem::GetExecutablePath(MCStringRef& r_path)
-{
-    return false;
 }
 
 bool MCIPhoneSystem::PathToNative(MCStringRef p_path, MCStringRef& r_native)

@@ -34,7 +34,6 @@
 				'src/libbrowser_cef.h',
 				'src/libbrowser_cef_lnx.cpp',
 				'src/libbrowser_cef_win.cpp',
-				'src/libbrowser_cefshared_lnx.cpp',
 				
 				'src/libbrowser_win.rc.h',
 				'src/libbrowser_win.rc',
@@ -103,7 +102,6 @@
 						'sources!':
 						[
 							'src/libbrowser_cef_lnx.cpp',
-							'src/libbrowser_cefshared_lnx.cpp',
 							'src/signal_restore_posix.cpp',
 							
 							'src/libbrowser_lnx_factories.cpp',
@@ -153,55 +151,9 @@
 						'dependencies':
 						[
 							'libbrowser-cefprocess',
+							'../prebuilt/libcef.gyp:libcef',
 							'../thirdparty/libcef/libcef.gyp:libcef_library_wrapper',
 							'../thirdparty/libcef/libcef.gyp:libcef_stubs',
-						],
-					},
-				],
-				
-				# Copy files needed to run from build folder
-				[
-					'OS == "linux"',
-					{
-						'copies':
-						[
-							{
-								'destination': '<(PRODUCT_DIR)',
-								'files': [
-									'../prebuilt/lib/linux/<(target_arch)/CEF/icudtl.dat',
-									'../prebuilt/lib/linux/<(target_arch)/CEF/natives_blob.bin',
-									'../prebuilt/lib/linux/<(target_arch)/CEF/snapshot_blob.bin',
-								],
-							},
-							{
-								'destination': '<(PRODUCT_DIR)/Externals/',
-								'files': [
-									'../prebuilt/lib/linux/<(target_arch)/CEF',
-								],
-							}
-						],
-					},
-				],
-				
-				[
-					'OS == "win"',
-					{
-						'copies':
-						[
-							{
-								'destination':'<(PRODUCT_DIR)/Externals/',
-								'files':
-								[
-									'../prebuilt/lib/win32/<(target_arch)/CEF/',
-								],
-							},
-							{
-								'destination':'<(PRODUCT_DIR)/Externals/CEF/',
-								'files':
-								[
-									'<(PRODUCT_DIR)/libbrowser-cefprocess.exe',
-								],
-							},
 						],
 					},
 				],
@@ -248,7 +200,7 @@
 				'../libcore/libcore.gyp:libCore',
 				'../libfoundation/libfoundation.gyp:libFoundation',
 				'../thirdparty/libcef/libcef.gyp:libcef_library_wrapper',
-				'../thirdparty/libcef/libcef.gyp:libcef_stubs',
+				'../prebuilt/libcef.gyp:libcef',
 			],
 
 			'include_dirs':
@@ -262,7 +214,6 @@
 				'src/libbrowser_cefprocess.cpp',
 				'src/libbrowser_cefprocess_lnx.cpp',
 				'src/libbrowser_cefprocess_win.cpp',
-				'src/libbrowser_cefshared_lnx.cpp',
 			],
 			
 			'conditions':
@@ -284,11 +235,62 @@
 						'sources!':
 						[
 							'src/libbrowser_cefprocess_lnx.cpp',
-							'src/libbrowser_cefshared_lnx.cpp',
 						],
 					},
 				],
 				
+				[
+					'OS == "win"',
+					{	
+						'copies':
+						[
+							{
+								'destination':'<(PRODUCT_DIR)/CEF/',
+								'files':
+								[
+									'<(PRODUCT_DIR)/libbrowser-cefprocess.exe',
+								],
+							},
+						],
+
+						'library_dirs':
+						[
+							'../prebuilt/lib/win32/<(target_arch)/CEF/',
+						],
+
+						'libraries':
+						[
+							'-llibcef.lib',
+						],
+					},
+				],
+                
+                [
+                    'OS == "win"',
+                    {
+                        'copies':
+                        [
+                            {
+                                'destination':'<(PRODUCT_DIR)/CEF/',
+                                'files':
+                                [
+                                    '<(PRODUCT_DIR)/libbrowser-cefprocess',
+                                ],
+                            },
+                        ],
+                        
+                        'library_dirs':
+                        [
+                            '../prebuilt/lib/linux/<(target_arch)/CEF/',
+                        ],
+                        
+                        'libraries':
+                        [
+                            '-llibcef',
+                        ],
+                    },
+                ],
+                
 				[
 					'OS == "win" or OS == "linux"',
 					{

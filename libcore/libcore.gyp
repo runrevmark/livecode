@@ -33,7 +33,6 @@
 				
 				'src/core.cpp',
 				'src/filesystem.cpp',
-				'src/module.cpp',
 				'src/thread.cpp',
 				'src/thunk.cpp',
 			],

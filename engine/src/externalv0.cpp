@@ -190,7 +190,8 @@ bool MCExternalV0::Prepare(void)
 {
 	// IM-2014-03-06: [[ revBrowserCEF ]] call the setExternalInterfaceVersion() function if present
 	SETEXTERNALINTERFACEVERSION t_set_version;
-	t_set_version = (SETEXTERNALINTERFACEVERSION)MCS_resolvemodulesymbol(m_module, MCSTR("setExternalInterfaceVersion"));
+	t_set_version = (SETEXTERNALINTERFACEVERSION)MCU_library_lookup(*m_module,
+                                                                    MCSTR("setExternalInterfaceVersion"));
 	if (t_set_version != nil)
 		t_set_version(EXTERNAL_INTERFACE_VERSION);
 	
@@ -198,16 +199,19 @@ bool MCExternalV0::Prepare(void)
 	// as it is used to determine if its a V0 external!).
 
 	GETXTABLE t_getter;
-	t_getter = (GETXTABLE)MCS_resolvemodulesymbol(m_module, MCSTR("getXtable"));
+	t_getter = (GETXTABLE)MCU_library_lookup(*m_module,
+                                             MCSTR("getXtable"));
     t_getter(MCcbs, deleter, &m_name, &m_table, &m_free);
 	
 	CONFIGURESECURITY t_conf_security;
-	t_conf_security = (CONFIGURESECURITY)MCS_resolvemodulesymbol(m_module, MCSTR("configureSecurity"));
+	t_conf_security = (CONFIGURESECURITY)MCU_library_lookup(*m_module,
+                                                            MCSTR("configureSecurity"));
 	if (t_conf_security != nil)
 		t_conf_security(MCsecuritycbs);
 
 	SHUTDOWNXTABLE t_shutdown;
-	t_shutdown = (SHUTDOWNXTABLE)MCS_resolvemodulesymbol(m_module, MCSTR("shutdownXtable"));
+	t_shutdown = (SHUTDOWNXTABLE)MCU_library_lookup(*m_module,
+                                                    MCSTR("shutdownXtable"));
 	if (t_shutdown != nil)
 		m_shutdown = t_shutdown;
 
@@ -1620,20 +1624,29 @@ static char *load_module(const char *arg1, const char *arg2,
     MCSysModuleHandle *t_result;
     t_result = (MCSysModuleHandle *)arg2;
     
-    *t_result = (MCSysModuleHandle)MCU_loadmodule(arg1);
+    MCAutoStringRef t_name;
+    if (MCStringCreateWithCString(arg1,
+                                  &t_name))
+    {
+        *t_result = (MCSysModuleHandle)MCU_library_load(*t_name);
+    }
+    else
+    {
+        *t_result = nullptr;
+    }
     
-    if (*t_result == nil)
+    if (*t_result == nullptr)
         *retval = xresFail;
     else
         *retval = xresSucc;
     
-    return nil;
+    return nullptr;
 }
 
 static char *unload_module(const char *arg1, const char *arg2,
                           const char *arg3, int *retval)
 {
-    MCU_unloadmodule((MCSysModuleHandle)arg1);
+    MCU_library_unload((MCSLibraryRef)arg1);
     *retval = xresSucc;
     return nil;
 }
@@ -1643,14 +1656,26 @@ static char *resolve_symbol_in_module(const char *arg1, const char *arg2,
 {
     void** t_resolved;
     t_resolved = (void **)arg3;
-    *t_resolved = MCU_resolvemodulesymbol((MCSysModuleHandle)arg1, arg2);
     
-    if (*t_resolved == nil)
+    
+    MCAutoStringRef t_name;
+    if (MCStringCreateWithCString(arg2,
+                                  &t_name))
+    {
+        *t_resolved = MCU_library_lookup((MCSLibraryRef)arg1,
+                                         *t_name);
+    }
+    else
+    {
+        *t_resolved = nullptr;
+    }
+    
+    if (*t_resolved == nullptr)
         *retval = xresFail;
     else
         *retval = xresSucc;
     
-    return nil;
+    return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////

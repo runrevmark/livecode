@@ -15,23 +15,3 @@ You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include <windows.h>
-
-extern "C"
-{
-
-void *MCU_loadmodule(const char *p_source)
-{
-    return LoadLibraryA(p_source);
-}
-
-void MCU_unloadmodule(void *p_module)
-{
-    
-}
-
-void *MCU_resolvemodulesymbol(void *p_module, const char *p_name)
-{
-    return GetProcAddress((HMODULE)p_module, p_name);
-}
-    
-}

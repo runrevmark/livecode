@@ -102,6 +102,17 @@
 				[
 					'OS == "win"',
 					{
+						'copies':
+						[
+							{
+								'destination':'<(PRODUCT_DIR)/CEF/',
+								'files':
+								[
+									'<(PRODUCT_DIR)/revbrowser-cefprocess.exe',
+								],
+							},
+						],
+						
 						'defines':
 						[
 							'__EXCEPTIONS',
@@ -119,11 +130,32 @@
 				[
 					'OS == "linux"',
 					{
+                        'copies':
+                        [
+                            {
+                                'destination':'<(PRODUCT_DIR)/CEF/',
+                                'files':
+                                [
+                                    '<(PRODUCT_DIR)/revbrowser-cefprocess',
+                                ],
+                            },
+                        ],
+                        
 						'libraries':
 						[
 							'-ldl',
 							'-lX11',
 						],
+						
+					    'library_dirs':
+					    [
+					        '../prebuilt/lib/linux/<(target_arch)/CEF/',
+					    ],
+		
+					    'libraries':
+					    [
+					        '-lcef',
+					    ],
 		
 						'all_dependent_settings':
 						{
@@ -176,17 +208,6 @@
 				[
 					'OS == "win"',
 					{	
-						'copies':
-						[
-							{
-								'destination':'<(PRODUCT_DIR)/CEF/',
-								'files':
-								[
-									'<(PRODUCT_DIR)/revbrowser-cefprocess.exe',
-								],
-							},
-						],
-
 						'library_dirs':
 						[
 							'../prebuilt/lib/win32/<(target_arch)/CEF/',
@@ -202,17 +223,6 @@
                 [
                     'OS == "linux"',
                     {
-                        'copies':
-                        [
-                            {
-                                'destination':'<(PRODUCT_DIR)/CEF/',
-                                'files':
-                                [
-                                    '<(PRODUCT_DIR)/revbrowser-cefprocess',
-                                ],
-                            },
-                        ],
-                        
                         'library_dirs':
                         [
                             '../prebuilt/lib/linux/<(target_arch)/CEF/',
@@ -220,7 +230,12 @@
                         
                         'libraries':
                         [
-                            '-llibcef',
+                            '-lcef',
+                        ],
+					   
+                        'ldflags':
+                        [
+                            '-Wl,-rpath=\\$$ORIGIN',
                         ],
                     },
                 ],

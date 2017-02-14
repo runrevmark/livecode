@@ -2983,7 +2983,8 @@ MCSLibraryRef MCU_library_load(MCStringRef p_path)
     {
         // See if the library is mapped, or is one of the (legacy) extensions.
         MCAutoStringRef t_mapped_path;
-        if (!MCdispatcher->fetchlibrarymapping(p_path,
+        if (MCdispatcher != nullptr &&
+            !MCdispatcher->fetchlibrarymapping(p_path,
                                                &t_mapped_path))
         {
             if (MCStringIsEqualToCString(p_path, "revsecurity", kMCStringOptionCompareCaseless) ||

@@ -38,6 +38,15 @@ static const char *kExistingCFBundleRefLibrary = nullptr;
 static const char *kExistingCFBundleRefLibrarySymbol = nullptr;
 static const char *kExistingHMODULELibrary = "user32.dll";
 static const char *kExistingHMODULELibrarySymbol = "CreateWindowExW";
+#elif defined(__LINUX__)
+static const char *kExistingStaticLibrary = nullptr;
+static const char *kExistingStaticLibrarySymbol = nullptr;
+static const char *kExistingDlHandleLibrary = "libz.so";
+static const char *kExistingDlHandleLibrarySymbol = "inflate";
+static const char *kExistingCFBundleRefLibrary = nullptr;
+static const char *kExistingCFBundleRefLibrarySymbol = nullptr;
+static const char *kExistingHMODULELibrary = nullptr;
+static const char *kExistingHMODULELibrarySymbol = nullptr;
 #endif
 
 static bool

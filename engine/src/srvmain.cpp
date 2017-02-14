@@ -613,9 +613,10 @@ extern "C" void MCModulesFinalize();
 
 int platform_main(int argc, char *argv[], char *envp[])
 {
-	if (!MCInitialize() || !MCSInitialize() ||
-	    !MCModulesInitialize() || !MCScriptInitialize())
-		exit(-1);
+    if (!MCInitialize()) { fprintf(stderr, "mcinit failed\n"); return -1; }
+    if (!MCSInitialize()) { fprintf(stderr, "mcsinit failed\n"); return -1; }
+    if (!MCModulesInitialize()) { fprintf(stderr, "mcmod failed\n"); return -1; }
+    if (!MCScriptInitialize()) { fprintf(stderr, "mcscr failed\n"); return -1; }
     
 // THIS IS MAC SPECIFIC AT THE MOMENT BUT SHOULD WORK ON LINUX
 

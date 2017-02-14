@@ -20,7 +20,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "cefbrowser.h"
 #include "cefbrowser_msg.h"
-#include "cefshared.h"
 
 #include <include/cef_app.h>
 
@@ -135,7 +134,7 @@ static const char *kCefPathSeparatorStr = "\\";
 static const char kCefPathSeparator = '\\';
 #else
 static const char *kCefProcessName = "revbrowser-cefprocess";
-static const char (kCefPathSeparatorStr = "/";
+static const char *kCefPathSeparatorStr = "/";
 static const char kCefPathSeparator = '/';
 #endif
 

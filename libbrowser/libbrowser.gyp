@@ -145,6 +145,22 @@
 				],
 				
 				[
+					'OS == "linux"',
+					{
+						'copies':
+						[
+						    {
+							'destination':'<(PRODUCT_DIR)/CEF/',
+							'files':
+							[
+							    '<(PRODUCT_DIR)/libbrowser-cefprocess',
+							],
+						    },
+						],
+					},
+				],
+
+				[
 					# Only the CEF platforms need libbrowser-cefprocess
 					'OS == "win" or OS == "linux"',
 					{
@@ -265,31 +281,25 @@
 					},
 				],
                 
-                [
-                    'OS == "win"',
-                    {
-                        'copies':
+				[
+				    'OS == "linux"',
+				    {
+					    'library_dirs':
+					    [
+					        '../prebuilt/lib/linux/<(target_arch)/CEF/',
+					    ],
+		
+					    'libraries':
+					    [
+					        '-lcef',
+					    ],
+					   
+                        'ldflags':
                         [
-                            {
-                                'destination':'<(PRODUCT_DIR)/CEF/',
-                                'files':
-                                [
-                                    '<(PRODUCT_DIR)/libbrowser-cefprocess',
-                                ],
-                            },
+                            '-Wl,-rpath=\\$$ORIGIN',
                         ],
-                        
-                        'library_dirs':
-                        [
-                            '../prebuilt/lib/linux/<(target_arch)/CEF/',
-                        ],
-                        
-                        'libraries':
-                        [
-                            '-llibcef',
-                        ],
-                    },
-                ],
+				    },
+				],
                 
 				[
 					'OS == "win" or OS == "linux"',

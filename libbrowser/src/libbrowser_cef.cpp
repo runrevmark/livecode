@@ -312,7 +312,7 @@ static const char *kCefPathSeparatorStr = "\\";
 static const char kCefPathSeparator = '\\';
 #else
 static const char *kCefProcessName = "libbrowser-cefprocess";
-static const char (kCefPathSeparatorStr = "/";
+static const char *kCefPathSeparatorStr = "/";
 static const char kCefPathSeparator = '/';
 #endif
 

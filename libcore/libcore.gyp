@@ -27,7 +27,6 @@
 				'include/atlsubset.h',
 				'include/core.h',
 				'include/filesystem.h',
-				'include/module.h',
 				'include/thread.h',
 				'include/thunk.h',
 				

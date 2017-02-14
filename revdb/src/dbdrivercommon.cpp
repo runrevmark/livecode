@@ -469,6 +469,7 @@ extern "C" LIBRARY_EXPORT void setcallbacksref(DBcallbacks *callbacks)
     dbcallbacks = callbacks;
 }
 
+#ifndef REVDB_BUILD
 extern "C" void *MCSupportLibraryLoad(const char *p_path)
 {
     if (dbcallbacks == NULL)
@@ -489,5 +490,6 @@ extern "C" void *MCSupportLibraryLookupSymbol(void *p_handle, const char *p_symb
         return NULL;
     return dbcallbacks -> resolve_symbol_in_module(p_handle, p_symbol);
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////

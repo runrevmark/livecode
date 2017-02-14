@@ -2166,6 +2166,7 @@ constant kSeparator = ":"
 private command revAddMapping pPlatform, pName, pLocation
    if sStandaloneSettingsA[pPlatform & ",library"] is not empty then put return after sStandaloneSettingsA[pPlatform & ",library"]
    put pName & kSeparator & "./" & pLocation after sStandaloneSettingsA[pPlatform & ",library"]
+   put the params & return after msg
 end revAddMapping
 
 # AL-2015-01-29: [[ Scriptify IDE ]] Factor out external copy function to ensure external is included in deploy params
@@ -2253,6 +2254,7 @@ private command revCopyCEFResources pPlatform, pStandalonePath, pCopyRevBrowserR
          if the result is not empty then
             revStandaloneAddWarning "Windows, external failed to copy:" && quote & tCefResources & slash & "locales" & quote
          end if
+         revAddMapping pPlatform, "CEF/libcef", "Externals/CEF/libcef"
          break
       case pPlatform contains "Linux"
          put tCurrentLocation & slash & "Externals/CEF" into tCEFDest
@@ -2265,14 +2267,14 @@ private command revCopyCEFResources pPlatform, pStandalonePath, pCopyRevBrowserR
          // make sure we only copy the required helper process executable
          put revListFiles(tCEFResources) into tCEFFiles
          filter lines of tCEFFiles not matching "*-cefprocess"
-
+         
          // The following files need to be placed alongside the executable
          local tCefTopLevelFiles = "icudtl.dat,natives_blob.bin,snapshot_blob.bin"
          replace comma with return in tCefTopLevelFiles
          repeat for each line tFile in tCefTopLevelFiles
             filter lines of tCEFFiles not matching tFile
          end repeat
-
+         
          // Copy files to CEF resource folder.
          repeat for each line tCEFFile in tCEFFiles
             revSBCopyFileToFolder tCefResources & slash & tCEFFile, tCEFDest, "revStandaloneProgressCallback", the long id of me
@@ -2285,7 +2287,7 @@ private command revCopyCEFResources pPlatform, pStandalonePath, pCopyRevBrowserR
          if the result is not empty then
             revStandaloneAddWarning "Linux, external failed to copy:" && quote & tCefResources & slash & "locales" & quote
          end if
-
+         
          // Copy files to standalone folder
          put tCefTopLevelFiles & return into tCEFFiles
          if pCopyRevBrowserResources then
@@ -2301,7 +2303,7 @@ private command revCopyCEFResources pPlatform, pStandalonePath, pCopyRevBrowserR
                revStandaloneAddWarning "Linux, external failed to copy:" && quote & tCefResources & slash & tCEFFile & quote
             end if
          end repeat
-         
+         revAddMapping pPlatform, "CEF/libcef", "Externals/CEF/libcef"
          break
       default
          break

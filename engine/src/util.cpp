@@ -2987,7 +2987,8 @@ MCSLibraryRef MCU_library_load(MCStringRef p_path)
                                                &t_mapped_path))
         {
             if (MCStringIsEqualToCString(p_path, "revsecurity", kMCStringOptionCompareCaseless) ||
-                MCStringIsEqualToCString(p_path, "revpdfprinter", kMCStringOptionCompareCaseless))
+                MCStringIsEqualToCString(p_path, "revpdfprinter", kMCStringOptionCompareCaseless) ||
+                MCStringIsEqualToCString(p_path, "CEF/libcef", kMCStringOptionCompareCaseless))
             {
                 t_mapped_path = p_path;
             }
@@ -3072,7 +3073,8 @@ MCSLibraryRef MCU_library_load(MCStringRef p_path)
 
 void MCU_library_unload(MCSLibraryRef p_module)
 {
-    MCValueRelease(p_module);
+    if (p_module != nullptr)
+        MCValueRelease(p_module);
 }
 
 void *MCU_library_lookup(MCSLibraryRef p_module,
@@ -3087,8 +3089,11 @@ void *MCU_library_lookup(MCSLibraryRef p_module,
 void *MCSupportLibraryLoad(const char *p_name_cstr)
 {
     MCAutoStringRef t_name;
-    if (!MCStringCreateWithCString(p_name_cstr,
-                                   &t_name))
+    if (!MCStringCreateWithBytes(reinterpret_cast<const byte_t *>(p_name_cstr),
+                                 strlen(p_name_cstr),
+                                 kMCStringEncodingUTF8,
+                                 false,
+                                 &t_name))
     {
         return nullptr;
     }
@@ -3101,12 +3106,41 @@ void MCSupportLibraryUnload(void *p_handle)
     MCU_library_unload(static_cast<MCSLibraryRef>(p_handle));
 }
 
+char *MCSupportLibraryCopyNativePath(void *p_handle)
+{
+    MCAutoStringRef t_path;
+    if (!MCSLibraryCopyPath(static_cast<MCSLibraryRef>(p_handle),
+                            &t_path))
+    {
+        return nullptr;
+    }
+
+    MCAutoStringRef t_native_path;
+    if (!MCS_pathtonative(*t_path,
+                          &t_native_path))
+    {
+        return nullptr;
+    }
+
+    char *t_path_str;
+    if (!MCStringConvertToUTF8String(*t_native_path,
+                                     t_path_str))
+    {
+        return nullptr;
+    }
+
+    return t_path_str;
+}
+
 void *MCSupportLibraryLookupSymbol(void *p_handle,
                                    const char *p_symbol_cstr)
 {
     MCAutoStringRef t_symbol;
-    if (!MCStringCreateWithCString(p_symbol_cstr,
-                                   &t_symbol))
+    if (!MCStringCreateWithBytes(reinterpret_cast<const byte_t *>(p_symbol_cstr),
+                                 strlen(p_symbol_cstr),
+                                 kMCStringEncodingUTF8,
+                                 false,
+                                 &t_symbol))
     {
         return nullptr;
     }

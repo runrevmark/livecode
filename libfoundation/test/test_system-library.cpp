@@ -29,6 +29,15 @@ static const char *kExistingCFBundleRefLibrary = "CoreGraphics.framework";
 static const char *kExistingCFBundleRefLibrarySymbol = "CGBitmapContextCreate";
 static const char *kExistingHMODULELibrary = nullptr;
 static const char *kExistingHMODULELibrarySymbol = nullptr;
+#elif defined(__WINDOWS__)
+static const char *kExistingStaticLibrary = nullptr;
+static const char *kExistingStaticLibrarySymbol = nullptr;
+static const char *kExistingDlHandleLibrary = nullptr;
+static const char *kExistingDlHandleLibrarySymbol = nullptr;
+static const char *kExistingCFBundleRefLibrary = nullptr;
+static const char *kExistingCFBundleRefLibrarySymbol = nullptr;
+static const char *kExistingHMODULELibrary = "user32.dll";
+static const char *kExistingHMODULELibrarySymbol = "CreateWindowExW";
 #endif
 
 static bool

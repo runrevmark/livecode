@@ -212,10 +212,4 @@ const char *MCCefPlatformGetLocalePath(void);
 #define MC_CEF_USE_MULTITHREADED_MESSAGELOOP 0
 #endif
 
-// AL-2015-02-17: [[ SB Inclusions ]] Work around problems linking to MCU_ functions from CEF
-
-/*extern "C" void *MCU_loadmodule(const char *p_source);
-extern "C" void MCU_unloadmodule(void *p_module);
-extern "C" void *MCU_resolvemodulesymbol(void *p_module, const char *p_symbol);*/
-
-#endif /* __LIBBROWSER_CEF_H__ */
+#endif

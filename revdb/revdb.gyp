@@ -626,6 +626,11 @@
 				'../libexternal/libexternal.gyp:libExternal-symbol-exports',
 			],
 			
+			'defines':
+			[
+				'REVDB_BUILD',
+			],
+
 			'include_dirs':
 			[
 				'src',
@@ -696,6 +701,11 @@
 				'../libexternal/libexternal.gyp:libExternal',
 			],
 			
+			'defines':
+			[
+				'REVDB_BUILD',
+			],
+
 			'include_dirs':
 			[
 				'src',

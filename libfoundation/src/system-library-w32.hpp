@@ -45,7 +45,7 @@ public:
         return m_handle != nullptr;
     }
     
-    bool IsEqualTo(const __MCSLibraryHandlePosix& p_other) const
+    bool IsEqualTo(const __MCSLibraryHandleWin32& p_other) const
     {
         return m_handle == p_other.m_handle;
     }
@@ -58,7 +58,7 @@ public:
     bool CreateWithNativePath(MCStringRef p_native_path)
     {
         MCAutoStringRefAsWString t_wstring_path;
-        if (!t_wstring_path.Lock(p_path))
+        if (!t_wstring_path.Lock(p_native_path))
         {
             return false;
         }
@@ -71,7 +71,7 @@ public:
         if (t_hmodule == NULL)
         {
             /* TODO: Use GetLastError() */
-            return __MCSLibraryThrowCreteWithNativePathFailed(p_native_path);
+            return __MCSLibraryThrowCreateWithNativePathFailed(p_native_path);
         }
         
         m_handle = t_hmodule;
@@ -97,22 +97,22 @@ public:
     
     bool CopyNativePath(MCStringRef& r_native_path) const
     {
-        for(unsigned int i = 4; i < 1024; i++)
+        for(unsigned int i = 1; i <= 1; i++)
         {
             size_t t_native_path_capacity = MAX_PATH * i;
-            wchar_t t_native_path[MAX_PATH * i + 1];
+            wchar_t t_native_path[MAX_PATH + 1];
             
             // Make sure the last char in the buffer is NUL so that we can detect
             // failure on Windows XP.
-            t_native_path[t_native_path_capacity - 1] = '\0'
+            t_native_path[t_native_path_capacity - 1] = '\0';
             
             // On Windows XP, the returned path will be truncated if the buffer is
             // too small and a NUL byte *will not* be added.
             DWORD t_native_path_size =
-                    GetModuleFileName(m_handle,
-                                      t_native_path,
-                              t_native_path_capacity);
-            
+                    GetModuleFileNameW(m_handle,
+                                       t_native_path,
+                                     t_native_path_capacity);
+
             DWORD t_error_code =
                     GetLastError();
             
@@ -121,7 +121,7 @@ public:
             //   others: GetLastError() returning ERROR_INSUFFICIENT_BUFFER
             if (t_native_path_size == 0)
             {
-                if (t_error_code == ERROR_SUCCESS && t_native_path[t_native_path_capacity - 1] != '\0') ||
+                if ((t_error_code == ERROR_SUCCESS && t_native_path[t_native_path_capacity - 1] != '\0') ||
                     t_error_code == ERROR_INSUFFICIENT_BUFFER)
                 {
                     continue;
@@ -144,13 +144,13 @@ public:
             
             // We have success.
             return MCStringCreateWithWString(t_native_path,
-                                             r_path);
+                                             r_native_path);
         }
     }
-    
+
     void *LookupSymbol(MCStringRef p_symbol) const
     {
-        MCStringRefAsCString t_cstring_symbol;
+        MCAutoStringRefAsCString t_cstring_symbol;
         if (!t_cstring_symbol.Lock(p_symbol))
         {
             /* MASKS_OOM */

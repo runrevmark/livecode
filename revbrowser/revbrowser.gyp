@@ -178,6 +178,33 @@
 						'type': 'none',
 					},
 				],
+				
+				[
+					'OS == "win"',
+					{	
+						'copies':
+						[
+							{
+								'destination':'<(PRODUCT_DIR)/CEF/',
+								'files':
+								[
+									'<(PRODUCT_DIR)/revbrowser-cefprocess.exe',
+								],
+							},
+						],
+
+						'library_dirs':
+						[
+							'../prebuilt/lib/win32/<(target_arch)/CEF/',
+						],
+
+						'libraries':
+						[
+							'-llibcef.lib',
+						],
+					},
+				],
+
 				[
 					'OS == "win" or OS == "linux"',
 					{
@@ -198,7 +225,7 @@
 				'../libcore/libcore.gyp:libCore',
 				'../libfoundation/libfoundation.gyp:libFoundation',
 				'../thirdparty/libcef/libcef.gyp:libcef_library_wrapper',
-				'../thirdparty/libcef/libcef.gyp:libcef_stubs',
+				'../prebuilt/libcef.gyp:libcef',
 			],
 			
 			'sources':

@@ -65,7 +65,9 @@ extern MCExecContext *MCECptr;
 // AL-2015-02-06: [[ SB Inclusions ]] Increment revision number of v0 external interface
 // SN-2015-03-12: [[ Bug 14413 ]] Increment revision number, for the addition of
 //  UTF-8 <-> native string functions.
-#define EXTERNAL_INTERFACE_VERSION 4
+// MW-2017-02-14: [[ SysLibrary ]] Increment revision number to V5 for
+//  copy_native_path_of_module
+#define EXTERNAL_INTERFACE_VERSION 5
 
 typedef struct _Xternal
 {
@@ -1621,19 +1623,10 @@ static char *window_to_stack_rect(const char *arg1, const char *arg2,
 static char *load_module(const char *arg1, const char *arg2,
                          const char *arg3, int *retval)
 {
-    MCSysModuleHandle *t_result;
-    t_result = (MCSysModuleHandle *)arg2;
-    
-    MCAutoStringRef t_name;
-    if (MCStringCreateWithCString(arg1,
-                                  &t_name))
-    {
-        *t_result = (MCSysModuleHandle)MCU_library_load(*t_name);
-    }
-    else
-    {
-        *t_result = nullptr;
-    }
+    void* *t_result;
+    t_result = (void* *)arg2;
+
+    *t_result = MCSupportLibraryLoad(arg1);
     
     if (*t_result == nullptr)
         *retval = xresFail;
@@ -1646,7 +1639,7 @@ static char *load_module(const char *arg1, const char *arg2,
 static char *unload_module(const char *arg1, const char *arg2,
                           const char *arg3, int *retval)
 {
-    MCU_library_unload((MCSLibraryRef)arg1);
+    MCSupportLibraryUnload((void *)arg1);
     *retval = xresSucc;
     return nil;
 }
@@ -1657,25 +1650,29 @@ static char *resolve_symbol_in_module(const char *arg1, const char *arg2,
     void** t_resolved;
     t_resolved = (void **)arg3;
     
-    
-    MCAutoStringRef t_name;
-    if (MCStringCreateWithCString(arg2,
-                                  &t_name))
-    {
-        *t_resolved = MCU_library_lookup((MCSLibraryRef)arg1,
-                                         *t_name);
-    }
-    else
-    {
-        *t_resolved = nullptr;
-    }
-    
+    *t_resolved = MCSupportLibraryLookupSymbol((MCSLibraryRef)arg1, arg2);
+
     if (*t_resolved == nullptr)
         *retval = xresFail;
     else
         *retval = xresSucc;
     
     return nullptr;
+}
+
+// Added in V5
+static char *copy_native_path_of_module(const char *arg1, const char *arg2,
+                                        const char *arg3, int *retval)
+{
+    char *t_result =
+            MCSupportLibraryCopyNativePath((MCSLibraryRef)arg1);
+
+    if (t_result == nullptr)
+        *retval = xresFail;
+    else
+        *retval = xresSucc;
+
+    return t_result;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -1822,6 +1819,8 @@ XCB MCcbs[] =
     /* V4 */ convert_from_native_to_utf8,
     /* V4 */ convert_to_native_from_utf8,
     
+    /* V5 */ copy_native_path_of_module,
+
 	NULL
 };
 

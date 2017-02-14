@@ -153,6 +153,7 @@
 						'dependencies':
 						[
 							'libbrowser-cefprocess',
+							'../prebuilt/libcef.gyp:libcef',
 							'../thirdparty/libcef/libcef.gyp:libcef_library_wrapper',
 							'../thirdparty/libcef/libcef.gyp:libcef_stubs',
 						],
@@ -186,23 +187,6 @@
 				[
 					'OS == "win"',
 					{
-						'copies':
-						[
-							{
-								'destination':'<(PRODUCT_DIR)/Externals/',
-								'files':
-								[
-									'../prebuilt/lib/win32/<(target_arch)/CEF/',
-								],
-							},
-							{
-								'destination':'<(PRODUCT_DIR)/Externals/CEF/',
-								'files':
-								[
-									'<(PRODUCT_DIR)/libbrowser-cefprocess.exe',
-								],
-							},
-						],
 					},
 				],
 			],
@@ -248,7 +232,7 @@
 				'../libcore/libcore.gyp:libCore',
 				'../libfoundation/libfoundation.gyp:libFoundation',
 				'../thirdparty/libcef/libcef.gyp:libcef_library_wrapper',
-				'../thirdparty/libcef/libcef.gyp:libcef_stubs',
+				'../prebuilt/libcef.gyp:libcef',
 			],
 
 			'include_dirs':
@@ -289,6 +273,32 @@
 					},
 				],
 				
+				[
+					'OS == "win"',
+					{	
+						'copies':
+						[
+							{
+								'destination':'<(PRODUCT_DIR)/CEF/',
+								'files':
+								[
+									'<(PRODUCT_DIR)/libbrowser-cefprocess.exe',
+								],
+							},
+						],
+
+						'library_dirs':
+						[
+							'../prebuilt/lib/win32/<(target_arch)/CEF/',
+						],
+
+						'libraries':
+						[
+							'-llibcef.lib',
+						],
+					},
+				],
+
 				[
 					'OS == "win" or OS == "linux"',
 					{

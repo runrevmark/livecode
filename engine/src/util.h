@@ -286,6 +286,7 @@ MCU_library_lookup(MCSLibraryRef handle,
 
 extern "C" void *MCSupportLibraryLoad(const char *name);
 extern "C" void MCSupportLibraryUnload(void *handle);
+extern "C" char *MCSupportLibraryCopyNativePath(void *handle);
 extern "C" void *MCSupportLibraryLookupSymbol(void *handle,
                                               const char *symbol);
 

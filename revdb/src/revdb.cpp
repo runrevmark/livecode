@@ -296,7 +296,11 @@ DATABASEREC *LoadDatabaseDriver(const char *p_type)
     if (t_database_rec == nullptr)
         t_database_rec = LoadDatabaseDriverInFolder("Database Drivers",
                                                     p_type);
-    
+
+	if (t_database_rec == nullptr)
+		t_database_rec = LoadDatabaseDriverInFolder("database_drivers",
+												    p_type);
+
     if (t_database_rec == nullptr)
         t_database_rec = LoadDatabaseDriverInFolder("drivers",
                                                     p_type);
@@ -2227,7 +2231,7 @@ void REVDB_Valentina(char *args[], int nargs, char **retstring, Bool *pass, Bool
 
 extern "C"
 {
-#ifdef _WINDOWS
+#ifdef WIN32
     void __declspec(dllexport) shutdownXtable(void);
 #else
     void shutdownXtable(void) __attribute__((visibility("default")));

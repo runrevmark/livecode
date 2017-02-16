@@ -146,6 +146,13 @@
                                     'lib/linux/<(target_arch)/CEF/chrome-sandbox',
                                     'lib/linux/<(target_arch)/CEF/devtools_resources.pak',
                                     'lib/linux/<(target_arch)/CEF/libcef.so',
+                                ],
+                            },
+                            
+                            {
+                                'destination': '<(PRODUCT_DIR)/',
+                                'files':
+                                [
                                     'lib/linux/<(target_arch)/CEF/icudtl.dat',
                                     'lib/linux/<(target_arch)/CEF/natives_blob.bin',
                                     'lib/linux/<(target_arch)/CEF/snapshot_blob.bin',

@@ -353,7 +353,8 @@ static bool __MCCefAppendPath(const char *p_base, const char *p_path, char *&r_p
 {
     if (p_base == nil)
         return MCCStringClone(p_path, r_path);
-    else if (MCCStringEndsWith(p_base, kCefPathSeparatorStr))
+    else if (MCCStringEndsWith(p_base, kCefPathSeparatorStr) ||
+             *p_path == '\0')
         return MCCStringFormat(r_path, "%s%s", p_base, p_path);
     else
         return MCCStringFormat(r_path, "%s%s%s", p_base, kCefPathSeparatorStr, p_path);

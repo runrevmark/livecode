@@ -48,10 +48,6 @@ MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Split, 4)
 MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SplitByRow, 2)
 MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SplitByColumn, 2)
 MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SplitAsSet, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Union, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Intersect, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, UnionRecursive, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, IntersectRecursive, 3)
 MC_EXEC_DEFINE_EVAL_METHOD(Arrays, ArrayEncode, 2)
 MC_EXEC_DEFINE_EVAL_METHOD(Arrays, ArrayDecode, 2)
 MC_EXEC_DEFINE_EVAL_METHOD(Arrays, MatrixMultiply, 3)
@@ -570,173 +566,311 @@ void MCArraysExecSplitAsSet(MCExecContext& ctxt, MCStringRef p_string, MCStringR
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//
-// Semantics of 'union tLeft with tRight [recursively]'
-// 
-// repeat for each key tKey in tRight
-//    if tKey is not among the keys of tLeft then
-//        put tRight[tKey] into tLeft[tKey]
-//    else if tRecursive then
-//        union tLeft[tKey] with tRight[tKey] recursively
-//    end if
-// end repeat
-//
-
-void MCArraysDoUnion(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, bool p_recursive, MCValueRef& r_result)
+template<typename SetAction>
+struct MCArraysExecSetAction
 {
-    if (!MCValueIsArray(p_src))
+public:
+    MCArraysExecSetAction(MCExecContext& p_ctxt,
+                          bool p_is_recursive)
+        : m_ctxt(p_ctxt),
+          m_is_recursive(p_is_recursive)
     {
-        r_result = MCValueRetain(p_dst);
-        return;
     }
     
-    if (!MCValueIsArray(p_dst))
+    bool Run(MCValueRef p_dst,
+             MCValueRef p_src,
+             MCValueRef& r_result)
     {
-        r_result = MCValueRetain(p_src);
-        return;
-        
+        MCAutoValueRef t_result(p_dst);
+        if (!MergeCallback(*this, InOut(t_result), p_src))
+        {
+            m_ctxt.Throw();
+            return false;
+        }
+        r_result = t_result.Take();
+        return true;
     }
-    
-    MCArrayRef t_src_array;
-    t_src_array = (MCArrayRef)p_src;
-    
-    MCArrayRef t_dst_array;
-    t_dst_array = (MCArrayRef)p_dst;
-    
-    MCAutoArrayRef t_result;
-    if (!MCArrayMutableCopy(t_dst_array, &t_result))
-        return;
-    
-    MCNameRef t_key;
-    MCValueRef t_src_value;
-    MCValueRef t_dst_value;
-    uintptr_t t_iterator;
-    t_iterator = 0;
-    
-	while(MCArrayIterate(t_src_array, t_iterator, t_key, t_src_value))
-	{
-        bool t_key_exists;
-        t_key_exists = MCArrayFetchValue(t_dst_array, ctxt . GetCaseSensitive(), t_key, t_dst_value);
-        
-        if (t_key_exists && !p_recursive)
-            continue;
-        
-        MCAutoValueRef t_recursive_result;
-        if (!t_key_exists)
-        {
-            t_recursive_result = t_src_value;
-        }
-        else if (p_recursive)
-        {
-            MCArraysDoUnion(ctxt, t_dst_value, t_src_value, true, &t_recursive_result);
-            
-            if (ctxt . HasError())
-                return;
-        }
-        
-        if (!MCArrayStoreValue(*t_result, ctxt . GetCaseSensitive(), t_key, *t_recursive_result))
-        {
-            ctxt . Throw();
-            return;
-        }
-	}
-    
-    r_result = MCValueRetain(*t_result);
-}
 
-//
-// Semantics of 'intersect tLeft with tRight [recursively]'
-// 
-// repeat for each key tKey in tLeft
-//    if tKey is not among the keys of tRight then
-//        delete variable tLeft[tKey]
-//    else if tRecursive then
-//        intersect tLeft[tKey] with tRight[tKey] recursively
-//    end if
-// end repeat
-//
+private:
+    MCExecContext& m_ctxt;
+    bool m_is_recursive = false;
+    
+    static bool MergeCallback(MCArraysExecSetAction& p_context,
+                              MCValueRef& x_dst,
+                              MCValueRef p_src)
+    {
+        if (SetAction::TrivialCase(x_dst, p_src))
+        {
+            return true;
+        }
+        
+        if (!MCArrayMutableCopyAndRelease(static_cast<MCArrayRef>(x_dst),
+                                          reinterpret_cast<MCArrayRef&>(x_dst)))
+        {
+            return false;
+        }
+        
+        if (!SetAction::GeneralCase(static_cast<MCArrayRef>(x_dst),
+                                    p_context.m_ctxt.GetCaseSensitive(),
+                                    static_cast<MCArrayRef>(p_src),
+                                    p_context.m_is_recursive ? reinterpret_cast<MCArrayMergeCallback>(MergeCallback) : nullptr,
+                                    p_context.m_is_recursive ? &p_context : nullptr))
+        {
+            return false;
+        }
+        
+        return true;
+    }
+};
 
-void MCArraysDoIntersect(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, bool p_recursive, MCValueRef& r_result)
+//////////
+
+/*
+    Semantics of array union:
+
+    function ArrayUnion(pLeft, pRight, pRecursive)
+        repeat for each key tKey in pRight
+            if tKey is not among the keys of pLeft then
+                put pRight[tKey] into pLeft[tKey]
+            else if pRecursive then
+                put ArrayUnion(pLeft[tKey], pRight[tKey], true) into pLeft[tKey]
+            end if
+        end repeat
+	
+        return pLeft
+    end ArrayUnion
+
+    if pRight is not an array then return pLeft
+    else if pLeft is not an array then return pRight
+*/
+
+struct MCArraysExecUnionAction
 {
-    if (!MCValueIsArray(p_dst))
+public:
+    static bool TrivialCase(MCValueRef& x_dst, MCValueRef p_src)
     {
-        r_result = MCValueRetain(p_dst);
-        return;
-        
-    }
-    
-    if (!MCValueIsArray(p_src))
-    {
-        r_result = MCValueRetain(kMCEmptyString);
-        return;
-    }
-    
-    MCArrayRef t_dst_array;
-    t_dst_array = (MCArrayRef)p_dst;
-    
-    MCArrayRef t_src_array;
-    t_src_array = (MCArrayRef)p_src;
-    
-    MCAutoArrayRef t_result;
-    if (!MCArrayMutableCopy(t_dst_array, &t_result))
-        return;
-    
-    MCNameRef t_key;
-    MCValueRef t_src_value;
-    MCValueRef t_dst_value;
-    uintptr_t t_iterator;
-    t_iterator = 0;
-    
-    while(MCArrayIterate(t_dst_array, t_iterator, t_key, t_dst_value))
-    {
-        bool t_key_exists;
-        t_key_exists = MCArrayFetchValue(t_src_array, ctxt . GetCaseSensitive(), t_key, t_src_value);
-        
-        if (t_key_exists && !p_recursive)
-            continue;
-        
-        if (!t_key_exists)
+        if (!MCValueIsArray(p_src))
         {
-            if (!MCArrayRemoveValue(*t_result, ctxt . GetCaseSensitive(), t_key))
-            {
-                ctxt . Throw();
-                return;
-            }
+            return true;
         }
-        else if (p_recursive)
+        
+        if (!MCValueIsArray(x_dst))
         {
-            MCAutoValueRef t_recursive_result;
-            MCArraysDoIntersect(ctxt, t_dst_value, t_src_value, true, &t_recursive_result);
-            
-            if (ctxt . HasError())
-                return;
-            
-            if (!MCArrayStoreValue(*t_result, ctxt . GetCaseSensitive(), t_key, *t_recursive_result))
-                return;
+            MCValueAssign(x_dst,
+                          p_src);
+            return true;
         }
+        
+        return false;
     }
     
-    r_result = MCValueRetain(*t_result);
-}
+    static bool GeneralCase(MCArrayRef p_dst,
+                     bool p_case_sensitive,
+                     MCArrayRef p_src,
+                     MCArrayMergeCallback p_callback,
+                     void *p_callback_context)
+    {
+        return MCArrayUnion(p_dst,
+                            p_case_sensitive,
+                            p_src,
+                            p_callback,
+                            p_callback_context);
+    }
+};
 
 void MCArraysExecUnion(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
 {
-    MCArraysDoUnion(ctxt, p_dst, p_src, false, r_result);
+    MCArraysExecSetAction<MCArraysExecUnionAction>(ctxt, false).Run(p_dst,
+                                                                    p_src,
+                                                                    r_result);
 }
+
+void MCArraysExecRecursiveUnion(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
+{
+    MCArraysExecSetAction<MCArraysExecUnionAction>(ctxt, true).Run(p_dst,
+                                                                   p_src,
+                                                                   r_result);
+}
+
+//////////
+
+/*
+    Semantics of array intersect:
+
+    function ArrayIntersect(pLeft, pRight, pRecursive)
+        repeat for each key tKey in pLeft
+            if tKey is not among the keys of pRight then
+                delete variable pLeft[tKey]
+            else if pRecursive then
+                put ArrayIntersect(pLeft[tKey], pRight[tKey], true) into pLeft[tKey]
+            end if
+        end repeat
+        
+        return pLeft
+    end ArrayIntersect
+    
+    if pLeft is not an array then return pLeft
+    else if pRight is not an array then return empty array
+*/
+
+struct MCArraysExecIntersectAction
+{
+public:
+    static bool TrivialCase(MCValueRef& x_dst, MCValueRef p_src)
+    {
+        if (!MCValueIsArray(x_dst))
+        {
+            return true;
+        }
+        
+        if (!MCValueIsArray(x_dst))
+        {
+            MCValueAssign(x_dst,
+                          static_cast<MCValueRef>(kMCEmptyArray));
+            return true;
+        }
+        
+        return false;
+    }
+    
+    static bool GeneralCase(MCArrayRef p_dst,
+                            bool p_case_sensitive,
+                            MCArrayRef p_src,
+                            MCArrayMergeCallback p_callback,
+                            void *p_callback_context)
+    {
+        return MCArrayIntersect(p_dst,
+                                p_case_sensitive,
+                                p_src,
+                                p_callback,
+                                p_callback_context);
+    }
+};
 
 void MCArraysExecIntersect(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
 {
-    MCArraysDoIntersect(ctxt, p_dst, p_src, false, r_result);
+    MCArraysExecSetAction<MCArraysExecIntersectAction>(ctxt, false).Run(p_dst,
+                                                                        p_src,
+                                                                        r_result);
 }
 
-void MCArraysExecUnionRecursive(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
+void MCArraysExecRecursiveIntersect(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
 {
-    MCArraysDoUnion(ctxt, p_dst, p_src, true, r_result);
+    MCArraysExecSetAction<MCArraysExecIntersectAction>(ctxt, true).Run(p_dst,
+                                                                       p_src,
+                                                                       r_result);
 }
 
-void MCArraysExecIntersectRecursive(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
+//////////
+
+/*
+    Semantics of array difference:
+
+    function ArrayDifference(pLeft, pRight)
+        repeat for each key tKey in pLeft
+            if tKey is among the keys of pRight then
+                delete variable pLeft[tKey]
+            end if
+        end repeat
+        
+        return pLeft
+    end ArrayIntersect
+    
+    if pLeft is not an array then return pLeft
+    else if pRight is not an array then return pLeft
+*/
+
+struct MCArraysExecDifferenceAction
 {
-    MCArraysDoIntersect(ctxt, p_dst, p_src, true, r_result);
+public:
+    static bool TrivialCase(MCValueRef& x_dst, MCValueRef p_src)
+    {
+        if (!MCValueIsArray(x_dst) ||
+            !MCValueIsArray(p_src))
+        {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    static bool GeneralCase(MCArrayRef p_dst,
+                            bool p_case_sensitive,
+                            MCArrayRef p_src,
+                            MCArrayMergeCallback p_callback,
+                            void *p_callback_context)
+    {
+        return MCArrayDifference(p_dst,
+                                 p_case_sensitive,
+                                 p_src);
+    }
+};
+
+void MCArraysExecDifference(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
+{
+    MCArraysExecSetAction<MCArraysExecDifferenceAction>(ctxt, false).Run(p_dst,
+                                                                         p_src,
+                                                                         r_result);
+}
+
+//////////
+
+/*
+    Semantics of a array symmetric difference:
+    
+    function ArraySymmetricDifference(pLeft, pRight)
+        repeat for each key tKey in pRight
+            if tKey is among the keys of pLeft then
+                delete variable pLeft[tKey]
+            else
+                put pRight[tKey] into pLeft[tKey]
+            end if
+        end repeat
+        
+        return pLeft
+    end ArraySymmetricDifference
+    
+    if pRight is not an array then return pLeft
+    else if pLeft is not an array then return pRight
+*/
+
+struct MCArraysExecSymmetricDifferenceAction
+{
+public:
+    static bool TrivialCase(MCValueRef& x_dst, MCValueRef p_src)
+    {
+        if (!MCValueIsArray(p_src))
+        {
+            return true;
+        }
+        
+        if (!MCValueIsArray(x_dst))
+        {
+            MCValueAssign(x_dst,
+                          p_src);
+            return true;
+        }
+        
+        return false;
+    }
+    
+    static bool GeneralCase(MCArrayRef p_dst,
+                            bool p_case_sensitive,
+                            MCArrayRef p_src,
+                            MCArrayMergeCallback p_callback,
+                            void *p_callback_context)
+    {
+        return MCArraySymmetricDifference(p_dst,
+                                          p_case_sensitive,
+                                          p_src);
+    }
+};
+
+void MCArraysExecSymmetricDifference(MCExecContext& ctxt, MCValueRef p_dst, MCValueRef p_src, MCValueRef& r_result)
+{
+    MCArraysExecSetAction<MCArraysExecSymmetricDifferenceAction>(ctxt, false).Run(p_dst,
+                                                                                  p_src,
+                                                                                  r_result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

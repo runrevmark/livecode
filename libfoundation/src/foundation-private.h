@@ -661,6 +661,7 @@ __MCAssertResolvedTypeInfo(MCTypeInfoRef x, bool (*p)(MCTypeInfoRef))
 
 #define __MCAssertIsLocale(x)   MCAssert(nil != (x)) /* FIXME */
 
+#define __MCAssertIsMutableArray(x) MCAssert(MCArrayIsMutable(x))
 #define __MCAssertIsMutableString(x) MCAssert(MCStringIsMutable(x))
 #define __MCAssertIsMutableData(x)   MCAssert(MCDataIsMutable(x))
 

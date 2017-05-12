@@ -2869,6 +2869,31 @@ MC_DLLEXPORT bool MCArrayIterate(MCArrayRef array, uintptr_t& iterator, MCNameRe
 
 // Returns true if the given array is the empty array.
 MC_DLLEXPORT bool MCArrayIsEmpty(MCArrayRef self);
+
+// The merge callback is invoked by the Union and Intersect operations to allow
+// then to work in recursive mode - it is called on every key which is in both
+// arrays to decide what key should go into the result.
+typedef bool (*MCArrayMergeCallback)(void *context, MCValueRef& x_value, MCValueRef other_value);
+
+// Union the keys of other_array into array. This adds any key present in other
+// but not in array to array. If a merge callback is specified then if a key is
+// present in both, it is invoked to compute the value to place into array.
+MC_DLLEXPORT bool MCArrayUnion(MCArrayRef array, bool case_sensitive, MCArrayRef other_array, MCArrayMergeCallback merge_callback, void *merge_context);
+
+// Intersect the keys of other_array with array. This removes any keys of array
+// which are not present in other_array. If a merge callback is specified then
+// if a key is present in both, it is invoked to compute the value to place into
+// array.
+MC_DLLEXPORT bool MCArrayIntersect(MCArrayRef array, bool case_sensitive, MCArrayRef other_array, MCArrayMergeCallback merge_callback, void *merge_context);
+
+// Difference the keys of array with other_array. This removes any keys in array
+// which are present in other_array.
+MC_DLLEXPORT bool MCArrayDifference(MCArrayRef array, bool case_sensitive, MCArrayRef other_array);
+
+// SymmetricDifference the keys of array with other_array. This removes any
+// keys from array which are present in other_array; and adds any keys of
+// other_array which are not present in array.
+MC_DLLEXPORT bool MCArraySymmetricDifference(MCArrayRef array, bool case_sensitive, MCArrayRef other_array);
     
 ////////////////////////////////////////////////////////////////////////////////
 //

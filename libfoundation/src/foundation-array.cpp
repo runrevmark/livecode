@@ -31,6 +31,9 @@ static uindex_t __MCArrayGetTableSizeIndex(__MCArray *self);
 // Returns true if the array is indirect.
 static bool __MCArrayIsIndirect(__MCArray *self);
 
+// Replaces the contents of the array with empty.
+static void __MCArrayClear(__MCArray *self);
+
 // Replaces all the values in the array with immutable copies.
 static bool __MCArrayMakeContentsImmutable(__MCArray *self);
 
@@ -54,6 +57,16 @@ static uindex_t __MCArrayGetTableCapacity(__MCArray *self);
 // slot in which the key is found, could be placed, or UINDEX_MAX if there is
 // no more room (and the key isn't there).
 static bool __MCArrayFindKeyValueSlot(__MCArray *self, bool case_sensitive, MCNameRef key, uindex_t& r_slot);
+
+// Ensure a slot with the given key exists in the array. If an existing matching
+// slot was found, or if adding such a slot succeeded, true is returned. Otherwise
+// false is returned. In the case of success r_slot is the slot index. If the slot
+// value is UINTPTR_MIN it means the slot didn't previously exist, otherwise it
+// will contain the existing value.
+static bool __MCArrayEnsureKeyValueSlot(__MCArray *self, bool case_sensitive, MCNameRef key, uindex_t& r_slot);
+
+// Remove a slot at the given index in array
+static void __MCArrayRemoveKeyValueSlot(__MCArray *self, uindex_t p_slot);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -445,14 +458,12 @@ bool MCArrayFetchValueOnPath(MCArrayRef array,
 
 //////////////////////
 
-MC_DLLEXPORT_DEF
-bool MCArrayStoreValue(MCArrayRef self, bool p_case_sensitive, MCNameRef p_key, MCValueRef p_value)
-{
-	return MCArrayStoreValueOnPath(self, p_case_sensitive, &p_key, 1, p_value);
-}
-
-MC_DLLEXPORT_DEF
-bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length, MCValueRef p_new_value)
+static bool
+MCArrayMutateValueOnPathInternal(MCArrayRef self,
+                                 bool p_case_sensitive,
+                                 const MCNameRef *p_path,
+                                 uindex_t p_path_length,
+                                 MCValueRef*& r_slot_ptr)
 {
 	// The array must be mutable.
 	MCAssert(MCArrayIsMutable(self));
@@ -478,8 +489,7 @@ bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNam
 		// If the path length is 1, then just set the value and return.
 		if (p_path_length == 1)
 		{
-			MCValueRelease(t_value);
-			self -> key_values[t_slot] . value = (uintptr_t)MCValueRetain(p_new_value);
+            r_slot_ptr = reinterpret_cast<MCValueRef*>(&self -> key_values[t_slot] . value);
 			return true;
 		}
 
@@ -498,7 +508,7 @@ bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNam
 			else
 				t_mutable_array = (MCArrayRef)t_value;
 
-			return MCArrayStoreValueOnPath(t_mutable_array, p_case_sensitive, p_path + 1, p_path_length - 1, p_new_value);
+			return MCArrayMutateValueOnPathInternal(t_mutable_array, p_case_sensitive, p_path + 1, p_path_length - 1, r_slot_ptr);
 		}
 	}
 	else
@@ -515,8 +525,9 @@ bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNam
 		if (p_path_length == 1)
 		{
 			self -> key_values[t_slot] . key = MCValueRetain(p_path[0]);
-			self -> key_values[t_slot] . value = (uintptr_t)MCValueRetain(p_new_value);
+			self -> key_values[t_slot] . value = UINTPTR_MIN;
 			self -> key_value_count += 1;
+            r_slot_ptr = reinterpret_cast<MCValueRef*>(&self -> key_values[t_slot] . value);
 			return true;
 		}
 	}
@@ -527,7 +538,7 @@ bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNam
 		return false;
 
 	// Build up the new array's value.
-	if (!MCArrayStoreValueOnPath(t_array, p_case_sensitive, p_path + 1, p_path_length - 1, p_new_value))
+	if (!MCArrayMutateValueOnPathInternal(t_array, p_case_sensitive, p_path + 1, p_path_length - 1, r_slot_ptr))
 	{
 		MCValueRelease(t_array);
 		return false;
@@ -545,6 +556,35 @@ bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNam
 	self -> key_values[t_slot] . value = (uintptr_t)t_array;
 
 	return true;
+}
+
+//////////////////////
+
+MC_DLLEXPORT_DEF
+bool MCArrayStoreValue(MCArrayRef self, bool p_case_sensitive, MCNameRef p_key, MCValueRef p_value)
+{
+	return MCArrayStoreValueOnPath(self, p_case_sensitive, &p_key, 1, p_value);
+}
+
+MC_DLLEXPORT_DEF
+bool MCArrayStoreValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length, MCValueRef p_new_value)
+{
+    MCValueRef *t_slot_ptr;
+    if (!MCArrayMutateValueOnPathInternal(self, p_case_sensitive, p_path, p_path_length, t_slot_ptr))
+    {
+        return false;
+    }
+    
+    MCValueRetain(p_new_value);
+    
+    if (*t_slot_ptr != nullptr)
+    {
+        MCValueRelease(*t_slot_ptr);
+    }
+    
+    *t_slot_ptr = p_new_value;
+    
+    return true;
 }
 
 bool MCArrayStoreValueOnPath(MCArrayRef array,
@@ -582,18 +622,10 @@ bool MCArrayRemoveValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNa
 	uindex_t t_slot;
 	if (__MCArrayFindKeyValueSlot(self, p_case_sensitive, p_path[0], t_slot))
 	{
-		MCValueRef t_value;
-		t_value = (MCValueRef)self -> key_values[t_slot] . value;
-
 		// If the path length is one, then just remove the key.
 		if (p_path_length == 1)
 		{
-			MCValueRelease(self -> key_values[t_slot] . key);
-			MCValueRelease(t_value);
-
-			self -> key_values[t_slot] . key = nil;
-			self -> key_values[t_slot] . value = UINTPTR_MAX;
-			self -> key_value_count -= 1;
+            __MCArrayRemoveKeyValueSlot(self, t_slot);
 
 			if (__MCArrayGetTableSizeIndex(self) > 2 &&
 				self -> key_value_count < __kMCValueHashTableCapacities[__MCArrayGetTableSizeIndex(self) - 2])
@@ -601,6 +633,9 @@ bool MCArrayRemoveValueOnPath(MCArrayRef self, bool p_case_sensitive, const MCNa
 
 			return true;
 		}
+        
+		MCValueRef t_value;
+		t_value = (MCValueRef)self -> key_values[t_slot] . value;
 
 		// If the value is an array then recurse.
 		if (MCValueGetTypeCode(t_value) == kMCValueTypeCodeArray)
@@ -631,6 +666,244 @@ bool MCArrayRemoveValueOnPath(MCArrayRef array,
 {
     return MCArrayRemoveValueOnPath(array, case_sensitive,
                                     path.data(), path.size());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static bool
+MCArrayUnionOp(MCArrayRef self,
+               bool p_case_sensitive,
+               MCArrayRef p_other,
+               bool p_is_sym_diff,
+               MCArrayMergeCallback p_merge_callback = nullptr,
+               void *p_merge_context = nullptr)
+{
+	__MCAssertIsMutableArray(self);
+    __MCAssertIsArray(p_other);
+    
+    // If self == other then
+    //   If union then self = self
+    //   If symmetric difference then self = empty-array
+    //
+    if (self == p_other)
+    {
+        if (p_is_sym_diff)
+        {
+            __MCArrayClear(self);
+        }
+        return true;
+    }
+    
+    // Make sure self is not indirect.
+	if (__MCArrayIsIndirect(self))
+		if (!__MCArrayResolveIndirect(self))
+			return false;
+    
+    // Fetch the contents of other.
+    MCArrayRef t_other_contents = p_other;
+    if (__MCArrayIsIndirect(t_other_contents))
+    {
+        t_other_contents = t_other_contents->contents;
+    }
+
+    // We keep track of the number of keys added or remove.
+    index_t t_key_delta = 0;
+
+    // Iterate through all slots of other
+	for(uindex_t t_other_slot = 0; t_other_slot < __MCArrayGetTableSize(t_other_contents); t_other_slot += 1)
+	{
+		if (t_other_contents->key_values[t_other_slot].value == UINTPTR_MIN ||
+            t_other_contents->key_values[t_other_slot].value == UINTPTR_MAX)
+        {
+            continue;
+        }
+        
+        MCNameRef t_other_key = t_other_contents->key_values[t_other_slot].key;
+        MCValueRef t_other_value = reinterpret_cast<MCValueRef>(t_other_contents->key_values[t_other_slot].value);
+        
+        // Ensure there is a slot in self with the current other key
+        uindex_t t_self_slot;
+        if (!__MCArrayEnsureKeyValueSlot(self,
+                                         p_case_sensitive,
+                                         t_other_key,
+                                         t_self_slot))
+        {
+            return false;
+        }
+        
+        // If the slot in self has no value (i.e. it has just been added) then
+        // give it the value of the slot in other.
+        if (self->key_values[t_self_slot].value == UINTPTR_MIN)
+        {
+            self->key_values[t_self_slot].value = reinterpret_cast<uintptr_t>(MCValueRetain(t_other_value));
+            t_key_delta += 1;
+        }
+        else if (p_is_sym_diff)
+        {
+            __MCArrayRemoveKeyValueSlot(self,
+                                        t_self_slot);
+            t_key_delta -= 1;
+        }
+        else if (p_merge_callback != nullptr)
+        {
+            if (!p_merge_callback(p_merge_context,
+                                  *reinterpret_cast<MCValueRef*>(self->key_values[t_self_slot].value),
+                                  t_other_value))
+            {
+                return false;
+            }
+        }
+	}
+    
+    if (t_key_delta < 0)
+    {
+        if (__MCArrayGetTableSizeIndex(self) > 2 &&
+            self -> key_value_count < __kMCValueHashTableCapacities[__MCArrayGetTableSizeIndex(self) - 2])
+            __MCArrayRehash(self, t_key_delta);
+    }
+    
+    return true;
+}
+
+MC_DLLEXPORT_DEF bool
+MCArrayUnion(MCArrayRef self,
+             bool p_case_sensitive,
+             MCArrayRef p_other,
+             MCArrayMergeCallback p_merge_callback,
+             void *p_merge_context)
+{
+    return MCArrayUnionOp(self,
+                          p_case_sensitive,
+                          p_other,
+                          false);
+}
+
+MC_DLLEXPORT_DEF bool
+MCArraySymmetricDifference(MCArrayRef self,
+                           bool p_case_sensitive,
+                           MCArrayRef p_other)
+{
+    return MCArrayUnionOp(self,
+                          p_case_sensitive,
+                          p_other,
+                          true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static bool
+MCArrayIntersectOp(MCArrayRef self,
+                   bool p_case_sensitive,
+                   MCArrayRef p_other,
+                   bool p_is_difference,
+                   MCArrayMergeCallback p_merge_callback = nullptr,
+                   void *p_merge_context = nullptr)
+{
+	__MCAssertIsMutableArray(self);
+    __MCAssertIsArray(p_other);
+    
+    // If self == other then
+    //   If intersect then self = self
+    //   If difference then self = empty-array
+    //
+    if (self == p_other)
+    {
+        if (p_is_difference)
+        {
+            __MCArrayClear(self);
+        }
+            
+        return true;
+    }
+    
+    // Make sure self is not indirect.
+	if (__MCArrayIsIndirect(self))
+		if (!__MCArrayResolveIndirect(self))
+			return false;
+    
+    // Fetch the contents of other.
+    MCArrayRef t_other_contents = p_other;
+    if (__MCArrayIsIndirect(t_other_contents))
+    {
+        t_other_contents = t_other_contents->contents;
+    }
+
+    // We keep track of the number of keys added or remove.
+    index_t t_key_delta = 0;
+    
+    // Iterate through all slots of self
+	for(uindex_t t_self_slot = 0; t_self_slot < __MCArrayGetTableSize(self); t_self_slot += 1)
+	{
+		if (self->key_values[t_self_slot].value == UINTPTR_MIN ||
+            self->key_values[t_self_slot].value == UINTPTR_MAX)
+        {
+            continue;
+        }
+        
+        MCNameRef t_self_key = self->key_values[t_self_slot].key;
+        
+        // If the key is in other:
+        //   If difference, then remove
+        //   If intersect, merge
+        // If the key is not in other:
+        //   If difference, do nothing
+        //   If intersect, remove
+        uindex_t t_other_slot;
+        if (__MCArrayFindKeyValueSlot(t_other_contents,
+                                      p_case_sensitive,
+                                      t_self_key,
+                                      t_other_slot) == p_is_difference)
+        {
+            __MCArrayRemoveKeyValueSlot(self,
+                                        t_self_slot);
+            t_key_delta -= 1;
+        }
+        else if (!p_is_difference &&
+                 p_merge_callback != nullptr)
+        {
+            if (!p_merge_callback(p_merge_context,
+                                  *reinterpret_cast<MCValueRef*>(self->key_values[t_self_slot].value),
+                                  reinterpret_cast<MCValueRef>(t_other_contents->key_values[t_other_slot].value)))
+            {
+                return false;
+            }
+        }
+	}
+    
+    if (t_key_delta < 0)
+    {
+        if (__MCArrayGetTableSizeIndex(self) > 2 &&
+            self -> key_value_count < __kMCValueHashTableCapacities[__MCArrayGetTableSizeIndex(self) - 2])
+            __MCArrayRehash(self, t_key_delta);
+    }
+    
+    return true;
+}
+
+MC_DLLEXPORT_DEF bool
+MCArrayIntersect(MCArrayRef self,
+                 bool p_case_sensitive,
+                 MCArrayRef p_other,
+                 MCArrayMergeCallback p_merge_callback,
+                 void *p_merge_context)
+{
+    return MCArrayIntersectOp(self,
+                              p_case_sensitive,
+                              p_other,
+                              false,
+                              p_merge_callback,
+                              p_merge_context);
+}
+
+MC_DLLEXPORT_DEF bool
+MCArrayDifference(MCArrayRef self,
+                  bool p_case_sensitive,
+                  MCArrayRef p_other)
+{
+    return MCArrayIntersectOp(self,
+                              p_case_sensitive,
+                              p_other,
+                              true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -688,29 +961,35 @@ bool MCArrayIsEmpty(MCArrayRef self)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static void
+__MCArrayDestroyKeyValues(__MCArray *self)
+{
+    uindex_t t_used;
+    t_used = self -> key_value_count;
+
+    uindex_t t_count;
+    t_count = __MCArrayGetTableSize(self);
+    for(uindex_t i = 0; t_used > 0 && i < t_count; i++)
+    {
+        if (self -> key_values[i] . value == UINTPTR_MIN || self -> key_values[i] . value == UINTPTR_MAX)
+            continue;
+
+        MCValueRelease(self -> key_values[i] . key);
+        MCValueRelease((MCValueRef)self -> key_values[i] . value);
+
+        t_used -= 1;
+    }
+
+    MCMemoryDeleteArray(self -> key_values);
+}
+
 void __MCArrayDestroy(__MCArray *self)
 {
 	if (__MCArrayIsIndirect(self))
 		MCValueRelease(self -> contents);
 	else
 	{
-		uindex_t t_used;
-		t_used = self -> key_value_count;
-
-		uindex_t t_count;
-		t_count = __MCArrayGetTableSize(self);
-		for(uindex_t i = 0; t_used > 0 && i < t_count; i++)
-		{
-			if (self -> key_values[i] . value == UINTPTR_MIN || self -> key_values[i] . value == UINTPTR_MAX)
-				continue;
-
-			MCValueRelease(self -> key_values[i] . key);
-			MCValueRelease((MCValueRef)self -> key_values[i] . value);
-
-			t_used -= 1;
-		}
-
-		MCMemoryDeleteArray(self -> key_values);
+        __MCArrayDestroyKeyValues(self);
 	}
 }
 
@@ -866,6 +1145,21 @@ static bool __MCArrayMakeContentsImmutable(__MCArray *self)
 	return true;
 }
 
+static void __MCArrayClear(__MCArray *self)
+{
+    if (__MCArrayIsIndirect(self))
+    {
+        // Release the existing contents, and make it the empty array instead.
+        MCValueAssign(self->contents, kMCEmptyArray);
+        return;
+    }
+    
+    __MCArrayDestroyKeyValues(self);
+    
+    self->flags |= kMCArrayFlagIsIndirect;
+    self->contents = MCValueRetain(kMCEmptyArray);
+}
+
 static bool __MCArrayMakeIndirect(__MCArray *self)
 {
 	// If we are already indirect, there's nothing to do.
@@ -1016,6 +1310,46 @@ static bool __MCArrayFindKeyValueSlot(__MCArray *self, bool p_case_sensitive, MC
 	return false;
 }
 
+static bool __MCArrayEnsureKeyValueSlot(__MCArray *self, bool p_case_sensitive, MCNameRef p_key, uindex_t& r_slot)
+{
+    uindex_t t_slot;
+    if (!__MCArrayFindKeyValueSlot(self,
+                                   p_case_sensitive,
+                                   p_key,
+                                   t_slot))
+    {
+        if (t_slot == UINDEX_MAX ||
+            self->key_value_count >= __MCArrayGetTableCapacity(self))
+        {
+            if (!__MCArrayRehash(self,
+                                 1))
+            {
+                return false;
+            }
+            
+            __MCArrayFindKeyValueSlot(self,
+                                      p_case_sensitive,
+                                      p_key,
+                                      t_slot);
+        }
+        
+        self->key_values[t_slot].key = MCValueRetain(p_key);
+        self->key_values[t_slot].value = UINTPTR_MIN;
+        self->key_value_count += 1;
+    }
+
+    return true;
+}
+
+static void __MCArrayRemoveKeyValueSlot(__MCArray *self, uindex_t p_slot)
+{
+    MCValueRelease(self->key_values[p_slot].key);
+    MCValueRelease(reinterpret_cast<MCValueRef>(self->key_values[p_slot].key));
+    self->key_values[p_slot].key = nullptr;
+    self->key_values[p_slot].value = UINTPTR_MAX;
+    self->key_value_count -= 1;
+}
+
 static bool __MCArrayRehash(__MCArray *self, index_t p_by)
 {
 	uindex_t t_new_capacity_idx;
@@ -1083,6 +1417,7 @@ void __MCArrayFinalize(void)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef _DEBUG
 void __MCArrayDump(MCArrayRef array)
 {
 	// If the array is indirect, get the contents.
@@ -1122,170 +1457,6 @@ void __MCArrayDump(MCArrayRef array)
 		}
 	}
 }
-
-/*
-bool MCArrayFetchValue(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length, MCValueRef& r_value)
-{
-	MCArrayRef t_container;
-	if (p_path_length == 1)
-		t_container = self;
-	else
-		t_container = __MCArrayResolvePath(self, p_case_sensitive, p_path, p_path_length - 1);
-
-	uindex_t t_slot;
-	if (__MCArrayFindKeyValueSlotForFetch(t_container, p_case_sensitive, p_path[p_path_length - 1], t_slot))
-	{
-		r_value = (MCValueRef)t_container -> key_values[t_slot] . value;
-		return true;
-	}
-
-	return false;
-}
-
-bool MCArrayStoreValue(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length, MCValueRef p_value)
-{
-	MCArrayRef t_container;
-	if (p_path_length == 1)
-		t_container = self;
-	else if (!__MCArrayResolveMutablePath(self, p_case_sensitive, p_path, p_path_length - 1, t_container))
-		return false;
-
-	uindex_t t_slot;
-	if (__MCArrayFindKeyValueSlotForStore(t_container, p_case_sensitive, p_path[p_path_length - 1], t_slot))
-	{
-		uintptr_t t_value_ptr;
-		t_value_ptr = t_container -> key_values[t_slot] . value;
-		
-		MCValueRetain(p_value);
-		if (t_value_ptr != UINTPTR_MIN && t_value_ptr != UINTPTR_MAX)
-		{
-			MCValueRelease((MCValueRef)t_value_ptr);
-			t_container -> key_values[t_slot] . value = p_value;
-		}
-		else
-		{
-			t_container -> key_values[t_slot] . name = MCValueRetain(p_path[p_path_length - 1]);
-			t_container -> key_values[t_slot] . value = (uintptr_t)p_value;
-			t_container -> key_value_count += 1;
-		}
-	}
-	else
-		return false;
-
-	return true;
-}
-
-bool MCArrayRemoveValue(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length)
-{
-	MCArrayRef t_container;
-	if (p_path_length == 1)
-		t_container = self;
-	else if (!__MCArrayResolveMutablePath(self, p_case_sensitive, p_path, p_path_length - 1, t_container))
-		return false;
-
-	uindex_t t_slot;
-	if (__MCArrayFindKeyValueSlotForRemove(t_container, p_case_sensitive, p_path[p_path_length - 1], t_slot))
-	{
-		MCValueRelease(t_container -> key_values[t_slot] . key);
-		MCValueRelease((MCValueRef)t_container -> key_values[t_slot] . value);
-	}
-
-	return true;
-}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
-
-static MCArrayRef __MCArrayResolvePath(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length)
-{
-	MCArrayRef t_container;
-	t_container = self;
-	for(uindex_t i = 0; i < p_path_length)
-	{
-		uindex_t t_slot;
-		if (__MCArrayFindKeyValueSlotForFetch(t_container, p_case_sensitive, p_path[i], t_slot))
-		{
-			MCValueRef t_value;
-			t_value = (MCValueRef)t_container -> key_values[t_slot] . value;
-			if (MCValueGetTypeCode(t_value) == kMCValueTypeCodeArray)
-			{
-				t_container = (MCArrayRef)t_value;
-				continue;
-			}
-		}
-
-		// If we get here then either the key wasn't found, or the value found
-		// was not an array - either way the path resolves to empty.
-		break;
-	}
-
-	return t_container;
-}
-
-static bool __MCArrayResolveMutablePath(MCArrayRef self, bool p_case_sensitive, const MCNameRef *p_path, uindex_t p_path_length, MCArrayRef& r_array)
-{
-	MCArrayRef t_container;
-	t_container = self;
-	for(t_path_index = 0; t_path_index < p_path_length; t_path_index++)
-	{
-		MCArrayRef t_next_array;
-
-		// Lookup the slot for the given key.
-		uindex_t t_slot;
-		if (__MCArrayFindKeyValueSlotForStore(t_container, p_case_sensitive, p_path[t_path_index], t_slot))
-		{
-			uintptr_t t_value_ptr;
-			t_value_ptr = t_container -> key_values[t_slot] . value;
-
-			if (t_value_ptr != UINTPTR_MIN && t_value_ptr != UINTPTR_MAX)
-			{
-				// At this point we have a slot and it has a value within it. So fetch it.
-				MCValueRef t_value;
-				t_value = (MCValueRef)t_container -> key_values[t_slot] . value;
-
-				// If the value is already an array then must ensure it is mutable; otherwise
-				// we must change it to an array.
-				if (MCValueGetTypeCode(t_value) == kMCValueTypeCodeArray)
-				{
-					if (MCArrayIsMutable((MCArrayRef)t_value))
-						t_next_array = (MCArrayRef)t_value;
-					else
-					{
-						if (MCArrayMutableCopyAndRelease((MCArrayRef)t_value, t_next_array))
-							t_container -> key_values[t_slot] . value = (uintptr_t)t_next_array;
-						else
-							return false;
-					}
-				}
-				else if (MCArrayCreateMutable(t_next_array))
-				{
-					MCValueRelease(t_value);
-					t_container -> key_values[t_slot] . value = (uintptr_t)t_next_array;
-				}
-				else
-					return false;
-			}
-			else
-			{
-				// At this point a new slot has been created but has yet to be
-				// filled. So create a new array and fill it.
-				if (MCArrayCreateMutable(t_next_array))
-				{
-					t_container -> key_values[t_slot] . key = MCValueRetain(p_path[t_path_index]);
-					t_container -> key_values[t_slot] . value = (uintptr_t)t_next_array;
-					t_container -> key_value_count += 1;
-				}
-				else
-					return false;
-			}
-		}
-		else
-			return false;
-
-		t_container = t_next_array;
-	}
-
-	// At this point 't_container' contains a mutable array for the last key
-	// in the path.
-	r_array = t_container;
-	return true;
-}*/

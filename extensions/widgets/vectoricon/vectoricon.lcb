@@ -1,0 +1,356 @@
+/*
+Copyright (C) 2015-2016 LiveCode Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
+
+widget com.livecode.widget.vectoricon
+--
+
+-- dependency declarations
+use com.livecode.canvas
+use com.livecode.widget
+use com.livecode.engine
+
+-- A VGProgram is a list of lists where each element is list of the form:
+--   [ <opcode>, <arglist> ]
+type VGProgram is List
+type VGOpcode is Integer
+
+-- adding metadata to ensure the extension displays correctly in livecode
+metadata title is "Vector Icon"
+metadata author is "LiveCode"
+metadata version is "0.0.0"
+
+--
+
+property vglText get GetVGLText set SetVGLText
+
+--
+
+variable mCurrentProgram as optional VGProgram
+
+--
+
+public handler OnPaint() returns nothing
+	if mCurrentProgram is nothing then
+		return
+	end if
+
+	VGExecute(mCurrentProgram, this canvas)
+end handler
+
+handler GetVGLText() returns String
+	return the empty string
+end handler
+
+handler SetVGLText(in pProgramString as String)
+	variable tProgram as optional VGProgram
+	variable tErrors as optional String
+	put VGCompile(pProgramString, tProgram) into tErrors
+	if tErrors is not nothing then
+		throw tErrors
+	end if
+
+	put tProgram into mCurrentProgram
+
+	redraw all
+end handler
+
+--
+
+constant kVGOpcodeSave is 1
+constant kVGOpcodeRestore is 2
+constant kVGOpcodeBegin is 3
+constant kVGOpcodeEnd is 4
+constant kVGOpcodeOpacity is 5
+constant kVGOpcodeTransform is 6
+constant kVGOpcodeFillNonZero is 7
+constant kVGOpcodeFillEvenOdd is 8
+constant kVGOpcodeStroke is 9
+constant kVGOpcodeFillNonZeroAndStroke is 10
+constant kVGOpcodeFillEvenOddAndStroke is 11
+
+constant kVGOpcodeStrokeWidth is 12
+constant kVGOpcodeStrokeCapButt is 13
+constant kVGOpcodeStrokeCapRound is 14
+constant kVGOpcodeStrokeCapSquare is 15
+constant kVGOpcodeStrokeJoinBevel is 16
+constant kVGOpcodeStrokeJoinRound is 17
+constant kVGOpcodeStrokeJoinMiter is 18
+constant kVGOpcodeStrokeMiterLimit is 19
+constant kVGOpcodeStrokeDashes is 20
+constant kVGOpcodeStrokeDashOffset is 21
+
+constant kVGOpcodeDefineTransform is 22
+constant kVGOpcodeDefinePath is 23
+constant kVGOpcodeDefineSolidPaint is 24
+constant kVGOpcodeDefineLinearPaint is 25
+constant kVGOpcodeDefineRadialPaint is 26
+
+constant kVGObjectTransform is 1
+constant kVGObjectPaint is 2
+constant kVGObjectPath is 3
+
+constant kVGOpcodeNames is [ \
+	"S", "R", "B", "E", "O", "T", "FNZ", "FEO", "D", "FNZD", "FEOD", \
+	"SW", "SCB", "SCR", "SCS", "SJB", "SJR", "SJM", "SML", "SD", "SDO", \
+	"DT", "DP", "DSP", "DLP", "DRP" \
+]
+
+constant kVGOpcodeFormats is [ \
+	"", "", "", "", "n", "i", "ii", "ii", "ii", "iii", "iii", \
+	"n", "", "", "", "", "", "", "n", "*", "n", \
+	"nnnnnn", "s", "nnnn", "nnnn*", "nnn*" \
+]
+
+handler VGCompileParseCommand(in pCommand as String, out rOpcode as optional VGOpcode, out rArguments as optional List) returns optional String
+	-- First split the command into '<opcode> <rest...>'.
+	variable tNameEndOffset as Integer
+	variable tName as String
+	variable tArgumentStrings as List
+	put the first offset of " " in pCommand into tNameEndOffset
+	if tNameEndOffset is 0 then
+		put pCommand into tName
+		put the empty list into tArgumentStrings
+	else
+		put char 1 to tNameEndOffset - 1 of pCommand into tName
+		split (char tNameEndOffset to the number of chars in pCommand of pCommand) by "," into tArgumentStrings
+	end if
+
+	-- Lookup the opcode's index, or throw an error if it cannot be found
+	variable tOpcode as VGOpcode
+	put the first index of tName in kVGOpcodeNames into tOpcode
+	if tOpcode is 0 then
+		return "Unknown opcode name '" & tName & "'"
+	end if
+
+	-- Fetch the opcode's format
+	variable tFormat as String
+	put kVGOpcodeFormats[tOpcode] into tFormat
+
+	-- Now process the arguments into tArguments
+	variable tArguments as List
+	variable tArgumentIndex as Integer
+	variable tRepeating as Boolean
+	put false into tRepeating
+	repeat with tArgumentIndex from 1 up to the number of elements in tArgumentStrings
+		variable tSpec as String
+		if tArgumentIndex <= the number of codeunits in tFormat then
+			put codeunit tArgumentIndex of tFormat into tSpec
+			if tSpec is "*" then
+				put true into tRepeating
+				put "n" into tSpec
+			end if
+		else if tRepeating then
+			put "n" into tSpec
+		else
+			return "Expected " & (the number of codeunits in tFormat) formatted as string & " arguments"
+		end if
+
+		if tSpec is "s" then
+			push tArgumentStrings[tArgumentIndex] onto back of tArguments
+		else if tSpec is "n" then
+			variable tNumericArgument as optional Number
+			put tArgumentStrings[tArgumentIndex] parsed as number into tNumericArgument
+			if tNumericArgument is nothing then
+				return "Number expected for argument " & (tArgumentIndex formatted as string)
+			end if
+			push tNumericArgument onto back of tArguments
+		else if tSpec is "i" then
+			variable tNumericArgument as optional Number
+			put tArgumentStrings[tArgumentIndex] parsed as number into tNumericArgument
+			if tNumericArgument is nothing or \
+				the floor of tNumericArgument is not tNumericArgument or \
+				tNumericArgument < 1 then
+				return "Positive integer expected for argument " & (tArgumentIndex formatted as string)
+			end if
+			push tNumericArgument onto back of tArguments
+		end if
+	end repeat
+
+	if tFormat contains "*" and \
+		the number of elements in tArgumentStrings < the number of codeunits in tFormat - 1 then
+		return "Expected at least " & (the number of codeunits in tFormat - 1) formatted as string & " arguments"
+	else if the number of elements in tArgumentStrings < the number of codeunits in tFormat then
+		return "Expected " & (the number of codeunits in tFormat) formatted as string & " arguments"
+	end if
+
+	put tOpcode into rOpcode
+	put tArguments into rArguments
+
+	return nothing
+end handler
+
+-- The input format for VGCompile is a return-delimited string of operations
+-- with syntax indicated by each opcode. e.g.
+--   PMT 0, 0
+--   PLT 0, 100
+--   PLT 100, 100
+--   PZ
+handler VGCompile(in pString as String, out rProgram as optional VGProgram) returns optional String
+	variable tErrors as List
+
+	variable tCommandStrings as List
+	split pString by "\n" into tCommandStrings
+
+	variable tCommands as List
+	variable tObjects as List
+	variable tObjectTypes as List
+
+	variable tCommandString as String
+	variable tCommandRow as Integer
+	repeat for each element tCommandString in tCommandStrings
+		add 1 to tCommandRow
+
+		variable tOpcode as optional Integer
+		variable tArguments as optional List
+		variable tError as optional String
+		put VGCompileParseCommand(tCommandString, tOpcode, tArguments) into tError
+
+		if tError is nothing then
+			if tOpcode is kVGOpcodeDefineTransform then
+				push transform with matrix tArguments onto back of tObjects
+				push kVGObjectTransform onto back of tObjectTypes
+			else if tOpcode is kVGOpcodeDefinePath then
+				push path tArguments[1] onto back of tObjects
+				push kVGObjectPath onto back of tObjectTypes
+			else if tOpcode is kVGOpcodeDefineSolidPaint then
+				push solid paint with color tArguments onto back of tObjects
+				push kVGObjectPaint onto back of tObjectTypes
+			else if tOpcode is kVGOpcodeDefineLinearPaint then
+				put "linear paint not yet implemented" into tError
+			else if tOpcode is kVGOpcodeDefineRadialPaint then
+				put "radial paint not yet implemented" into tError
+			else if tOpcode is kVGOpcodeTransform then
+				if tArguments[1] > the number of elements in tObjectTypes or \
+					tObjectTypes[tArguments[1]] is not kVGObjectTransform then
+					put "transform object expected" into tError
+				end if
+			else if tOpcode is kVGOpcodeFillNonZero or \
+					tOpcode is kVGOpcodeFillEvenOdd or \
+					tOpcode is kVGOpcodeStroke or \
+					tOpcode is kVGOpcodeFillNonZeroAndStroke or \
+					tOpcode is kVGOpcodeFillEvenOddAndStroke then
+				if tArguments[1] > the number of elements in tObjectTypes or \
+					tObjectTypes[tArguments[1]] is not kVGObjectPath then
+					put "path object expected for argument 1" into tError
+				else
+					put tObjects[tArguments[1]] into tArguments[1]
+				end if
+
+				if tArguments[2] > the number of elements in tObjectTypes or \
+							tObjectTypes[tArguments[2]] is not kVGObjectPaint then
+					put "paint object expected for argument 2" into tError
+				else
+					put tObjects[tArguments[2]] into tArguments[2]
+				end if
+
+				if (tOpcode is kVGOpcodeFillNonZeroAndStroke or tOpcode is kVGOpcodeFillEvenOddAndStroke) then
+					if tArguments[3] > the number of elements in tObjectTypes or \
+						tObjectTypes[tArguments[3]] is not kVGObjectPaint then
+						put "paint object expected for argument 3" into tError
+					else
+						put tObjects[tArguments[3]] into tArguments[3]
+					end if
+				end if
+			end if
+		end if
+
+		if tError is not nothing then
+			push "error, row " & (tCommandRow formatted as string) & ": " & tError onto back of tErrors
+		else if tOpcode < kVGOpcodeDefineTransform then
+			push [ tOpcode ] & tArguments onto back of tCommands
+		end if
+	end repeat
+
+	if tErrors is not the empty list then
+		put nothing into rProgram
+
+		variable tErrorsString
+		combine tErrors with "\n" into tErrorsString
+		return tErrorsString
+	end if
+
+	put tCommands into rProgram
+
+	return nothing
+end handler
+
+handler VGExecute(in pProgram as VGProgram, in pCanvas as Canvas) returns nothing
+	variable tCommand as List
+	repeat for each element tCommand in pProgram
+		variable tOpcode as Integer
+		put tCommand[1] into tOpcode
+
+		if tOpcode is kVGOpcodeSave then
+			save state of pCanvas
+		else if tOpcode is kVGOpcodeRestore then
+			restore state of pCanvas
+		else if tOpcode is kVGOpcodeBegin then
+			begin layer on pCanvas
+		else if tOpcode is kVGOpcodeEnd then
+			end layer on pCanvas
+		else if tOpcode is kVGOpcodeOpacity then
+			set the opacity of pCanvas to tCommand[2]
+		else if tOpcode is kVGOpcodeTransform then
+			transform pCanvas by tCommand[2]
+		else if tOpcode is kVGOpcodeFillNonZero then
+			set the fill rule of pCanvas to "non-zero"
+			set the paint of pCanvas to tCommand[3]
+			fill tCommand[2] on pCanvas
+		else if tOpcode is kVGOpcodeFillEvenOdd then
+			set the fill rule of pCanvas to "even odd"
+			set the paint of pCanvas to tCommand[3]
+			fill tCommand[2] on pCanvas
+		else if tOpcode is kVGOpcodeStroke then
+			set the paint of pCanvas to tCommand[3]
+			stroke tCommand[2] on pCanvas
+		else if tOpcode is kVGOpcodeFillNonZeroAndStroke then
+			set the fill rule of pCanvas to "non-zero"
+			set the paint of pCanvas to tCommand[3]
+			fill tCommand[2] on pCanvas
+			set the paint of pCanvas to tCommand[4]
+			stroke tCommand[2] on pCanvas
+		else if tOpcode is kVGOpcodeFillEvenOddAndStroke then
+			set the fill rule of pCanvas to "even odd"
+			set the paint of pCanvas to tCommand[3]
+			fill tCommand[2] on pCanvas
+			set the paint of pCanvas to tCommand[4]
+			stroke tCommand[2] on pCanvas
+		else if tOpcode is kVGOpcodeStrokeWidth then
+			set the stroke width of pCanvas to tCommand[2]
+		else if tOpcode is kVGOpcodeStrokeCapButt then
+			set the cap style of pCanvas to "butt"
+		else if tOpcode is kVGOpcodeStrokeCapRound then
+			set the cap style of pCanvas to "round"
+		else if tOpcode is kVGOpcodeStrokeCapSquare then
+			set the cap style of pCanvas to "square"
+		else if tOpcode is kVGOpcodeStrokeJoinBevel then
+			set the join style of pCanvas to "bevel"
+		else if tOpcode is kVGOpcodeStrokeJoinRound then
+			set the join style of pCanvas to "round"
+		else if tOpcode is kVGOpcodeStrokeJoinMiter then
+			set the join style of pCanvas to "miter"
+		else if tOpcode is kVGOpcodeStrokeMiterLimit then
+			set the miter limit of pCanvas to tCommand[2]
+		else if tOpcode is kVGOpcodeStrokeDashes then
+			set the dashes of pCanvas to element 2 to -1 of tCommand
+		else if tOpcode is kVGOpcodeStrokeDashOffset then
+			set the dash phase of pCanvas to tCommand[2]
+		end if
+	end repeat
+end handler
+
+end widget

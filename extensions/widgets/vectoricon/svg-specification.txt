@@ -1,0 +1,91 @@
+attribute id
+  value <ncname>
+  initial
+  inherited no
+  animatable no
+
+#
+
+attribute transform
+  value <transform-list> | <transform-ref> | none
+  initial none
+  inherited no
+  animatable yes
+
+#
+
+attribute fill
+  value <paint> | inherit
+  initial black
+  inherited yes
+  animatable yes
+
+attribute fill-rule
+  value nonzero | evenodd | inherit
+  initial nonzero
+  inherited yes
+  animatable yes
+
+attribute fill-opacity
+  value <opacity-value> | inherit
+  initial 1
+  inherited yes
+  animatable yes
+
+#
+
+attribute stroke
+  value <paint> | inherit
+  initial none
+  inherited yes
+  animatable yes
+
+attribute stroke-width
+  value ignore(0,)
+  initial 1
+  inherited yes
+  animatable yes
+
+attribute stroke-linecap
+  value butt | round | square | inherit
+  initial butt
+  inherited yes
+  animatable yes
+
+attribute stroke-linejoin
+  value miter | round | bevel | inherit
+  initial miter
+  inherited yes
+  animatable yes
+
+attribute stroke-miterlimit
+  value ignore(1,)
+  initial 4
+  inherited yes
+  animatable yes
+
+attribute stroke-dasharray
+  value none | <dash-array> | inherit
+  initial none
+  inherited yes
+  animatable yes
+
+attribute stroke-dashoffset
+  value <length> | inherit
+  initial 0
+  inherited yes
+  animatable yes
+
+attribute stroke-opacity
+  value <opacity-value> | inherit
+  initial 1
+  inherited yes
+  animatable yes
+
+#
+
+attribute vector-effect
+  value non-scaling-stroke | none | inherit
+  initial none
+  inherited no
+  animatable yes

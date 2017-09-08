@@ -436,7 +436,7 @@ bool MCSellist::clipboard(bool p_is_cut)
 		do
 		{
 			if (!t_node -> m_ref -> getstack() -> iskeyed())
-				MCresult -> sets("can't cut object (stack is password protected)");
+				MCresult -> setstaticcstring("can't cut object (stack is password protected)");
 			else
 			{
 				MCObject::continuepickling(t_context, t_node -> m_ref, t_node -> m_ref -> getcard() -> getid());
@@ -519,7 +519,7 @@ bool MCSellist::clipboard(bool p_is_cut)
 			}
 		}
 		else
-			MCresult -> sets("can't write to clipboard");
+			MCresult -> setstaticcstring("can't write to clipboard");
 
 		return true;
 	}

@@ -1223,7 +1223,7 @@ void MCExecContext::SetTheResultToValue(MCValueRef p_value)
 
 void MCExecContext::SetTheResultToStaticCString(const char *p_cstring)
 {
-    MCresult -> sets(p_cstring);
+    MCresult -> setstaticcstring(p_cstring);
     MCresultmode = kMCExecResultModeReturn;
 }
 
@@ -1241,7 +1241,7 @@ void MCExecContext::GiveCStringToResult(char *p_cstring)
 
 void MCExecContext::SetTheResultToCString(const char *p_string)
 {
-    MCresult -> copysvalue(p_string);
+    MCresult -> setcstring(p_string);
     MCresultmode = kMCExecResultModeReturn;
 }
 

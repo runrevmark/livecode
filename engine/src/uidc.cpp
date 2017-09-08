@@ -1330,7 +1330,7 @@ bool MCUIDC::addusermessage(MCObject* optr, MCNameRef name, real8 time, MCParame
     // MW-2014-05-28: [[ Bug 12463 ]] Set the result to the pending message id.
 	char buffer[U4L];
 	sprintf(buffer, "%u", messageid);
-	MCresult->copysvalue(buffer);
+	MCresult->setcstring(buffer);
     
     return true;
 }

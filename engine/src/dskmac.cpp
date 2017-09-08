@@ -452,15 +452,15 @@ static void MCS_launch_set_result_from_lsstatus(void)
             break;
             
         case 1:
-            MCresult -> sets("can't open file");
+            MCresult -> setstaticcstring("can't open file");
             break;
             
         case 2:
-            MCresult -> sets("request failed");
+            MCresult -> setstaticcstring("request failed");
             break;
             
         case 3:
-            MCresult -> sets("no association");
+            MCresult -> setstaticcstring("no association");
             break;
 	}
     
@@ -1809,7 +1809,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         rh = NewHandle(len);
         if (rh == NULL)
         {
-            MCresult -> sets("can't create resource handle");
+            MCresult -> setstaticcstring("can't create resource handle");
         }
         else
         {
@@ -1821,7 +1821,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
             if ((errno = ResError()) != noErr)
             {
                 DisposeHandle(rh);
-                MCresult -> sets("can't add resource");
+                MCresult -> setstaticcstring("can't add resource");
             }
             else
                 SetResAttrs(rh, newflags);
@@ -1874,7 +1874,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         {
             errno = ResError();
             CloseResFile(resFileRefNum);
-            MCresult -> sets("can't find specified resource");
+            MCresult -> setstaticcstring("can't find specified resource");
         }
         
         bool t_success = true;
@@ -1884,7 +1884,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
             Size resLength = GetHandleSize(rh);
             if (resLength <= 0)
             {
-                MCresult -> sets("can't get resouce length.");
+                MCresult -> setstaticcstring("can't get resouce length.");
             }
             else
                 t_success = MCStringCreateWithNativeChars((char_t*)(*rh), resLength, r_value);
@@ -2122,13 +2122,13 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         }
         
         if (rh == NULL)
-            MCresult->sets("can't find the resource specified");
+            MCresult->setstaticcstring("can't find the resource specified");
         else
         {
             SetResAttrs(rh, 0); // override protect flag
             RemoveResource(rh);
             if ((errno = ResError()) != noErr)
-                MCresult->sets("can't remove the resource specified");
+                MCresult->setstaticcstring("can't remove the resource specified");
             DisposeHandle(rh);
         }
         
@@ -2193,7 +2193,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         if (!MCSecureModeCanAccessDisk())
         {
             r_data = MCValueRetain(kMCEmptyString);
-            MCresult->sets("can't open file");
+            MCresult->setstaticcstring("can't open file");
             return;
         }
         
@@ -2219,21 +2219,21 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         // We only support sizes that fit inside a uindex_t
         SInt64 fsize;
         if ((errno = FSGetForkSize(fRefNum, &fsize)) != noErr)
-            MCresult->sets("can't get file size");
+            MCresult->setstaticcstring("can't get file size");
         if (fsize < 0 || fsize > UINDEX_MAX)
-            MCresult->sets("invalid file size");
+            MCresult->setstaticcstring("invalid file size");
         else
         {
             char *buffer;
             buffer = new (nothrow) char[fsize];
             if (buffer == NULL)
-                MCresult->sets("can't create data buffer");
+                MCresult->setstaticcstring("can't create data buffer");
             else
             {
                 ByteCount t_read;
                 errno = FSReadFork(fRefNum, fsFromMark, 0, ByteCount(fsize), buffer, &t_read);
                 if (t_read != ByteCount(fsize)) //did not read bytes as specified
-                    MCresult->sets("error reading file");
+                    MCresult->setstaticcstring("error reading file");
                 else
                 {
                     /* UNCHECKED */ MCStringCreateWithNativeChars((const char_t *)buffer, uindex_t(t_read), r_data);
@@ -2298,7 +2298,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         if (errno != noErr)
         {
             AEDisposeDesc(&receiver);
-            MCresult->sets("no such program");
+            MCresult->setstaticcstring("no such program");
             return;
         }
         AppleEvent ae;
@@ -2365,7 +2365,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         {
             char *buffer = new (nothrow) char[6 + I2L];
             sprintf(buffer, "error %d", errno);
-            MCresult->copysvalue(buffer);
+            MCresult->setcstring(buffer);
             delete[] buffer;
             return;
         }
@@ -2378,12 +2378,12 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
             {
                 if (MCscreen->wait(READ_INTERVAL, False, True))
                 {
-                    MCresult->sets("user interrupt");
+                    MCresult->setstaticcstring("user interrupt");
                     return;
                 }
                 if (curtime > endtime)
                 {
-                    MCresult->sets("timeout");
+                    MCresult->setstaticcstring("timeout");
                     return;
                 }
                 if (AEAnswerErr != NULL || AEAnswerData != NULL)
@@ -2553,7 +2553,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         if (errno != noErr)
         {
             AEDisposeDesc(&receiver);
-            MCresult->sets("no such program");
+            MCresult->setstaticcstring("no such program");
             r_value = MCValueRetain(kMCEmptyString);
             return false;
         }
@@ -2575,7 +2575,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         {
             char *buffer = new (nothrow) char[6 + I2L];
             sprintf(buffer, "error %d", errno);
-            MCresult->copysvalue(buffer);
+            MCresult->setcstring(buffer);
             delete[] buffer;
             
             r_value = MCValueRetain(kMCEmptyString);
@@ -2586,13 +2586,13 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
         {
             if (MCscreen->wait(READ_INTERVAL, False, True))
             {
-                MCresult->sets("user interrupt");
+                MCresult->setstaticcstring("user interrupt");
                 r_value = MCValueRetain(kMCEmptyString);
                 return false;
             }
             if (curtime > endtime)
             {
-                MCresult->sets("timeout");
+                MCresult->setstaticcstring("timeout");
                 r_value = MCValueRetain(kMCEmptyString);
                 return false;
             }
@@ -3411,7 +3411,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         t_os_error = MCS_mac_pathtoref(p_target, t_fsref);
         if (t_os_error != noErr)
         {
-            MCresult -> sets("file not found");
+            MCresult -> setstaticcstring("file not found");
             return False;
         }
         
@@ -3421,13 +3421,13 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         t_os_error = FSResolveAliasFile(&t_fsref, TRUE, &t_is_folder, &t_is_alias);
         if (t_os_error != noErr || !t_is_alias) // this always seems to be false
         {
-            MCresult -> sets("can't get alias");
+            MCresult -> setstaticcstring("can't get alias");
             return False;
         }
         
         if (!MCS_mac_fsref_to_path(t_fsref, r_resolved_path))
         {
-            MCresult -> sets("can't get alias path");
+            MCresult -> setstaticcstring("can't get alias path");
             return False;
         }
         
@@ -3710,7 +3710,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         {
             char *buffer = new (nothrow) char[6 + I2L];
             sprintf(buffer, "error %d", errno);
-            MCresult->copysvalue(buffer);
+            MCresult->setcstring(buffer);
             delete[] buffer;
             return false;
         }
@@ -4597,7 +4597,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
             if (errno != noErr)
             {
                 // MW-2008-06-12: [[ Bug 6336 ]] No result set if file not found on OS X
-                MCresult -> sets("can't open file");
+                MCresult -> setstaticcstring("can't open file");
                 t_error = 1;
             }
         }
@@ -4681,7 +4681,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         }
         if (posacomp == NULL)
         {
-            MCresult->sets("alternate language not found");
+            MCresult->setstaticcstring("alternate language not found");
             return;
         }
         if (posacomp->compinstance == NULL)
@@ -4691,7 +4691,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         OSAID scriptid;
         if (osacompile(p_script, posacomp->compinstance, scriptid) != noErr)
         {
-            MCresult->sets("compiler error");
+            MCresult->setstaticcstring("compiler error");
             return;
         }
         MCAutoStringRef rvalue;
@@ -4711,10 +4711,10 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
              ep . setstring("execution error,%s",);
              AEDisposeDesc(&err_str);*/
             
-            MCresult->sets("execution error");
+            MCresult->setstaticcstring("execution error");
         }
         else
-            MCresult->sets("execution error");
+            MCresult->setstaticcstring("execution error");
         
         OSADispose(posacomp->compinstance, scriptid);
     }
@@ -5520,7 +5520,7 @@ static void MCS_startprocess_launch(MCNameRef name, MCStringRef docname, Open_mo
 	{
 		if (errno != noErr)
 		{
-			MCresult->sets("no such program");
+			MCresult->setstaticcstring("no such program");
 			return;
 		}
         
@@ -5534,7 +5534,7 @@ static void MCS_startprocess_launch(MCNameRef name, MCStringRef docname, Open_mo
 		{
 			if (MCS_mac_pathtoref(docname, t_doc_fsref) != noErr)
 			{
-				MCresult->sets("no such document");
+				MCresult->setstaticcstring("no such document");
 				return;
 			}
 			inLaunchSpec.numDocs = 1;
@@ -5561,7 +5561,7 @@ static void MCS_startprocess_launch(MCNameRef name, MCStringRef docname, Open_mo
             FSCatalogInfo t_catalog_info;
             if ((errno = FSGetCatalogInfo(&t_app_fsref, kFSCatInfoFinderInfo, &t_catalog_info, NULL, NULL, NULL)) != noErr)
             {
-                MCresult->sets("no such program");
+                MCresult->setstaticcstring("no such program");
                 return;
             }
             
@@ -5614,7 +5614,7 @@ static void MCS_startprocess_launch(MCNameRef name, MCStringRef docname, Open_mo
 		{
 			char buffer[7 + I2L];
 			sprintf(buffer, "error %d", errno);
-			MCresult->copysvalue(buffer);
+			MCresult->setcstring(buffer);
 		}
 		else
 		{
@@ -5881,7 +5881,7 @@ static void MCS_startprocess_unix(MCNameRef name, MCStringRef doc, Open_mode mod
 	{
 		if (noerror)
 			MCprocesses[index].pid = 0;
-		MCresult->sets("not opened");
+		MCresult->setstaticcstring("not opened");
 	}
 	else
 		MCresult->clear(False);

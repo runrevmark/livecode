@@ -1528,7 +1528,7 @@ Boolean MCPlayer::prepare(MCStringRef options)
     // PM-2014-12-17: [[ Bug 14232 ]] Update the result in case a filename is invalid or the file is corrupted
     if (hasinvalidfilename() || !t_path_resolved)
     {
-        MCresult->sets("could not create movie reference");
+        MCresult->setstaticcstring("could not create movie reference");
         return False;
     }
 	

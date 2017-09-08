@@ -490,11 +490,11 @@ bool MCS_aton(MCStringRef p_address, MCStringRef& r_name)
 	}
 	if (t_success)
 	{
-		MCresult->sets("");
+		MCresult->setstaticcstring("");
 	}
 	else
 	{
-		MCresult->sets("invalid host address");
+		MCresult->setstaticcstring("invalid host address");
 		r_name = MCValueRetain(kMCEmptyString);
 		t_success = true;
 	}
@@ -622,11 +622,11 @@ bool MCS_ntoa(MCStringRef p_hostname, MCObject *p_target, MCNameRef p_message, M
 	if (!t_success)
 	{
 		/* RESULT - !t_success doesn't necessarily mean an invalid address here */
-		MCresult->sets("invalid host address");
+		MCresult->setstaticcstring("invalid host address");
 	}
 	else
 	{
-		MCresult->sets("");
+		MCresult->setstaticcstring("");
 	}
 
 	if (t_success)
@@ -818,7 +818,7 @@ MCSocket *MCS_open_socket(MCNameRef name, MCNameRef from, Boolean datagram, MCOb
 #if defined(_WINDOWS_DESKTOP) || defined(_WINDOWS_SERVER)
 		MCS_seterrno(WSAGetLastError());
 #endif
-		MCresult->sets("can't create socket");
+		MCresult->setstaticcstring("can't create socket");
 		return NULL;
 	}
 
@@ -859,9 +859,9 @@ MCSocket *MCS_open_socket(MCNameRef name, MCNameRef from, Boolean datagram, MCOb
 			{
 				s->name = NULL;
 				if (s->error != NULL)
-					MCresult->copysvalue(MCString(s->error));
+					MCresult->setcstring(s->error);
 				else
-					MCresult->sets("can't connect to host");
+					MCresult->setstaticcstring("can't connect to host");
 				delete s;
 				s = NULL;
 			}
@@ -880,7 +880,7 @@ MCSocket *MCS_open_socket(MCNameRef name, MCNameRef from, Boolean datagram, MCOb
 				s = nil;
 
 				if (MCresult->isclear())
-					MCresult->sets("can't resolve hostname");
+					MCresult->setstaticcstring("can't resolve hostname");
 			}
 		}
 	}
@@ -919,7 +919,7 @@ MCDataRef MCS_read_socket(MCSocket *s, MCExecContext &ctxt, uint4 length, const 
 		s->setselect();
 		if (s->accepting)
 		{
-			MCresult->sets("can't read from this socket");
+			MCresult->setstaticcstring("can't read from this socket");
 			return t_data;
 		}
 		if (until == NULL)
@@ -974,7 +974,7 @@ MCDataRef MCS_read_socket(MCSocket *s, MCExecContext &ctxt, uint4 length, const 
 			t_continue = true;
 			if (MCscreen->wait(0.0, False, True))
 			{
-				MCresult->sets("interrupted");
+				MCresult->setstaticcstring("interrupted");
 				t_continue = false;
 			}
 
@@ -994,23 +994,23 @@ MCDataRef MCS_read_socket(MCSocket *s, MCExecContext &ctxt, uint4 length, const 
 				}
 				if (s->error != NULL)
 				{
-					MCresult->sets(s->error);
+					MCresult->setcstring(s->error);
 					break;
 				}
 				if (s->fd == 0)
 				{
-					MCresult->sets("eof");
+					MCresult->setstaticcstring("eof");
 					break;
 				}
 				if (curtime > eptr->timeout)
 				{
-					MCresult->sets("timeout");
+					MCresult->setstaticcstring("timeout");
 					break;
 				}
 				MCU_play();
 				if (MCscreen->wait(READ_INTERVAL, False, True))
 				{
-					MCresult->sets("interrupted");
+					MCresult->setstaticcstring("interrupted");
 					break;
 				}
 			}
@@ -1051,13 +1051,13 @@ void MCS_write_socket(const MCStringRef d, MCSocket *s, MCObject *optr, MCNameRe
 						  (sockaddr *)&to, sizeof(to)) < 0)
 			{
 				mptr = NULL;
-				MCresult->sets("error sending datagram");
+				MCresult->setstaticcstring("error sending datagram");
 			}
 		}
 		else if (send(s->fd, *temp_d, MCStringGetLength(d), 0) < 0)
 		{
 			mptr = NULL;
-			MCresult->sets("error sending datagram");
+			MCresult->setstaticcstring("error sending datagram");
 		}
 		if (mptr != NULL)
 		{
@@ -1081,17 +1081,17 @@ void MCS_write_socket(const MCStringRef d, MCSocket *s, MCObject *optr, MCNameRe
 			{
 				if (s->error != NULL)
 				{
-					MCresult->sets(s->error);
+					MCresult->setcstring(s->error);
 					break;
 				}
 				if (s->fd == 0)
 				{
-					MCresult->sets("socket closed");
+					MCresult->setstaticcstring("socket closed");
 					break;
 				}
 				if (curtime > eptr->timeout)
 				{
-					MCresult->sets("timeout");
+					MCresult->setstaticcstring("timeout");
 					break;
 				}
 				if (s->wevents != NULL && eptr == s->wevents
@@ -1100,7 +1100,7 @@ void MCS_write_socket(const MCStringRef d, MCSocket *s, MCObject *optr, MCNameRe
 				MCU_play();
 				if (MCscreen->wait(READ_INTERVAL, False, True))
 				{
-					MCresult->sets("interrupted");
+					MCresult->setstaticcstring("interrupted");
 					break;
 				}
 			}
@@ -1131,7 +1131,7 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
 #if defined(_WINDOWS_DESKTOP) || defined(_WINDOWS_SERVER)
 		MCS_seterrno(WSAGetLastError());
 #endif
-		MCresult->sets("can't create socket");
+		MCresult->setstaticcstring("can't create socket");
 		return NULL;
 	}
 
@@ -1146,7 +1146,7 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
     on = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char *)&on, sizeof(on)) != 0)
     {
-        MCresult->sets("can't reuse port");
+        MCresult->setstaticcstring("can't reuse port");
         return NULL;
     }
 #endif
@@ -1162,7 +1162,7 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
 		if (!MCStringCreateWithCString(MCdefaultnetworkinterface, &MCdefaultnetworkinterface_string) ||
 			!MCS_name_to_sockaddr(*MCdefaultnetworkinterface_string, addr))
 		{
-			MCresult->sets("can't resolve network interface");
+			MCresult->setstaticcstring("can't resolve network interface");
 			return NULL;
 		}
 	}
@@ -1188,7 +1188,7 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
 #else
 	if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 	{
-		MCresult->sets("Error binding socket");
+		MCresult->setstaticcstring("Error binding socket");
 		close(sock);
 		return NULL;
 	}
@@ -1201,7 +1201,7 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
         socklen_t addrsize = sizeof(addr);
         if (getsockname(sock, (sockaddr *)&addr, &addrsize) < 0)
         {
-            MCresult->sets("can't get bound port");
+            MCresult->setstaticcstring("can't get bound port");
 #if defined(_WINDOWS_DESKTOP) || defined(_WINDOWS_SERVER)
             closesocket(sock);
 #else
@@ -1500,7 +1500,7 @@ Boolean MCSocket::read_done()
 		{
 			revents->size = nread;
 			if (fd == 0)
-				MCresult->sets("eof");
+				MCresult->setstaticcstring("eof");
 			return True;
 		}
 		if (*revents->until != '\004')
@@ -1540,7 +1540,7 @@ Boolean MCSocket::read_done()
 				{
 					revents->size = nread;
 					if (fd == 0)
-						MCresult->sets("eof");
+						MCresult->setstaticcstring("eof");
 				}
 			}
 			return True;
@@ -1549,7 +1549,7 @@ Boolean MCSocket::read_done()
 	if (fd == 0 && error == NULL)
 	{
 		revents->size = nread;
-		MCresult->sets("eof");
+		MCresult->setstaticcstring("eof");
 		return True;
 	}
 	return False;

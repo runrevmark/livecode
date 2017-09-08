@@ -309,7 +309,7 @@ bool MCA_color(MCStringRef p_title, MCColor p_initial, bool as_sheet, bool& r_ch
 	}
 	else
 	{
-		MCresult->sets(MCcancelstring);
+		MCresult->setstaticcstring(MCcancelstring);
         r_chosen = false;
 	}
 

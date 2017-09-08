@@ -468,7 +468,7 @@ IO_stat readheader(IO_handle& stream, uint32_t& r_version)
 		{
 			if (theader[offset - 1] != '\n' || theader[offset - 2] == '\r')
 			{
-				MCresult->sets("stack was corrupted by a non-binary file transfer");
+				MCresult->setstaticcstring("stack was corrupted by a non-binary file transfer");
 				return IO_ERROR;
 			}
 
@@ -965,7 +965,7 @@ IO_stat MCDispatch::doreadfile(MCStringRef p_openpath, MCStringRef p_name, IO_ha
         // MW-2008-06-12: [[ Bug 6476 ]] Media won't open HC stacks
         if (!MCdispatcher->cut(True) || hc_import(p_name, stream, t_stack) != IO_NORMAL)
         {
-            MCresult->sets("file is not a stack");
+            MCresult->setstaticcstring("file is not a stack");
             return IO_ERROR;
         }
         r_stack = t_stack;
@@ -1106,18 +1106,18 @@ IO_stat MCDispatch::dosavescriptonlystack(MCStack *sptr, const MCStringRef p_fna
 		linkname = sptr -> getfilename();
     else
     {
-        MCresult->sets("stack does not have a filename");
+        MCresult->setstaticcstring("stack does not have a filename");
         return IO_ERROR;
     }
 
     if (*linkname == NULL)
 	{
-		MCresult->sets("can't open stack script file, bad path");
+		MCresult->setstaticcstring("can't open stack script file, bad path");
 		return IO_ERROR;
 	}
 	if (MCS_noperm(*linkname))
 	{
-		MCresult->sets("can't open stack script file, no permission");
+		MCresult->setstaticcstring("can't open stack script file, no permission");
 		return IO_ERROR;
 	}
     
@@ -1147,7 +1147,7 @@ IO_stat MCDispatch::dosavescriptonlystack(MCStack *sptr, const MCStringRef p_fna
 	IO_handle stream;
     if ((stream = MCS_open(*linkname, kMCOpenFileModeWrite, True, False, 0)) == NULL)
 	{
-		MCresult->sets("can't open stack script file");
+		MCresult->setstaticcstring("can't open stack script file");
         return IO_ERROR;
     }
 
@@ -1159,7 +1159,7 @@ IO_stat MCDispatch::dosavescriptonlystack(MCStack *sptr, const MCStringRef p_fna
     if (IO_write("\xEF\xBB\xBF", 1, 3, stream) != IO_NORMAL ||
         IO_write(*t_utf8_script, 1, t_utf8_script . Size(), stream) != IO_NORMAL)
     {
-        MCresult -> sets("error writing stack script file");
+        MCresult -> setstaticcstring("error writing stack script file");
         MCS_close(stream);
         return IO_ERROR;
     }
@@ -1186,13 +1186,13 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCStringRef p_fname, uint32
 		t_linkname = sptr -> getfilename();
 	else
 	{
-		MCresult -> sets("stack does not have a filename");
+		MCresult -> setstaticcstring("stack does not have a filename");
 		return IO_ERROR;
 	}
 	
 	if (MCS_noperm(*t_linkname))
 	{
-		MCresult->sets("can't open stack file, no permission");
+		MCresult->setstaticcstring("can't open stack file, no permission");
 		return IO_ERROR;
 	}
 
@@ -1206,7 +1206,7 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCStringRef p_fname, uint32
 	MCS_unlink(*t_backup);
 	if (MCS_exists(*t_linkname, True) && !MCS_backup(*t_linkname, *t_backup))
 	{
-		MCresult->sets("can't open stack backup file");
+		MCresult->setstaticcstring("can't open stack backup file");
 
 		MCValueAssign(MCfiletype, oldfiletype);
 		return IO_ERROR;
@@ -1215,13 +1215,13 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCStringRef p_fname, uint32
 
 	if ((stream = MCS_open(*t_linkname, kMCOpenFileModeWrite, True, False, 0)) == NULL)
 	{
-		MCresult->sets("can't open stack file");
+		MCresult->setstaticcstring("can't open stack file");
 		cleanup(stream, *t_linkname, *t_backup);
 		MCValueAssign(MCfiletype, oldfiletype);
 		return IO_ERROR;
 	}
 	MCValueAssign(MCfiletype, oldfiletype);
-	MCString errstring = "Error writing stack (disk full?)";
+	const char *errstring = "Error writing stack (disk full?)";
     
 	// MW-2012-03-04: [[ StackFile5500 ]] Work out what header to emit, and the size.
 	const char *t_header;
@@ -1231,7 +1231,7 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCStringRef p_fname, uint32
 	if (IO_write(t_header, sizeof(char), t_header_size, stream) != IO_NORMAL
 	        || IO_write_uint1(CHARSET, stream) != IO_NORMAL)
 	{
-		MCresult->sets(errstring);
+		MCresult->setstaticcstring(errstring);
 		cleanup(stream, *t_linkname, *t_backup);
 		return IO_ERROR;
 	}
@@ -1241,7 +1241,7 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCStringRef p_fname, uint32
 	if (IO_write_uint1(OT_NOTHOME, stream) != IO_NORMAL
 	        || IO_write_cstring_legacy(NULL, stream, 2) != IO_NORMAL)
 	{ // was stackfiles
-		MCresult->sets(errstring);
+		MCresult->setstaticcstring(errstring);
 		cleanup(stream, *t_linkname, *t_backup);
 		return IO_ERROR;
 	}
@@ -1255,7 +1255,7 @@ IO_stat MCDispatch::dosavestack(MCStack *sptr, const MCStringRef p_fname, uint32
 	        || IO_write_uint1(OT_END, stream) != IO_NORMAL)
 	{
 		if (MCresult -> isclear())
-			MCresult->sets(errstring);
+			MCresult->setstaticcstring(errstring);
 		cleanup(stream, *t_linkname, *t_backup);
 		return IO_ERROR;
 	}

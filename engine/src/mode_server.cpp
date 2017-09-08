@@ -204,7 +204,7 @@ IO_stat MCModeCheckSaveStack(MCStack *sptr, const MCStringRef filename)
 {
 	if (sptr == MCdispatcher -> getstacks())
 	{
-		MCresult->sets("can't save into standalone");
+		MCresult->setstaticcstring("can't save into standalone");
 		return IO_ERROR;
 	}
 

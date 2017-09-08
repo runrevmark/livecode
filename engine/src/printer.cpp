@@ -178,7 +178,7 @@ bool MCPrinter::ChoosePrinter(bool p_window_modal, MCStringRef &r_result)
 void MCPrinter::SetDeviceName(MCStringRef p_name)
 {
 	if (!DoReset(p_name))
-		MCresult -> sets("unknown printer");
+		MCresult -> setstaticcstring("unknown printer");
 }
 
 const char *MCPrinter::GetDeviceName(void)
@@ -192,7 +192,7 @@ void MCPrinter::SetDeviceSettings(MCDataRef p_settings)
 		DoReset(kMCEmptyString);
 	else if (!DoResetSettings(p_settings))
 	{
-		MCresult -> sets("unknown printer");
+		MCresult -> setstaticcstring("unknown printer");
 		return;
 	}
 }
@@ -931,11 +931,11 @@ void MCPrinter::SetResult(void)
 	break;
 	
 	case STATUS_CANCELLED:
-		MCresult -> sets(MCcancelstring);
+		MCresult -> setstaticcstring(MCcancelstring);
 	break;
 	
 	case STATUS_ERROR:
-		MCresult -> copysvalue(m_loop_error);
+		MCresult -> setcstring(m_loop_error);
 	break;
 	
 	default:

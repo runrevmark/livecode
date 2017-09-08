@@ -427,7 +427,7 @@ bool MCS_name_to_host_and_port(MCStringRef p_name, MCStringRef &r_host, MCNumber
         MCAutoStringRef t_port_string;
         if (!MCStringDivideAtIndex(p_name, t_colon, &t_host, &t_port_string))
         {
-            MCresult->sets("not a valid host:port string");
+            MCresult->setstaticcstring("not a valid host:port string");
             return false;
         }
         
@@ -440,7 +440,7 @@ bool MCS_name_to_host_and_port(MCStringRef p_name, MCStringRef &r_host, MCNumber
                 {
                     if (!MCNumberCreateWithUnsignedInteger(port_table[i].port, &t_port))
                     {
-                        MCresult->sets("can't set port");
+                        MCresult->setstaticcstring("can't set port");
                         return false;
                     }
                     break;
@@ -449,21 +449,21 @@ bool MCS_name_to_host_and_port(MCStringRef p_name, MCStringRef &r_host, MCNumber
             
             if (i == ELEMENTS(port_table))
             {
-                MCresult->sets("not a valid port");
+                MCresult->setstaticcstring("not a valid port");
                 return false;
             }
         }
 
         if (!MCNumberIsInteger(*t_port))
         {
-            MCresult->sets("not a valid port");
+            MCresult->setstaticcstring("not a valid port");
             return false;
         }
 
         integer_t t_port_int = MCNumberFetchAsInteger(*t_port);
         if (t_port_int < 0 || t_port_int > UINT16_MAX)
         {
-            MCresult->sets("not a valid port");
+            MCresult->setstaticcstring("not a valid port");
             return false;
         }
     }

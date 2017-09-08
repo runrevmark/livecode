@@ -152,7 +152,7 @@ IO_stat MCStack::load(IO_handle stream, uint32_t version, uint1 type)
 	if (type != OT_STACK)
 	{
 		if (MCresult->isclear() && type == OT_ENCRYPT_STACK)
-			MCresult->sets("Encrypted stacks cannot be opened in Community Edition");
+			MCresult->setstaticcstring("Encrypted stacks cannot be opened in Community Edition");
 		return IO_ERROR;
 	}
 	
@@ -2116,7 +2116,7 @@ void MCStack::find(MCExecContext &ctxt, Find_mode fmode,
     for (int i = 0 ; i < nstrings ; i++)
         MCValueRelease(strings[i]);
 	delete strings;
-	MCresult->sets(MCnotfoundstring);
+	MCresult->setstaticcstring(MCnotfoundstring);
 }
 
 void MCStack::markfind(MCExecContext &ctxt, Find_mode fmode,

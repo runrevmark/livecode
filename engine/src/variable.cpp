@@ -276,6 +276,25 @@ Exec_stat MCVariable::sets(const MCString& p_string)
 	return ES_NORMAL;
 }
 
+Exec_stat MCVariable::setstaticcstring(const char *p_cstring)
+{
+    return setcstring(p_cstring);
+}
+
+Exec_stat MCVariable::setcstring(const char *p_cstring)
+{
+	MCStringRef t_string;
+	if (!MCStringCreateWithNativeChars((const char_t *)p_cstring, strlen(p_cstring), t_string))
+    {
+        return ES_ERROR;
+    }
+    
+    MCExecTypeRelease(value);
+    value . type = kMCExecValueTypeStringRef;
+    value . stringref_value = t_string;
+    return ES_NORMAL;
+}
+
 void MCVariable::copysvalue(const MCString& p_string)
 {
 	MCStringRef t_string;

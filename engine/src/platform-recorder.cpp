@@ -180,7 +180,7 @@ extern bool MCQTInit(void);
 void MCPlatformSoundRecorderCreate(MCPlatformSoundRecorderRef& r_recorder)
 {
     if (!MCQTInit() && MCmajorosversion >= 0x1080)
-        MCresult -> sets("could not initialize quicktime");
+        MCresult -> setstaticcstring("could not initialize quicktime");
     else
         r_recorder = (MCPlatformSoundRecorderRef)MCQTSoundRecorderCreate();
 }

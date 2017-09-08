@@ -504,7 +504,7 @@ void MCQTSoundRecorder::BeginDialog()
     
 	if (ci == NULL)
 	{
-		MCresult->sets("can't open dialog");
+		MCresult->setstaticcstring("can't open dialog");
 		return;
 	}
     
@@ -590,7 +590,7 @@ void MCQTSoundRecorder::BeginDialog()
 		{
 			char buffer[22 + U4L];
 			sprintf(buffer, "error %d opening dialog", t_error);
-			MCresult->copysvalue(buffer);
+			MCresult->setcstring(buffer);
             m_dialog_result = kMCPlatformDialogResultError;
 			return;
 		}
@@ -699,7 +699,7 @@ bool MCQTSoundRecorder::StartRecording(MCStringRef p_filename)
     {
         char buffer[21 + U4L];
 		sprintf(buffer, "error %d starting recording", errno);
-		MCresult->copysvalue(buffer);
+		MCresult->setcstring(buffer);
         
 		if (m_channel != NULL)
 		{

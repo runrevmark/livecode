@@ -107,7 +107,7 @@ bool MCEngineAddExtensionFromModule(MCScriptModuleRef p_module)
         }
         else
         {
-            MCresult -> sets("module is not usable");
+            MCresult -> setstaticcstring("module is not usable");
         }
         return false;
     }
@@ -118,7 +118,7 @@ bool MCEngineAddExtensionFromModule(MCScriptModuleRef p_module)
     {
         if (!MCScriptCreateInstanceOfModule(p_module, t_instance))
         {
-            MCresult -> sets("could not instantiate module");
+            MCresult -> setstaticcstring("could not instantiate module");
             return false;
         }
     }

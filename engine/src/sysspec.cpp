@@ -832,7 +832,7 @@ void MCS_loadresfile(MCStringRef p_filename, MCStringRef& r_data)
 		return;
     }
     
-    MCresult -> sets("not supported");
+    MCresult -> setstaticcstring("not supported");
 }
 
 void MCS_saveresfile(MCStringRef p_path, MCDataRef p_data)
@@ -852,7 +852,7 @@ void MCS_saveresfile(MCStringRef p_path, MCDataRef p_data)
 		return;
     }
     
-    MCresult -> sets("not supported");
+    MCresult -> setstaticcstring("not supported");
 }
 
 bool MCS_longfilepath(MCStringRef p_path, MCStringRef& r_long_path)
@@ -1379,7 +1379,7 @@ bool MCS_loadtextfile(MCStringRef p_filename, MCStringRef& r_text)
 {
 	if (!MCSecureModeCanAccessDisk())
 	{
-		MCresult->sets("can't open file");
+		MCresult->setstaticcstring("can't open file");
 		return false;
 	}
     
@@ -1394,7 +1394,7 @@ bool MCS_loadtextfile(MCStringRef p_filename, MCStringRef& r_text)
 	
 	if (t_file == NULL)
 	{
-		MCresult -> sets("can't open file");
+		MCresult -> setstaticcstring("can't open file");
 		return false;
 	}
 	
@@ -1436,7 +1436,7 @@ bool MCS_loadtextfile(MCStringRef p_filename, MCStringRef& r_text)
     
 	if (!t_success)
 	{
-		MCresult -> sets("error reading file");
+		MCresult -> setstaticcstring("error reading file");
         return false;
 	}
     
@@ -1447,7 +1447,7 @@ bool MCS_loadbinaryfile(MCStringRef p_filename, MCDataRef& r_data)
 {
 	if (!MCSecureModeCanAccessDisk())
 	{
-		MCresult->sets("can't open file");
+		MCresult->setstaticcstring("can't open file");
 		return false;
 	}
     
@@ -1462,7 +1462,7 @@ bool MCS_loadbinaryfile(MCStringRef p_filename, MCDataRef& r_data)
 	
 	if (t_file == NULL)
 	{
-		MCresult -> sets("can't open file");
+		MCresult -> setstaticcstring("can't open file");
 		return false;
 	}
 	
@@ -1491,7 +1491,7 @@ bool MCS_loadbinaryfile(MCStringRef p_filename, MCDataRef& r_data)
     
 	if (!t_success)
 	{
-		MCresult -> sets("error reading file");
+		MCresult -> setstaticcstring("error reading file");
         return false;
 	}
     
@@ -1503,7 +1503,7 @@ bool MCS_savetextfile(MCStringRef p_filename, MCStringRef p_string)
     // AL-2014-10-29: Reinstate secure mode check when trying to save file
     if (!MCSecureModeCanAccessDisk())
 	{
-		MCresult->sets("can't open file");
+		MCresult->setstaticcstring("can't open file");
 		return false;
 	}
     
@@ -1519,7 +1519,7 @@ bool MCS_savetextfile(MCStringRef p_filename, MCStringRef p_string)
 	
 	if (t_file == NULL)
 	{
-		MCresult -> sets("can't open file");
+		MCresult -> setstaticcstring("can't open file");
 		return false;
 	}
     
@@ -1540,7 +1540,7 @@ bool MCS_savetextfile(MCStringRef p_filename, MCStringRef p_string)
     /* UNCHECKED */ MCStringEncode(*t_converted, kMCStringEncodingNative, false, &t_data);
     
 	if (!t_file -> Write(MCDataGetBytePtr(*t_data), MCDataGetLength(*t_data)))
-		MCresult -> sets("error writing file");
+		MCresult -> setstaticcstring("error writing file");
 	
 	t_file -> Close();
     
@@ -1555,7 +1555,7 @@ bool MCS_savebinaryfile(MCStringRef p_filename, MCDataRef p_data)
     // AL-2014-10-29: Reinstate secure mode check when trying to save file
     if (!MCSecureModeCanAccessDisk())
 	{
-		MCresult->sets("can't open file");
+		MCresult->setstaticcstring("can't open file");
 		return false;
 	}
     
@@ -1572,13 +1572,13 @@ bool MCS_savebinaryfile(MCStringRef p_filename, MCDataRef p_data)
 	
 	if (t_file == NULL)
 	{
-		MCresult -> sets("can't open file");
+		MCresult -> setstaticcstring("can't open file");
 		return false;
 	}
     
 	if (!t_file -> Write(MCDataGetBytePtr(p_data), MCDataGetLength(p_data)))
 	{
-		MCresult -> sets("error writing file");
+		MCresult -> setstaticcstring("error writing file");
 		t_success = false;
 	}
 	
@@ -1689,7 +1689,7 @@ void MCS_send(MCStringRef p_message, MCStringRef p_program, MCStringRef p_eventt
 		return;
 	}
     
-	MCresult->sets("not supported");
+	MCresult->setstaticcstring("not supported");
 }
 
 void MCS_reply(MCStringRef p_message, MCStringRef p_keyword, Boolean p_error)
@@ -1703,7 +1703,7 @@ void MCS_reply(MCStringRef p_message, MCStringRef p_keyword, Boolean p_error)
 		return;
 	}
     
-	MCresult->sets("not supported");
+	MCresult->setstaticcstring("not supported");
 }
 
 void MCS_request_ae(MCStringRef p_message, uint2 p_ae, MCStringRef& r_value)
@@ -1717,7 +1717,7 @@ void MCS_request_ae(MCStringRef p_message, uint2 p_ae, MCStringRef& r_value)
 		return;
 	}
     
-	MCresult->sets("not supported");
+	MCresult->setstaticcstring("not supported");
 }
 
 bool MCS_request_program(MCStringRef p_message, MCStringRef p_program, MCStringRef& r_result)
@@ -1728,7 +1728,7 @@ bool MCS_request_program(MCStringRef p_message, MCStringRef p_program, MCStringR
     if (t_service != nil)
         return t_service -> RequestProgram(p_message, p_program, r_result);
     
-	MCresult->sets("not supported");
+	MCresult->setstaticcstring("not supported");
 	return true;
 }
 
@@ -1858,7 +1858,7 @@ bool MCS_changeprocesstype(bool p_to_foreground)
     if (t_service != nil)
         return t_service -> ChangeProcessType(p_to_foreground);
     
-    MCresult -> sets("not supported");
+    MCresult -> setstaticcstring("not supported");
     return true;
 }
 
@@ -1870,7 +1870,7 @@ bool MCS_processtypeisforeground(void)
     if (t_service != nil)
         return t_service -> ProcessTypeIsForeground();
     
-    MCresult -> sets("not supported");
+    MCresult -> setstaticcstring("not supported");
     return true;
 }
 

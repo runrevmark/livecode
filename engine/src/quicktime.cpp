@@ -722,7 +722,7 @@ Boolean MCQTEffectsDialog(MCStringRef &r_data)
 	QTEffectsQuery((void **)&effectlist);
 	if (effectlist == NULL)
 	{
-		MCresult->sets("can't get effect list");
+		MCresult->setstaticcstring("can't get effect list");
 		return False;
 	}
 	OSErr result;
@@ -761,7 +761,7 @@ Boolean MCQTEffectsDialog(MCStringRef &r_data)
 	}
 	if (result == userCanceledErr)
 	{
-		MCresult->sets(MCcancelstring);
+		MCresult->setstaticcstring(MCcancelstring);
 		QTDisposeAtomContainer(effectlist);
 		return False;
 	}
@@ -1263,18 +1263,18 @@ Boolean MCQTEffectsDialog(MCStringRef &r_value)
 
 void MCQTRecordSound(MCStringRef file)
 {
-    MCresult -> sets("not supported");
+    MCresult -> setstaticcstring("not supported");
 }
 
 void MCQTGetRecordLoudness(integer_t &r_loudness)
 {
-	MCresult -> sets("not supported");
+	MCresult -> setstaticcstring("not supported");
     r_loudness = 0;
 }
 
 void MCQTGetRecordCompressionList(MCStringRef &r_compression_list)
 {
-	MCresult -> sets("not supported");
+	MCresult -> setstaticcstring("not supported");
     r_compression_list = MCValueRetain(kMCEmptyString);
 }
 
@@ -1290,7 +1290,7 @@ MCStringRef MCQTGetRecordFormatLabel(intenum_t p_id)
         
 bool MCQTGetRecordFormatList(MCStringRef &r_format_list)
 {
-    MCresult -> sets("not supported");
+    MCresult -> setstaticcstring("not supported");
     r_format_list = MCValueRetain(kMCEmptyString);
     return true;
 }

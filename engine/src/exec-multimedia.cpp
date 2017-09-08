@@ -557,7 +557,7 @@ void MCMultimediaExecAnswerRecord(MCExecContext &ctxt)
         }
 
         if (t_result == kMCPlatformDialogResultCancel)
-            MCresult->sets(MCcancelstring);
+            MCresult->setstaticcstring(MCcancelstring);
     }
 #else
     extern void MCQTRecordDialog();
@@ -751,7 +751,7 @@ void MCMultimediaExecPlayAudioClip(MCExecContext& ctxt, MCStack *p_target, int p
 		if (!MCacptr->import(p_clip, stream))
 		{
 			MCS_close(stream);
-			MCresult->sets("error reading audioClip");
+			MCresult->setstaticcstring("error reading audioClip");
 			delete MCacptr;
 			MCacptr = nil;
 			ctxt . Throw();

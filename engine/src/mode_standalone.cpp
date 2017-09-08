@@ -199,7 +199,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 	// If we've already seen the epilogue, we are done.
 	if (self -> done)
 	{
-		MCresult -> sets("unexpected data encountered");
+		MCresult -> setstaticcstring("unexpected data encountered");
 		return false;
 	}
 
@@ -214,7 +214,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		MCCapsulePrologueSection t_prologue;
 		if (IO_read(&t_prologue, sizeof(t_prologue), p_stream) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read standalone prologue");
+			MCresult -> setstaticcstring("failed to read standalone prologue");
 			return false;
 		}
 		
@@ -229,7 +229,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		t_redirect = new (nothrow) char[p_length];
 		if (IO_read(t_redirect, p_length, p_stream) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read redirect ref");
+			MCresult -> setstaticcstring("failed to read redirect ref");
 			return false;
 		}
 		
@@ -247,7 +247,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
         t_fontmap = new (nothrow) char[p_length];
         if (IO_read(t_fontmap, p_length, p_stream) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read fontmap");
+            MCresult -> setstaticcstring("failed to read fontmap");
             return false;
         }
         
@@ -263,7 +263,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 	case kMCCapsuleSectionTypeMainStack:
 		if (MCdispatcher -> readstartupstack(p_stream, self -> stack) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read standalone stack");
+			MCresult -> setstaticcstring("failed to read standalone stack");
 			return false;
 		}
 		
@@ -275,7 +275,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
     case kMCCapsuleSectionTypeScriptOnlyMainStack:
         if (MCdispatcher -> readscriptonlystartupstack(p_stream, p_length, self -> stack) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read standalone stack");
+            MCresult -> setstaticcstring("failed to read standalone stack");
             return false;
         }
             
@@ -293,7 +293,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
                             "./%@",
                             *t_external_str))
 		{
-			MCresult -> sets("failed to read external ref");
+			MCresult -> setstaticcstring("failed to read external ref");
 			return false;
 		}
 		
@@ -301,7 +301,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		{
             MCAutoStringRef t_error;
             if (!MCStringFormat(&t_error, "failed to load external: %@", *t_external_str))
-                MCresult -> sets("failed to load external");
+                MCresult -> setstaticcstring("failed to load external");
             else
                 MCresult -> setvalueref(*t_error);
 			return false;
@@ -315,7 +315,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		MCAutoStringRef t_mapping_str;
 		if (!MCStandaloneCapsuleReadString(p_stream, p_length, &t_mapping_str))
         {
-            MCresult -> sets("failed to read library mapping");
+            MCresult -> setstaticcstring("failed to read library mapping");
             return false;
         }
         
@@ -328,7 +328,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		MCAutoStringRef t_script_str;
 		if (!MCStandaloneCapsuleReadString(p_stream, p_length, &t_script_str))
 		{
-			MCresult -> sets("failed to read startup script");
+			MCresult -> setstaticcstring("failed to read startup script");
 			return false;
 		}
 
@@ -347,7 +347,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
                                                  p_stream, nullptr,
                                                  t_aux_stack, t_result) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read auxillary stack");
+            MCresult -> setstaticcstring("failed to read auxillary stack");
             return false;
         }
         MCdispatcher -> processstack(kMCEmptyString, t_aux_stack);
@@ -366,7 +366,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
                                                            t_result)
             != IO_NORMAL)
         {
-            MCresult -> sets("failed to read auxillary stack");
+            MCresult -> setstaticcstring("failed to read auxillary stack");
             return false;
         }
         MCdispatcher -> processstack(kMCEmptyString, t_aux_stack);
@@ -378,13 +378,13 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		MCAutoByteArray t_module_data;
 		if (!t_module_data.New(p_length))
 		{
-			MCresult -> sets("out of memory");
+			MCresult -> setstaticcstring("out of memory");
 			return false;
 		}
 		
         if (IO_read(t_module_data.Bytes(), p_length, p_stream) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read module");
+            MCresult -> setstaticcstring("failed to read module");
             return false;
         }
     
@@ -405,7 +405,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
         
         if (!t_success)
         {
-            MCresult -> sets("failed to load module");
+            MCresult -> setstaticcstring("failed to load module");
             return false;
         }
         
@@ -422,12 +422,12 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		uint8_t t_read_digest[16];
 		if (IO_read(t_read_digest, 16, p_stream) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read standalone checksum");
+			MCresult -> setstaticcstring("failed to read standalone checksum");
 			return false;
 		}
 		if (memcmp(t_read_digest, p_digest, 16) != 0)
 		{
-			MCresult -> sets("standalone checksum mismatch");
+			MCresult -> setstaticcstring("standalone checksum mismatch");
 			return false;
 		}
 		break;
@@ -437,7 +437,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
         char t_edition_byte;
         if (IO_read(&t_edition_byte, 1, p_stream) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read license");
+            MCresult -> setstaticcstring("failed to read license");
             return false;
         }
 
@@ -467,20 +467,20 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 			else
 			{
 				MCMemoryDeallocate(t_data);
-				MCresult -> sets("failed to read banner stack");
+				MCresult -> setstaticcstring("failed to read banner stack");
 				return false;
 			}
 		}
 		else
 		{
-			MCresult -> sets("out of memory");
+			MCresult -> setstaticcstring("out of memory");
 			return false;
 		}
 	}
 	break;
 	
 	default:
-		MCresult -> sets("unrecognized section encountered");
+		MCresult -> setstaticcstring("unrecognized section encountered");
 		return false;
 	}
 	
@@ -531,14 +531,14 @@ IO_stat MCDispatch::startup(void)
 		
 		if (t_stream == NULL)
         {
-		    MCresult->sets("unable to open startup stack");
+		    MCresult->setstaticcstring("unable to open startup stack");
 			return IO_ERROR;
         }
 		
 		MCStack *t_stack;
 		if (readstartupstack(t_stream, t_stack) != IO_NORMAL)
         {
-		    MCresult->sets("unable to read startup stack");
+		    MCresult->setstaticcstring("unable to read startup stack");
 			return IO_ERROR;
         }
 		
@@ -781,7 +781,7 @@ IO_stat MCDispatch::startup(void)
 	    MCStack *t_stack;
 	    if (MCdispatcher->loadfile(*t_env, t_stack) != IO_NORMAL)
 	    {
-		    MCresult->sets("failed to read TEST_STACK stackfile");
+		    MCresult->setstaticcstring("failed to read TEST_STACK stackfile");
 		    return IO_ERROR;
 	    }
 
@@ -862,7 +862,7 @@ IO_stat MCDispatch::startup(void)
 		MCStack *sptr;
 		if (MCdispatcher -> loadfile(MCstacknames[1], sptr) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read stackfile");
+			MCresult -> setstaticcstring("failed to read stackfile");
 			return IO_ERROR;
 		}
 		
@@ -873,7 +873,7 @@ IO_stat MCDispatch::startup(void)
 	}
 	else
 	{
-		MCresult -> sets("no stackfile to run");
+		MCresult -> setstaticcstring("no stackfile to run");
 		return IO_ERROR;
 	}
 	
@@ -903,7 +903,7 @@ IO_stat MCDispatch::startup(void)
 								 t_decompressed))
 		{
 			MCValueRelease(t_compressed);
-			MCresult -> sets("error decoding banner stack");
+			MCresult -> setstaticcstring("error decoding banner stack");
 			return IO_ERROR;
 		}
 		MCValueRelease(t_compressed);
@@ -913,7 +913,7 @@ IO_stat MCDispatch::startup(void)
 								MCDataGetLength(t_decompressed));
 		if (MCdispatcher -> readfile(nil, nil, t_stream, t_banner_stack) != IO_NORMAL)
 		{
-			MCresult -> sets("invalid banner stack");
+			MCresult -> setstaticcstring("invalid banner stack");
 			return IO_ERROR;
 		}
 		MCS_close(t_stream);
@@ -1038,7 +1038,7 @@ IO_stat MCModeCheckSaveStack(MCStack *sptr, const MCStringRef p_filename)
 {
 	if (sptr == MCdispatcher -> getstacks())
 	{
-		MCresult->sets("can't save into standalone");
+		MCresult->setstaticcstring("can't save into standalone");
 		return IO_ERROR;
 	}
 

@@ -718,7 +718,7 @@ Exec_stat MCField::sethtml(uint4 parid, MCValueRef data)
 {
 	if (state & CS_NO_FILE)
 	{
-		MCresult->sets("can't set HTMLtext while images are loading");
+		MCresult->setstaticcstring("can't set HTMLtext while images are loading");
 		return ES_ERROR;
 	}
 	state |= CS_NO_FILE; // prevent interactions while downloading images

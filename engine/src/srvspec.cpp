@@ -223,7 +223,7 @@ static void url_execute(MCStringRef p_url, MCUrlExecuteCallback p_callback, void
 					{
 						static char t_error_str[64];
 						sprintf(t_error_str, "error %ld", t_code);
-						MCresult -> copysvalue(t_error_str);
+						MCresult -> setcstring(t_error_str);
 					}
 				}
 				else
@@ -234,7 +234,7 @@ static void url_execute(MCStringRef p_url, MCUrlExecuteCallback p_callback, void
 		{
 			static char t_error_str[CURL_ERROR_SIZE + 64];
 			sprintf(t_error_str, "error %s", t_error_buffer);
-			MCresult -> copysvalue(t_error_str);
+			MCresult -> setcstring(t_error_str);
 		}
 	}
 	

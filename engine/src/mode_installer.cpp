@@ -1153,7 +1153,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 	// If we've already seen the epilogue, we are done.
 	if (self -> done)
 	{
-		MCresult -> sets("unexpected data encountered");
+		MCresult -> setstaticcstring("unexpected data encountered");
 		return false;
 	}
 
@@ -1168,7 +1168,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		MCCapsulePrologueSection t_prologue;
 		if (IO_read(&t_prologue, sizeof(t_prologue), p_stream) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read project prologue");
+			MCresult -> setstaticcstring("failed to read project prologue");
 			return false;
 		}
 	}
@@ -1177,7 +1177,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 	case kMCCapsuleSectionTypeMainStack:
 		if (MCdispatcher -> readstartupstack(p_stream, self -> stack) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read project stack");
+			MCresult -> setstaticcstring("failed to read project stack");
 			return false;
 		}
             
@@ -1189,7 +1189,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
     case kMCCapsuleSectionTypeScriptOnlyMainStack:
         if (MCdispatcher -> readscriptonlystartupstack(p_stream, p_length, self -> stack) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read project stack");
+            MCresult -> setstaticcstring("failed to read project stack");
             return false;
         }
         
@@ -1202,12 +1202,12 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		uint8_t t_read_digest[16];
 		if (IO_read(t_read_digest, 16, p_stream) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read project checksum");
+			MCresult -> setstaticcstring("failed to read project checksum");
 			return false;
 		}
 		if (memcmp(t_read_digest, p_digest, 16) != 0)
 		{
-			MCresult -> sets("project checksum mismatch");
+			MCresult -> setstaticcstring("project checksum mismatch");
 			return false;
 		}
 		break;
@@ -1218,7 +1218,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
         t_script = new (nothrow) char[p_length];
         if (IO_read(t_script, p_length, p_stream) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read startup script");
+            MCresult -> setstaticcstring("failed to read startup script");
             return false;
         }
             
@@ -1241,7 +1241,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
                                                  p_stream, nullptr,
                                                  t_aux_stack, t_result) != IO_NORMAL)
         {
-            MCresult -> sets("failed to read auxillary stack");
+            MCresult -> setstaticcstring("failed to read auxillary stack");
             return false;
         }
         MCdispatcher -> processstack(kMCEmptyString, t_aux_stack);
@@ -1260,7 +1260,7 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
                                                            t_result)
             != IO_NORMAL)
         {
-            MCresult -> sets("failed to read auxillary stack");
+            MCresult -> setstaticcstring("failed to read auxillary stack");
             return false;
         }
         MCdispatcher -> processstack(kMCEmptyString, t_aux_stack);
@@ -1273,14 +1273,14 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
 		char t_edition_byte;
 		if (IO_read(&t_edition_byte, 1, p_stream) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read license");
+			MCresult -> setstaticcstring("failed to read license");
 			return false;
 		}
 	}
 		break;
 			
 	default:
-		MCresult -> sets("unrecognized section encountered");
+		MCresult -> setstaticcstring("unrecognized section encountered");
 		return false;
 	}
 	
@@ -1329,7 +1329,7 @@ IO_stat MCDispatch::startup(void)
 		t_stream = MCS_open(getenv("TEST_STACK"), IO_READ_MODE, False, False, 0);
 		if (MCdispatcher -> readstartupstack(t_stream, t_stack) != IO_NORMAL)
 		{
-			MCresult -> sets("failed to read installer stack");
+			MCresult -> setstaticcstring("failed to read installer stack");
 			return IO_ERROR;
 		}
 		MCS_close(t_stream);
@@ -1347,7 +1347,7 @@ IO_stat MCDispatch::startup(void)
 
 		return IO_NORMAL;
 #else
-		MCresult -> sets("installer corrupted");
+		MCresult -> setstaticcstring("installer corrupted");
 		return IO_ERROR;
 #endif
 	}
@@ -1492,7 +1492,7 @@ IO_stat MCModeCheckSaveStack(MCStack *sptr, const MCStringRef filename)
 {
 	if (sptr == MCdispatcher -> getstacks())
 	{
-		MCresult->sets("can't save into installer");
+		MCresult->setstaticcstring("can't save into installer");
 		return IO_ERROR;
 	}
 

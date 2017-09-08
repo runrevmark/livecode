@@ -190,6 +190,9 @@ public:
 	//
 	Exec_stat sets(const MCString &s);
 
+    Exec_stat setcstring(const char *s);
+    Exec_stat setstaticcstring(const char *s);
+
 	// Copy the given string into the variable
 	void copysvalue(const MCString &s);
 

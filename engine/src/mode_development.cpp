@@ -313,7 +313,7 @@ IO_stat MCDispatch::startup(void)
         {
             if (MCdispatcher -> loadfile(MCstacknames[0], sptr) != IO_NORMAL)
             {
-                MCresult -> sets("failed to read stackfile");
+                MCresult -> setstaticcstring("failed to read stackfile");
                 return IO_ERROR;
             }
             

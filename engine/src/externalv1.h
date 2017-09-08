@@ -423,6 +423,13 @@ extern MCExecPoint *MCEPptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/* MCExternalCData type represents a counted byte buffer */
+struct MCExternalCData
+{
+	char *string;
+	uint32_t length;
+};
+
 // MW-2014-01-22: [[ CompatV1 ]] Shim classes that emulate the old MCVariableValue
 //   semantics using the new MCValueRef imp.
 class MCExternalVariable
@@ -462,7 +469,7 @@ public:
     // SN-2014-07-01: [[ ExternalsApiV6 ]] Default string in use is now a StringRef
     //  New function added to get the CData - allowing nil bytes in the string
     MCExternalError GetString(MCExternalValueOptions options, MCStringRef& r_string);
-    MCExternalError GetCData(MCExternalValueOptions options, void* r_data);
+    MCExternalError GetCData(MCExternalValueOptions options, MCExternalCData& r_data);
     MCExternalError GetCString(MCExternalValueOptions options, const char*& r_cstring);
     
     // SN-2015-01-14: [[ Bug 14057 ]] Function added to uniformise the External conversion

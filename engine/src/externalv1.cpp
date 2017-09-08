@@ -692,11 +692,10 @@ MCExternalError MCExternalVariable::ConvertToString(MCValueRef p_value, MCExtern
     return kMCExternalErrorNone;
 }
 // SN-2014-07-16: [[ ExternalsApiV6 ]] Function to get the CData type - allowing nil bytes in the string
-MCExternalError MCExternalVariable::GetCData(MCExternalValueOptions p_options, void *r_value)
+MCExternalError MCExternalVariable::GetCData(MCExternalValueOptions p_options, MCExternalCData& r_value)
 {
 	MCAutoStringRef t_string_value;
 	MCExternalError t_error;
-    MCString t_string;
     uindex_t t_length;
     
 	t_error = GetString(p_options, &t_string_value);
@@ -709,8 +708,9 @@ MCExternalError MCExternalVariable::GetCData(MCExternalValueOptions p_options, v
     if (!MCStringNormalizeAndConvertToNative(*t_string_value, (char_t*&)m_string_conversion, t_length))
         return kMCExternalErrorOutOfMemory;
 	
-	t_string . set(m_string_conversion, t_length);
-    *(MCString*)r_value = t_string;
+    r_value.string = m_string_conversion;
+    r_value.length = t_length;
+    
 	return kMCExternalErrorNone;
 }
 
@@ -1670,7 +1670,7 @@ static MCExternalError MCExternalVariableFetch(MCExternalVariableRef var, MCExte
 	case kMCExternalValueOptionAsReal:
         return var -> GetReal(p_options, *(real64_t *)p_value);
     case kMCExternalValueOptionAsString:
-        return var -> GetCData(p_options, p_value);
+        return var -> GetCData(p_options, *(MCExternalCData *)p_value);
     case kMCExternalValueOptionAsCString:
         return var -> GetCString(p_options, *(const char **)p_value);
         
@@ -2132,7 +2132,8 @@ static MCExternalError MCExternalVariableIterateKeys(MCExternalVariableRef var, 
             case kMCExternalValueOptionAsString:
                 if (!MCStringConvertToCString(t_key_as_string, t_key_as_cstring))
                     return kMCExternalErrorOutOfMemory;
-                *(MCString *)p_key = MCString(t_key_as_cstring, strlen(t_key_as_cstring));
+                static_cast<MCExternalCData *>(p_key)->string = t_key_as_cstring;
+                static_cast<MCExternalCData *>(p_key)->length = strlen(t_key_as_cstring);
                 return kMCExternalErrorNone;
                 
             case kMCExternalValueOptionAsCString:

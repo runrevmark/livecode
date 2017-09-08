@@ -442,9 +442,6 @@ Boolean MCtextarrows = True;
 uint2 MCuserlevel = 8;
 Boolean MCusermodify = True;
 uint2 MCsoundchannel;
-MCString MCtruemcstring;
-MCString MCfalsemcstring;
-MCString MCnullmcstring;
 Boolean MCinlineinput = True;
 
 uint4 MCqtidlerate = 50;
@@ -832,10 +829,6 @@ void X_clear_globals(void)
 	MCcurtheme = nil;
 	MCsslcertificates = nil;
 	MCdefaultnetworkinterface = nil;
-
-	MCtruemcstring = MCtruestring;
-	MCfalsemcstring = MCfalsestring;
-	MCnullmcstring = NULL;
 
 	// MW-2013-03-11: [[ Bug 10713 ]] Make sure we reset the regex cache globals to nil.
 	// JS-2013-07-01: [[ EnhancedFilter ]] Refactored regex caching mechanism.

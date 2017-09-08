@@ -145,9 +145,6 @@ bool X_init(const X_init_options& p_options)
 	////
 
 	MCswapbytes = byte_swapped();
-	MCtruemcstring = MCtruestring;
-	MCfalsemcstring = MCfalsestring;
-	MCnullmcstring = MCnullmcstring;
 
 #ifdef _WINDOWS_DESKTOP
 	// Make sure certain things are already created before MCS_init. This is

@@ -370,9 +370,6 @@ bool X_init(const X_init_options& p_options)
 	////
 	
 	MCswapbytes = byte_swapped();
-	MCtruemcstring = MCtruestring;
-	MCfalsemcstring = MCfalsestring;
-	MCnullmcstring = MCnullmcstring;
 
 	////
 

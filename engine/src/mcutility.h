@@ -146,7 +146,7 @@ public:
 	}
 	
 	char *clone() const;
-	
+
 	// Split this MCString into two at the given character.
 	// Returns true if a split is found, otherwise r_head is equal to
 	// this and r_tail is empty.
@@ -192,15 +192,6 @@ private:
 
 	Node *m_nodes;
 };
-
-extern MCString MCtruemcstring;
-extern MCString MCfalsemcstring;
-extern MCString MCnullmcstring;
-
-inline const MCString &MCU_btos(uint4 condition)
-{
-	return condition ? MCtruemcstring : MCfalsemcstring;
-}
 
 inline uint4 MCU_abs(int4 source)
 {

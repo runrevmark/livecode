@@ -1247,7 +1247,7 @@ void MCExecContext::SetTheResultToCString(const char *p_string)
 
 void MCExecContext::SetTheResultToBool(bool p_bool)
 {
-    MCresult -> sets(MCU_btos(p_bool));
+    MCresult -> setvalueref(p_bool ? kMCTrue : kMCFalse);
     MCresultmode = kMCExecResultModeReturn;
 }
 

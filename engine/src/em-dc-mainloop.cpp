@@ -144,8 +144,6 @@ X_init(const X_init_options& p_options)
 	++MCwaitdepth;
 
 	MCswapbytes = MCEmscriptenIsLittleEndian();
-	MCtruemcstring = MCtruestring;
-	MCfalsemcstring = MCfalsestring;
 
 	/* On Emscripten, we let the engine sleep indefinitely in the
 	 * absence on incoming events. */

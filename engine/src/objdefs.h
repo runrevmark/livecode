@@ -50,10 +50,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define INTERPOLATION_BICUBIC 2
 #define INTERPOLATION_BOX 0
 
-#define STACK_SIZE "10000"
-#define FREE_SIZE  "0"
-#define DISK_SPACE  "1000000"
-
 #define START_ID 1001
 
 #define OPTION_TIME 250

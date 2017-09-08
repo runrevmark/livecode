@@ -1442,16 +1442,12 @@ void MCStack::GetHcStack(MCExecContext& ctxt, bool& r_setting)
 
 void MCStack::GetSize(MCExecContext& ctxt, uinteger_t& r_size)
 {
-	uint4 t_size;
-	/* UNCHECKED */ MCU_stoui4(STACK_SIZE, t_size);
-	r_size = t_size;
+	r_size = 10000;
 }
 
 void MCStack::GetFreeSize(MCExecContext& ctxt, uinteger_t& r_size)
 {
-	uint4 t_size;
-	/* UNCHECKED */ MCU_stoui4(FREE_SIZE, t_size);
-	r_size = t_size;
+	r_size = 0;
 }
 
 void MCStack::GetLockScreen(MCExecContext& ctxt, bool& r_locked)

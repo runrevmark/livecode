@@ -73,65 +73,72 @@ struct MCSortnode
 	}
 };
 
+/* Many of the MCU_ functions previously used the MCString class which treated
+ * a null ptr as a 0 length string. The MCU_strlen function emulates this
+ * behavior. */
+inline uint4 MCU_strlen(const char *p_string)
+{
+    return p_string != nullptr ? strlen(p_string) : 0;
+}
+
 extern void MCU_play();
 extern void MCU_play_stop();
+
 extern void MCU_init();
+
 extern void MCU_watchcursor(MCStack *sptr, Boolean force);
 extern void MCU_unwatchcursor(MCStack *sptr, Boolean force);
+
 extern void MCU_resetprops(Boolean update);
 extern void MCU_saveprops(MCSaveprops &sp);
 extern void MCU_restoreprops(MCSaveprops &sp);
+
 extern int4 MCU_any(int4 max);
-extern bool MCU_getnumberformat(uint2 fw, uint2 trail, uint2 force, MCStringRef& r_string);
-extern void MCU_setnumberformat(MCStringRef p_input, uint2 &fw, uint2 &trailing, uint2 &force);
-extern real8 MCU_stoIEEE(const char *bytes);
-extern real8 MCU_i4tor8(int4 in);
-extern real8 MCU_fwrap(real8 p_x, real8 p_y);
-extern int4 MCU_r8toi4(real8 in);
 extern void MCU_srand();
 extern real8 MCU_drand();
-extern Boolean MCU_comparechar(const char *sptr, char target,
-	                               Boolean isunicode = False);
-extern Boolean MCU_strchr(const char *&, uint4 &, char,
-	                          Boolean isunicode = False);
+
+extern bool MCU_getnumberformat(uint2 fw, uint2 trail, uint2 force, MCStringRef& r_string);
+extern void MCU_setnumberformat(MCStringRef p_input, uint2 &fw, uint2 &trailing, uint2 &force);
+
+extern real8 MCU_stoIEEE(const char *bytes);
+
+extern real8 MCU_i4tor8(int4 in);
+extern int4 MCU_r8toi4(real8 in);
+
+extern real8 MCU_fwrap(real8 p_x, real8 p_y);
+
+extern Boolean MCU_comparechar(const char *sptr, char target, Boolean isunicode = False);
+extern Boolean MCU_strchr(const char *&, uint4 &, char, Boolean isunicode = False);
+extern int4 MCU_strncasecmp(const char *one, const char *two, size_t n);
 inline uint1 MCU_charsize(Boolean isunicode = False);
 extern char *MCU_strtok(char *, const char *);
+
 /* WRAPPER */ extern bool MCU_strtol(MCStringRef p_string, int4& r_l);
-extern int4 MCU_strtol(const char *&, uint4 &, int1, Boolean &done,
-	                       Boolean reals = False, Boolean octals = False);
-extern real8 MCU_strtor8(const char *&, uint4 &, int1, Boolean &r_done,
-						Boolean convertoctals = False);
-extern void MCU_strip(char *sptr, uint2 trailing, uint2 force);
+extern int4 MCU_strtol(const char *&, uint4 &, int1, Boolean &done, Boolean reals = False, Boolean octals = False);
+
+extern real8 MCU_strtor8(const char *&, uint4 &, int1, Boolean &r_done, Boolean convertoctals = False);
 extern uint4 MCU_r8tos(char *&sptr, uint4 &s, real8 n,uint2 fw, uint2 trailing, uint2 force);
 extern bool MCU_r8tos(real8 n, uint2 fw, uint2 trailing, uint2 force, MCStringRef &r_string);
 extern bool MCU_stor8(MCStringRef, real8& r_d, bool co = false);
-extern Boolean MCU_stor8(const MCString&, real8& d, Boolean co = False);
-extern bool MCU_stoi2(MCStringRef, int2 &r_d);
-extern Boolean MCU_stoi2(const MCString&, int2 &d);
+
+extern void MCU_strip(char *sptr, uint2 trailing, uint2 force);
+
+extern bool MCU_stoi2(MCStringRef p_string, int2 &r_d);
 extern bool MCU_stoui2(MCStringRef p_string, uint2 &r_d);
-extern Boolean MCU_stoui2(const MCString&, uint2 &d);
-extern bool MCU_stoi2x2(MCStringRef p_string, int16_t& r_d1, int16_t& r_d2);
-extern Boolean MCU_stoi2x2(const MCString&, int2 &d1, int2 &d2);
-extern bool MCU_stoi2x4(MCStringRef p_string, int16_t& r_d1, int16_t& r_d2, int16_t& r_d3, int16_t& r_d4);
-extern Boolean MCU_stoi2x4(const MCString&, int2 &d1, int2 &d2, int2 &d3, int2 &d4);
-extern bool MCU_stoi4x4(MCStringRef p_string, int32_t& r_d1, int32_t& r_d2, int32_t& r_d3, int32_t& r_d4);
-extern Boolean MCU_stoi4x4(const MCString&, int32_t &d1, int32_t &d2, int32_t &d3, int32_t &d4);
-extern Boolean MCU_stoi4x2(const MCString &s, int32_t &d1, int32_t &d2);
-extern Boolean MCU_stobxb(const MCString& p_string, Boolean &r_left, Boolean& r_right);
 extern bool MCU_stoi4(MCStringRef p_string, int4& r_d);
-extern Boolean MCU_stoi4(const MCString&, int4& d);
+extern Boolean MCU_stoi4(const char *, uint4 l, int4& d);
 extern bool MCU_stoui4(MCStringRef p_string, uint4 &r_d);
-extern Boolean MCU_stoui4(const MCString&, uint4& d);
+extern Boolean MCU_stoui4(const char *, uint4 l, uint4& d);
+
+extern bool MCU_stoi2x2(MCStringRef p_string, int16_t& r_d1, int16_t& r_d2);
+extern bool MCU_stoi2x4(MCStringRef p_string, int16_t& r_d1, int16_t& r_d2, int16_t& r_d3, int16_t& r_d4);
+extern bool MCU_stoi4x4(MCStringRef p_string, int32_t& r_d1, int32_t& r_d2, int32_t& r_d3, int32_t& r_d4);
+
 extern bool MCU_stoui4x2(MCStringRef p_string, uint4 &r_d1, uint4 &r_d2);
 extern bool MCU_stob(MCStringRef p_string, bool& r_condition);
-extern Boolean MCU_stob(const MCString&, Boolean& condition);
-extern int4 MCU_strncasecmp(const char *one, const char *two, size_t n);
-extern Boolean MCU_offset(const MCString &p, const MCString &w,
-	                          uint4 &offset, Boolean casesensitive = False);
-extern void MCU_additem(char *&dptr, const char *sptr, Boolean first);
-extern void MCU_addline(char *&dptr, const char *sptr, Boolean first);
-extern void MCU_break_string(const MCString &s, MCString *&ptrs, uint2 &nptrs,
-	                             Boolean isunicode = False);
+
+extern void MCU_break_string(const char *s, MCString *&ptrs, uint2 &nptrs, Boolean isunicode = False);
+extern Boolean MCU_offset(const char *, const char *, uint4& offset, Boolean cs = False);
 
 #ifndef _DEBUG_MEMORY
 extern void MCU_realloc(char **data, uint4 osize, uint4 nsize, uint4 csize);

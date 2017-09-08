@@ -1516,16 +1516,16 @@ bool MCNetPBMImageLoader::LoadHeader(uint32_t &r_width, uint32_t &r_height, uint
 		m_format = t_token[1] - '0';
 
 		t_success = m_reader->GetToken(t_token, t_token_size) &&
-			MCU_stoui4(MCString((const char*)t_token, t_token_size), t_width);
+			MCU_stoui4((const char*)t_token, t_token_size, t_width);
 	}
 
 	if (t_success)
 		t_success = m_reader->GetToken(t_token, t_token_size) &&
-		MCU_stoui4(MCString((const char*)t_token, t_token_size), t_height);
+		MCU_stoui4((const char*)t_token, t_token_size, t_height);
 
 	if (t_success && m_format != 1 && m_format != 4)
 		t_success = m_reader->GetToken(t_token, t_token_size) &&
-		MCU_stoui4(MCString((const char*)t_token, t_token_size), m_max_value);
+		MCU_stoui4((const char*)t_token, t_token_size, m_max_value);
 
 	if (t_success)
 		t_success = t_width > 0 && t_height > 0 && m_max_value < 65536;
@@ -1634,7 +1634,7 @@ bool MCNetPBMImageLoader::LoadFrames(MCBitmapFrame *&r_frames, uint32_t &r_count
 			for (uindex_t x = 0; t_success && x < t_width * t_channel_count; x++)
 			{
 				t_success = m_reader->GetToken(t_token, t_token_size) &&
-				MCU_stoui4(MCString((const char*)t_token, t_token_size), t_value);
+				MCU_stoui4((const char*)t_token, t_token_size, t_value);
 
 				if (t_success)
 					t_success = t_value <= m_max_value;
@@ -1783,7 +1783,7 @@ bool c_bitmap_split_define(const char *p_line, char *&r_name, c_bitmap_define &r
 		while (t_name_ptr[t_value_index] == ' ')
 			t_value_index++;
 
-		t_success = True == MCU_stoi4(MCString(t_name_ptr + t_value_index), t_value);
+		t_success = True == MCU_stoi4(t_name_ptr + t_value_index, strlen(t_name_ptr + t_value_index), t_value);
 	}
 
 	if (t_success)

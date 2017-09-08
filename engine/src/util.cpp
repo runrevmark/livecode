@@ -649,14 +649,6 @@ uint4 MCU_r8tos(char *&d, uint4 &s, real8 n,
 	return strlen(d);
 }
 
-/* WRAPPER */
-bool MCU_stor8(MCStringRef p_string, real8 &r_d, bool p_convert_octals)
-{
-    MCAutoStringRefAsCString t_cstring;
-    t_cstring . Lock(p_string);
-	return True == MCU_stor8(MCString(*t_cstring, strlen(*t_cstring)), r_d, p_convert_octals);
-}
-
 Boolean MCU_stor8(const MCString &s, real8 &d, Boolean convertoctals)
 {
 	const char *sptr = s.getstring();
@@ -740,6 +732,25 @@ real8 MCU_strtor8(const char *&r_str, uint4 &r_len, int1 p_delim, Boolean &r_don
 	return d;
 }
 
+/* WRAPPER */
+bool MCU_stor8(MCStringRef p_string, real8 &r_d, bool p_convert_octals)
+{
+    MCAutoStringRefAsCString t_cstring;
+    t_cstring . Lock(p_string);
+	return True == MCU_stor8(MCString(*t_cstring, strlen(*t_cstring)), r_d, p_convert_octals);
+}
+
+static Boolean MCU_stoi2(const MCString &s, int2 &d)
+{
+	const char *sptr = s.getstring();
+	uint4 l = s.getlength();
+	Boolean done;
+	d = MCU_strtol(sptr, l, '\0', done, True, False);
+	if (!done || l != 0)
+		return False;
+	return True;
+}
+
 /* WRAPPER */ bool MCU_stoi2(MCStringRef p_string, int2 &r_d)
 {
     MCAutoStringRefAsCString t_cstring;
@@ -747,7 +758,7 @@ real8 MCU_strtor8(const char *&r_str, uint4 &r_len, int1 p_delim, Boolean &r_don
 	return True == MCU_stoi2(MCString(*t_cstring, strlen(*t_cstring)), r_d);
 }
 
-Boolean MCU_stoi2(const MCString &s, int2 &d)
+static Boolean MCU_stoui2(const MCString &s, uint2 &d)
 {
 	const char *sptr = s.getstring();
 	uint4 l = s.getlength();
@@ -765,18 +776,7 @@ Boolean MCU_stoi2(const MCString &s, int2 &d)
 	return True == MCU_stoui2(MCString(*t_cstring, strlen(*t_cstring)), r_d);
 }
 
-Boolean MCU_stoui2(const MCString &s, uint2 &d)
-{
-	const char *sptr = s.getstring();
-	uint4 l = s.getlength();
-	Boolean done;
-	d = MCU_strtol(sptr, l, '\0', done, True, False);
-	if (!done || l != 0)
-		return False;
-	return True;
-}
-
-Boolean MCU_stoi2x2(const MCString &s, int2 &d1, int2 &d2)
+static Boolean MCU_stoi2x2(const MCString &s, int2 &d1, int2 &d2)
 {
 	const char *sptr = s.getstring();
 	uint4 l = s.getlength();
@@ -797,7 +797,34 @@ Boolean MCU_stoi2x2(const MCString &s, int2 &d1, int2 &d2)
 	return True == MCU_stoi2x2(MCString(*t_cstring, strlen(*t_cstring)), r_d1, r_d2);
 }
 
-Boolean MCU_stoi2x4(const MCString &s, int2 &d1, int2 &d2, int2 &d3, int2 &d4)
+static Boolean MCU_stoi4x4(const MCString &s, int32_t &d1, int32_t &d2, int32_t &d3, int32_t &d4)
+{
+	const char *sptr = s.getstring();
+	uint4 l = s.getlength();
+	Boolean done;
+	d1 = MCU_strtol(sptr, l, ',', done, True, False);
+	if (!done || l == 0)
+		return False;
+	d2 = MCU_strtol(sptr, l, ',', done, True, False);
+	if (!done || l == 0)
+		return False;
+	d3 = MCU_strtol(sptr, l, ',', done, True, False);
+	if (!done || l == 0)
+		return False;
+	d4 = MCU_strtol(sptr, l, '\0', done, True, False);
+	if (!done || l != 0)
+		return False;
+	return True;
+}
+
+/* WRAPPER */ bool MCU_stoi4x4(MCStringRef p_string, int32_t& r_d1, int32_t& r_d2, int32_t& r_d3, int32_t& r_d4)
+{
+    MCAutoStringRefAsCString t_cstring;
+    t_cstring . Lock(p_string);
+	return True == MCU_stoi4x4(MCString(*t_cstring, strlen(*t_cstring)), r_d1, r_d2, r_d3, r_d4);
+}
+
+static Boolean MCU_stoi2x4(const MCString &s, int2 &d1, int2 &d2, int2 &d3, int2 &d4)
 {
 	int32_t t_d1, t_d2, t_d3, t_d4;
 	if (!MCU_stoi4x4(s, t_d1, t_d2, t_d3, t_d4))
@@ -818,43 +845,11 @@ Boolean MCU_stoi2x4(const MCString &s, int2 &d1, int2 &d2, int2 &d3, int2 &d4)
 	return True == MCU_stoi2x4(MCString(*t_cstring, strlen(*t_cstring)), r_d1, r_d2, r_d3, r_d4);
 }
 
-/* WRAPPER */ bool MCU_stoi4x4(MCStringRef p_string, int32_t& r_d1, int32_t& r_d2, int32_t& r_d3, int32_t& r_d4)
+Boolean MCU_stoi4(const char *sptr, uint4 l, int4 &d)
 {
-    MCAutoStringRefAsCString t_cstring;
-    t_cstring . Lock(p_string);
-	return True == MCU_stoi4x4(MCString(*t_cstring, strlen(*t_cstring)), r_d1, r_d2, r_d3, r_d4);
-}
-
-Boolean MCU_stoi4x4(const MCString &s, int32_t &d1, int32_t &d2, int32_t &d3, int32_t &d4)
-{
-	const char *sptr = s.getstring();
-	uint4 l = s.getlength();
 	Boolean done;
-	d1 = MCU_strtol(sptr, l, ',', done, True, False);
-	if (!done || l == 0)
-		return False;
-	d2 = MCU_strtol(sptr, l, ',', done, True, False);
-	if (!done || l == 0)
-		return False;
-	d3 = MCU_strtol(sptr, l, ',', done, True, False);
-	if (!done || l == 0)
-		return False;
-	d4 = MCU_strtol(sptr, l, '\0', done, True, False);
+	d = MCU_strtol(sptr, l, '\0', done);
 	if (!done || l != 0)
-		return False;
-	return True;
-}
-
-Boolean MCU_stoi4x2(const MCString &s, int32_t &d1, int32_t &d2)
-{
-	const char *sptr = s.getstring();
-	uint4 l = s.getlength();
-	Boolean done;
-	d1 = MCU_strtol(sptr, l, ',', done, True, False);
-	if (!done || l == 0)
-		return False;
-	d2 = MCU_strtol(sptr, l, ',', done, True, False);
-	if (!done || l == 0)
 		return False;
 	return True;
 }
@@ -863,35 +858,23 @@ Boolean MCU_stoi4x2(const MCString &s, int32_t &d1, int32_t &d2)
 {
     MCAutoStringRefAsCString t_cstring;
     t_cstring . Lock(p_string);
-	return True == MCU_stoi4(MCString(*t_cstring, strlen(*t_cstring)), r_d);
+	return True == MCU_stoi4(*t_cstring, strlen(*t_cstring), r_d);
 }
 
-Boolean MCU_stoi4(const MCString &s, int4 &d)
+Boolean MCU_stoui4(const char *sptr, uint4 l, uint4 &d)
 {
-	const char *sptr = s.getstring();
-	uint4 l = s.getlength();
 	Boolean done;
 	d = MCU_strtol(sptr, l, '\0', done);
 	if (!done || l != 0)
 		return False;
 	return True;
 }
+
 /* WRAPPER */ bool MCU_stoui4(MCStringRef p_string, uint4 &r_d)
 {
     MCAutoStringRefAsCString t_cstring;
     t_cstring . Lock(p_string);
-	return True == MCU_stoui4(MCString(*t_cstring, strlen(*t_cstring)), r_d);
-}
-
-Boolean MCU_stoui4(const MCString &s, uint4 &d)
-{
-	const char *sptr = s.getstring();
-	uint4 l = s.getlength();
-	Boolean done;
-	d = MCU_strtol(sptr, l, '\0', done);
-	if (!done || l != 0)
-		return False;
-	return True;
+	return True == MCU_stoui4(*t_cstring, strlen(*t_cstring), r_d);
 }
 
 bool MCU_stoui4x2(MCStringRef p_string, uint4 &r_d1, uint4 &r_d2)
@@ -909,6 +892,25 @@ bool MCU_stoui4x2(MCStringRef p_string, uint4 &r_d1, uint4 &r_d2)
 	if (!done || l != 0)
 		return false;
 	return true;
+}
+
+static Boolean MCU_stob(const MCString &s, Boolean &condition)
+{
+	if (s.getlength() == 4 && (s.getstring() == MCtruestring
+	                           || !MCU_strncasecmp(s.getstring(),
+	                                               MCtruestring, 4)))
+	{
+		condition = True;
+		return True;
+	}
+	if (s.getlength() == 5 && (s.getstring() == MCfalsestring
+	                           || !MCU_strncasecmp(s.getstring(),
+	                                               MCfalsestring, 5)))
+	{
+		condition = False;
+		return True;
+	}
+	return False;
 }
 
 /* WRAPPER */ bool MCU_stob(MCStringRef p_string, bool& r_condition)
@@ -929,38 +931,19 @@ bool MCU_stoui4x2(MCStringRef p_string, uint4 &r_d1, uint4 &r_d2)
 	return false;
 }
 
-Boolean MCU_stob(const MCString &s, Boolean &condition)
-{
-	if (s.getlength() == 4 && (s.getstring() == MCtruestring
-	                           || !MCU_strncasecmp(s.getstring(),
-	                                               MCtruestring, 4)))
-	{
-		condition = True;
-		return True;
-	}
-	if (s.getlength() == 5 && (s.getstring() == MCfalsestring
-	                           || !MCU_strncasecmp(s.getstring(),
-	                                               MCfalsestring, 5)))
-	{
-		condition = False;
-		return True;
-	}
-	return False;
-}
-
-Boolean MCU_offset(const MCString &part, const MCString &whole,
+Boolean MCU_offset(const char *part, const char *whole,
                    uint4 &offset, Boolean casesensitive)
 {
-	uint4 tl = part.getlength();
-	uint4 sl = whole.getlength();
+	uint4 tl = MCU_strlen(part);
+	uint4 sl = MCU_strlen(whole);
 	offset = 0;
 
 	if (tl > sl || tl == 0 || sl == 0)
 		return False;
 	uint4 length = sl - tl;
 	uint4 i;
-	const uint1 *pptr = (uint1 *)part.getstring();
-	const uint1 *wptr = (uint1 *)whole.getstring();
+	const uint1 *pptr = (uint1 *)part;
+	const uint1 *wptr = (uint1 *)whole;
 	if (casesensitive)
 		for (i = 0 ; i <= length ; i++)
 		{
@@ -1008,52 +991,18 @@ Boolean MCU_offset(const MCString &part, const MCString &whole,
 	return False;
 }
 
-void MCU_additem(char *&dptr, const char *sptr, Boolean first)
-{
-	uint4 dlength = strlen(dptr);
-	uint4 slength;
-	if (sptr == NULL)
-		slength = 0;
-	else
-		slength = strlen(sptr);
-	MCU_realloc((char **)&dptr, dlength, dlength + slength + 2, sizeof(char));
-	if (!first)
-		dptr[dlength++] = ',';
-	if (sptr == NULL)
-		dptr[dlength++] = '\0';
-	else
-		strcpy(&dptr[dlength], sptr);
-}
-
-void MCU_addline(char *&dptr, const char *sptr, Boolean first)
-{
-	uint4 dlength = strlen(dptr);
-	uint4 slength;
-	if (sptr == NULL)
-		slength = 0;
-	else
-		slength = strlen(sptr);
-	MCU_realloc((char **)&dptr, dlength, dlength + slength + 2, sizeof(char));
-	if (!first)
-		dptr[dlength++] = '\n';
-	if (sptr == NULL)
-		dptr[dlength++] = '\0';
-	else
-		strcpy(&dptr[dlength], sptr);
-}
-
-void MCU_break_string(const MCString &s, MCString *&ptrs, uint2 &nptrs,
+void MCU_break_string(const char *string, MCString *&ptrs, uint2 &nptrs,
                       Boolean isunicode)
 {
 	delete ptrs;
 	ptrs = NULL;
 	nptrs = 0;
-	uint4 len = s.getlength();
-	if (isunicode && (long)len & 1)
-		len--;
-	const char *string = s.getstring();
 	if (string == NULL)
 		return;
+    
+	uint4 len = strlen(string);
+	if (isunicode && (long)len & 1)
+		len--;
 	const char *sptr = string;
 	nptrs = 1;
 	uint4 tlen = len;

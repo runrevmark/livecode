@@ -286,7 +286,7 @@ void MCVisualEffect::compile_effect(MCSyntaxFactoryRef ctxt)
 	{
 		MCSyntaxFactoryBeginExpression(ctxt, line, pos);
 		t_parameter -> value -> compile(ctxt);
-		MCSyntaxFactoryEvalConstantOldString(ctxt, t_parameter -> key);
+		MCSyntaxFactoryEvalConstantCString(ctxt, t_parameter -> key);
 		MCSyntaxFactoryEvalConstantBool(ctxt, t_parameter -> has_id);
 		MCSyntaxFactoryEvalMethod(ctxt, kMCInterfaceMakeVisualEffectArgumentMethodInfo);
 		MCSyntaxFactoryEndExpression(ctxt);

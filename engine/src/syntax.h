@@ -49,7 +49,7 @@ void MCSyntaxFactoryCopyLog(MCSyntaxFactoryRef factory, MCStringRef& r_log);
 bool MCSyntaxFactoryIsValid(MCSyntaxFactoryRef factory);
 
 void MCSyntaxFactoryEvalConstant(MCSyntaxFactoryRef factory, MCValueRef value);
-void MCSyntaxFactoryEvalConstantOldString(MCSyntaxFactoryRef factory, const MCString& string);
+void MCSyntaxFactoryEvalConstantCString(MCSyntaxFactoryRef factory, const char *string);
 void MCSyntaxFactoryEvalConstantUInt(MCSyntaxFactoryRef factory, uinteger_t value);
 void MCSyntaxFactoryEvalConstantInt(MCSyntaxFactoryRef factory, integer_t value);
 void MCSyntaxFactoryEvalConstantDouble(MCSyntaxFactoryRef factory, double value);

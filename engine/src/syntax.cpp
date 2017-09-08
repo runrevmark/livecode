@@ -160,10 +160,10 @@ void MCSyntaxFactoryEvalConstant(MCSyntaxFactoryRef self, MCValueRef p_value)
 	MCSyntaxFactoryPushOperand(self);
 }
 
-void MCSyntaxFactoryEvalConstantOldString(MCSyntaxFactoryRef self, const MCString& p_value)
+void MCSyntaxFactoryEvalConstantCString(MCSyntaxFactoryRef self, const char* p_value)
 {
 	MCAutoStringRef t_value_string;
-	/* UNCHECKED */ MCStringCreateWithNativeChars((const char_t *)p_value . getstring(), p_value . getlength(), &t_value_string);
+	/* UNCHECKED */ MCStringCreateWithNativeChars((const char_t *)p_value, strlen(p_value), &t_value_string);
 	MCSyntaxFactoryEvalConstant(self, *t_value_string);
 }
 

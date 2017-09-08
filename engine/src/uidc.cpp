@@ -1683,8 +1683,10 @@ Boolean MCUIDC::lookupcolor(MCStringRef s, MCColor *color)
     uint4 slength = strlen(*t_cstring);
     /* UNCHECKED */ MCAutoPointer<char[]> startptr = new (nothrow) char[slength + 1];
 
-    MCU_lower(*startptr, *t_cstring);
-
+    /* Lowercase the string */
+	for (uint4 i = 0 ; i < slength ; i++)
+		(*startptr)[i] = MCS_tolower((*t_cstring)[i]);
+    
     (*startptr)[slength] = '\0';
 
     char* sptr = *startptr;

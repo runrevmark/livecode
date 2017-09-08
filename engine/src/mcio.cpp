@@ -453,10 +453,10 @@ IO_stat IO_discard_cstring_legacy(IO_handle stream, uint1 size)
 	return IO_read_cstring_legacy(&t_discarded, stream, size);
 }
 
-IO_stat IO_write_string_legacy_full(const MCString &p_string, IO_handle p_stream, uint8_t p_size, bool p_write_null)
+IO_stat IO_write_string_legacy_full(const char *p_string, uint32_t p_length, IO_handle p_stream, uint8_t p_size, bool p_write_null)
 {
 	IO_stat stat = IO_NORMAL;
-	uint32_t t_strlen = p_string.getlength();
+	uint32_t t_strlen = p_length;
 	uint4 length = 0;
 	uint32_t t_inc = p_write_null ? 1 : 0;
 	switch (p_size)
@@ -485,7 +485,7 @@ IO_stat IO_write_string_legacy_full(const MCString &p_string, IO_handle p_stream
 	}
 	if (length)
 	{
-		stat = MCStackSecurityWrite(p_string.getstring(), length - t_inc, p_stream);
+		stat = MCStackSecurityWrite(p_string, length - t_inc, p_stream);
 		if (stat == IO_NORMAL && p_write_null)
 			stat = IO_write_uint1(0, p_stream);
 	}
@@ -494,7 +494,7 @@ IO_stat IO_write_string_legacy_full(const MCString &p_string, IO_handle p_stream
 
 IO_stat IO_write_cstring_legacy(const char *string, IO_handle stream, uint1 size)
 {
-	return IO_write_string_legacy_full(MCString(string), stream, size, true);
+	return IO_write_string_legacy_full(string, MCU_strlen(string), stream, size, true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -646,7 +646,7 @@ IO_stat IO_write_stringref_legacy(MCStringRef p_string, IO_handle p_stream, bool
 	
 	uindex_t t_length = MCDataGetLength(t_data);
 	const char *t_bytes = (const char *)MCDataGetBytePtr(t_data);
-	stat = IO_write_string_legacy_full(MCString(t_bytes, t_length), p_stream, p_size, true);
+	stat = IO_write_string_legacy_full(t_bytes, t_length, p_stream, p_size, true);
 	MCValueRelease(t_data);
 	return stat;
 }
@@ -730,7 +730,7 @@ IO_stat IO_write_stringref_legacy_utf8(MCStringRef p_string, IO_handle stream, u
 	uindex_t t_length = 0;
 	if (!MCStringConvertToUTF8(p_string, t_bytes, t_length))
 		return IO_ERROR;
-	stat = IO_write_string_legacy_full(MCString(t_bytes, t_length), stream, size, true);
+	stat = IO_write_string_legacy_full(t_bytes, t_length, stream, size, true);
 	MCMemoryDeleteArray(t_bytes);
 	return stat;
 }

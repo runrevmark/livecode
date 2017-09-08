@@ -733,7 +733,7 @@ IO_stat MCParagraph::save(IO_handle stream, uint4 p_part, uint32_t p_version)
 
         // AL-2014-07-15: [[ Bug 12672 ]] If the data is larger than MAXUINT2,
         //  make sure appropriate size is passed to IO_write_string_legacy_full
-		if ((stat = IO_write_string_legacy_full(MCString(t_data, t_data_len), stream, t_data_len > MAXUINT2 ? 4 : 2, true)) != IO_NORMAL)
+		if ((stat = IO_write_string_legacy_full(t_data, t_data_len, stream, t_data_len > MAXUINT2 ? 4 : 2, true)) != IO_NORMAL)
 			return stat;
 
 		// If the string had to be byte swapped, delete the allocated data

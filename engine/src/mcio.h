@@ -117,7 +117,7 @@ extern IO_stat IO_write_mccolor(const MCColor& color, IO_handle stream);
 
 // These methods read/write a legacy string (as native).
 extern IO_stat IO_read_string_legacy_full(char *&r_string, uint32_t &r_length, IO_handle p_stream, uint8_t p_size, bool p_includes_null, bool p_translate);
-extern IO_stat IO_write_string_legacy_full(const MCString &string, IO_handle stream, uint1 size, bool p_write_null);
+extern IO_stat IO_write_string_legacy_full(const char *p_string, uint32_t p_length, IO_handle stream, uint1 size, bool p_write_null);
 extern IO_stat IO_read_cstring_legacy(char*& r_string, IO_handle stream, uint1 size);
 extern IO_stat IO_write_cstring_legacy(const char* string, IO_handle stream, uint1 size);
 // Read and immediately discard a legacy string

@@ -1538,7 +1538,7 @@ static bool save_array_to_handle(void *p_context, MCArrayRef p_array, MCNameRef 
         if (!MCStringConvertToNative(*t_string, &t_c_string, t_length))
             return false;
         
-		t_stat = IO_write_string_legacy_full(MCString((const char*)*t_c_string, (uint4)t_length), t_stream, t_size, false);
+		t_stat = IO_write_string_legacy_full((const char*)*t_c_string, t_length, t_stream, t_size, false);
 	}
 	
 	return t_stat == IO_NORMAL;

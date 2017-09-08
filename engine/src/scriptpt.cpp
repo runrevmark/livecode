@@ -146,7 +146,8 @@ MCScriptPoint::MCScriptPoint(MCScriptPoint &sp)
 	curptr = sp.curptr;
 	tokenptr = sp.tokenptr;
 	backupptr = sp.backupptr;
-	token = sp.token;
+    token_string = sp.token_string;
+    token_length = sp.token_length;
 	line = sp.line;
 	pos = sp.pos;
 	escapes = sp.escapes;
@@ -244,7 +245,8 @@ MCScriptPoint& MCScriptPoint::operator =(const MCScriptPoint& sp)
 	tokenptr = sp.tokenptr;
 	backupptr = sp.backupptr;
     endptr = sp.endptr;
-	token = sp.token;
+    token_string = sp.token_string;
+    token_length = sp.token_length;
 	line = sp.line;
 	pos = sp.pos;
     m_type = sp.m_type;
@@ -260,7 +262,7 @@ MCScriptPoint::~MCScriptPoint()
 
 void MCScriptPoint::cleartoken(void)
 {
-	token . setlength(0);
+	token_length = 0;
 	MCValueAssign(token_nameref, kMCEmptyName);
 }
 
@@ -276,7 +278,7 @@ MCNameRef MCScriptPoint::gettoken_nameref(void)
         MCAutoStringRef t_string_token;
         if (token_nameref != nil)
             MCValueRelease(token_nameref);
-        /* UNCHECKED */ MCStringCreateWithBytes((const byte_t *)token . getstring(), (token . getlength() * 2), kMCStringEncodingUTF16, false, &t_string_token);
+        /* UNCHECKED */ MCStringCreateWithBytes((const byte_t *)token_string, (token_length * 2), kMCStringEncodingUTF16, false, &t_string_token);
 		/* UNCHECKED */ MCNameCreate(*t_string_token, token_nameref);
     }
 	return token_nameref;
@@ -1116,8 +1118,8 @@ Parse_stat MCScriptPoint::next(Symbol_type &type)
 			tokenptr = startptr;
 			
 			// Set the token string appropriately.
-			token.setstring((const char *)tokenptr);
-			token.setlength(curptr - tokenptr);
+			token_string = (const char *)tokenptr;
+			token_length = curptr - tokenptr;
 			
 			// If we aren't looking at the end of the data, then advance by 5 to skip '<?rev'.
 			if (*curptr != '\0')
@@ -1140,7 +1142,7 @@ Parse_stat MCScriptPoint::next(Symbol_type &type)
 	{
 		if (stat == PS_ERROR)
 			MCperror->add(PE_PARSE_BADCHAR, *this);
-		token.setstring((const char *)curptr);
+        token_string = (const char *)curptr;
 		return stat;
 	}
 	
@@ -1158,7 +1160,7 @@ Parse_stat MCScriptPoint::next(Symbol_type &type)
 	}
 	if (type == ST_EOF)
 	{
-		token.setstring((const char *)curptr);
+        token_string = (const char *)curptr;
 		return PS_EOF;
 	}
 	if (type == ST_EOL || type == ST_SEMI)
@@ -1170,7 +1172,7 @@ Parse_stat MCScriptPoint::next(Symbol_type &type)
 	}
 	if (type == ST_LIT)
 		advance();
-	token.setstring((const char *)curptr);
+    token_string = (const char *)curptr;
 
 	switch (type)
 	{
@@ -1250,11 +1252,11 @@ Parse_stat MCScriptPoint::next(Symbol_type &type)
 	}
 	if (type == ST_LIT && gettype(getcurrent()) == ST_LIT)
 	{
-		token.setlength(curptr - tokenptr - 1);
+		token_length = curptr - tokenptr - 1;
 		advance();
 	}
 	else
-		token.setlength(curptr - tokenptr);
+		token_length = curptr - tokenptr;
 	pos += curptr - startptr;
 
 	m_type = type;
@@ -1278,7 +1280,7 @@ Parse_stat MCScriptPoint::lookup(Script_point t, const LT *&dlt)
 	if (m_type == ST_LIT)
 		return PS_NO_MATCH;
 	
-	if (token.getlength())
+	if (token_length)
 	{
 		const LT *table = table_pointers[t];
 		uint2 high = table_sizes[t];
@@ -1292,9 +1294,9 @@ Parse_stat MCScriptPoint::lookup(Script_point t, const LT *&dlt)
 		{
 			// Both the table and the token are encoded in UTF-8
 			uint2 mid = low + ((high - low) >> 1);
-			cond = MCU_strncasecmp(token_cstring, table[mid].token, token.getlength());
+			cond = MCU_strncasecmp(token_cstring, table[mid].token, token_length);
 			if (cond == 0)
-				cond -= table[mid].token[token.getlength()];
+				cond -= table[mid].token[token_length];
 			if (cond < 0)
 				high = mid;
 			else
@@ -1322,9 +1324,9 @@ bool MCScriptPoint::lookupconstantvalue(const char *& r_value)
 	while (low < high)
 	{
 		uint2 mid = low + ((high - low) >> 1);
-		cond = MCU_strncasecmp(token_cstring, constant_table[mid].token, token.getlength());
+		cond = MCU_strncasecmp(token_cstring, constant_table[mid].token, token_length);
 		if (cond == 0)
-			cond -= constant_table[mid].token[token.getlength()];
+			cond -= constant_table[mid].token[token_length];
 		if (cond < 0)
 			high = mid;
 		else
@@ -1358,9 +1360,9 @@ Parse_stat MCScriptPoint::lookupconstant(MCExpression **dest)
 	while (low < high)
 	{
 		uint2 mid = low + ((high - low) >> 1);
-		cond = MCU_strncasecmp(token_cstring, constant_table[mid].token, token.getlength());
+		cond = MCU_strncasecmp(token_cstring, constant_table[mid].token, token_length);
 		if (cond == 0)
-			cond -= constant_table[mid].token[token.getlength()];
+			cond -= constant_table[mid].token[token_length];
 		if (cond < 0)
 			high = mid;
 		else
@@ -1368,7 +1370,7 @@ Parse_stat MCScriptPoint::lookupconstant(MCExpression **dest)
 				low = mid + 1;
 			else
 			{
-				if (token.getlength() == 4 && MCU_strncasecmp(token_cstring, "null", 4) == 0)
+				if (token_length == 4 && MCU_strncasecmp(token_cstring, "null", 4) == 0)
 				{
 					// Create a stringref that contains an explicit nul character
                     MCAutoStringRef t_nul_string;
@@ -1376,7 +1378,7 @@ Parse_stat MCScriptPoint::lookupconstant(MCExpression **dest)
                     
                     *dest = new (nothrow) MCConstant(*t_nul_string, BAD_NUMERIC);
 				}
-                else if (token.getlength() == 5 && MCU_strncasecmp(token_cstring, "empty", 5) == 0)
+                else if (token_length == 5 && MCU_strncasecmp(token_cstring, "empty", 5) == 0)
                 {
                     // Uses the kMCNull as a StringRef - that's what is expected from 'empty'
                     *dest = new (nothrow) MCConstant(kMCEmptyString, BAD_NUMERIC);

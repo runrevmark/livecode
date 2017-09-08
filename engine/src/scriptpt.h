@@ -47,7 +47,13 @@ class MCScriptPoint
 	const unichar_t *tokenptr;
 	const unichar_t *backupptr;
     const unichar_t *endptr;
-	MCString token;
+    
+    /* The current token pointer and length. If it points anywere, this always
+     * points to within the data held by utf16_script, so it is actually UTF-16
+     * and not char. */
+    const char *token_string;
+    uint4 token_length;
+    
 	MCNameRef token_nameref;
 	uint2 line;
 	uint2 pos;
@@ -131,7 +137,7 @@ public:
     {
         // Warning: explicitly truncated to a uindex_t
         // This imposes a limit of 4GB on scripts
-        size_t index = (const unichar_t *)token . getstring() + length - endptr;
+        size_t index = (const unichar_t *)token_string + length - endptr;
         MCAssert(uindex_t(index) == index);
         
         return uindex_t(index);

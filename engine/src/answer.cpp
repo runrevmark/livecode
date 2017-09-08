@@ -38,7 +38,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "dispatch.h"
 #include "securemode.h"
 
-#include "meta.h"
 #include "answer.h"
 #include "printer.h"
 

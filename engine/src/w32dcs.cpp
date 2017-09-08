@@ -38,7 +38,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "w32dc.h"
 #include "resource.h"
-#include "meta.h"
 #include "mode.h"
 
 #include "w32text.h"
@@ -808,7 +807,7 @@ uint2 MCScreenDC::getpad()
 
 Window MCScreenDC::getroot()
 {
-	static Meta::static_ptr_t<_Drawable> mydrawable;
+	static MCAutoPointer<_Drawable> mydrawable;
 	if (mydrawable == DNULL)
 		mydrawable = new (nothrow) _Drawable;
 	mydrawable->type = DC_WINDOW;

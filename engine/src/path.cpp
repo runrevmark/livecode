@@ -32,8 +32,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "path.h"
 
-#include "meta.h"
-
 #include "pathprivate.h"
 #include "context.h"
 
@@ -197,10 +195,10 @@ MCPath *MCPath::create_path(uint1 *p_commands, uint32_t p_command_count, int4 *p
 
 MCPath *MCPath::create_line(int2 fx, int2 fy, int2 tx, int2 ty, bool adjust)
 {
-	static Meta::static_ptr_t<MCPath> s_line_cache;
+	static MCAutoPointer<MCPath> s_line_cache;
 	MCPath *t_line;
 
-	t_line = s_line_cache;
+	t_line = *s_line_cache;
 	cache(t_line, 2, 2);
 	s_line_cache = t_line;
 
@@ -211,7 +209,7 @@ MCPath *MCPath::create_line(int2 fx, int2 fy, int2 tx, int2 ty, bool adjust)
 		PATH_CHECK(t_line, 2, 2);
 	PATH_END
 
-	return s_line_cache;
+	return *s_line_cache;
 }
 
 MCPath *MCPath::create_polyline(MCPoint *points, uint2 count, bool adjust)
@@ -261,13 +259,13 @@ MCPath *MCPath::create_polypolyline(MCLineSegment *segments, uint2 count, bool a
 
 MCPath *MCPath::create_rectangle(const MCRectangle& rect, bool adjust)
 {
-	static Meta::static_ptr_t<MCPath> s_rectangle_cache;
+	static MCAutoPointer<MCPath> s_rectangle_cache;
 	MCPath *t_rectangle;
 
 	if (rect . width == 0 || rect . height == 0)
 		return create_empty();
 
-	t_rectangle = s_rectangle_cache;
+	t_rectangle = *s_rectangle_cache;
 	cache(t_rectangle, 5, 4);
 	s_rectangle_cache = t_rectangle;
 
@@ -288,7 +286,7 @@ MCPath *MCPath::create_rectangle(const MCRectangle& rect, bool adjust)
 		PATH_CHECK(t_rectangle, 5, 4);
 	PATH_END
 
-	return s_rectangle_cache;
+	return *s_rectangle_cache;
 }
 
 // We approximate the circular corners by cubic bezier curves. For an arc radius R
@@ -317,7 +315,7 @@ MCPath *MCPath::create_rectangle(const MCRectangle& rect, bool adjust)
 //
 MCPath *MCPath::create_rounded_rectangle(const MCRectangle& rect, uint2 radius, bool adjust)
 {
-	static Meta::static_ptr_t<MCPath> s_round_rectangle_cache;
+	static MCAutoPointer<MCPath> s_round_rectangle_cache;
 	MCPath *t_round_rectangle;
 
 	if (rect . width == 0 || rect . height == 0)
@@ -329,7 +327,7 @@ MCPath *MCPath::create_rounded_rectangle(const MCRectangle& rect, uint2 radius, 
 	if (radius == 0)
 		return create_rectangle(rect, adjust);
 
-	t_round_rectangle = s_round_rectangle_cache;
+	t_round_rectangle = *s_round_rectangle_cache;
 	cache(t_round_rectangle, 9, 16);
 	s_round_rectangle_cache = t_round_rectangle;
 
@@ -379,7 +377,7 @@ MCPath *MCPath::create_rounded_rectangle(const MCRectangle& rect, uint2 radius, 
 		PATH_CHECK(t_round_rectangle, 9, 16);
 	PATH_END
 
-	return s_round_rectangle_cache;
+	return *s_round_rectangle_cache;
 }
 
 MCPath *MCPath::create_polygon(MCPoint *points, uint2 count, bool adjust)
@@ -445,7 +443,7 @@ MCPath *MCPath::create_polypolygon(MCPoint *points, uint2 count, bool adjust)
 
 MCPath *MCPath::create_arc(const MCRectangle& rect, uint2 p_start, uint2 p_angle, bool adjust)
 {
-	static Meta::static_ptr_t<MCPath> s_arc_cache;
+	static MCAutoPointer<MCPath> s_arc_cache;
 	MCPath *t_arc;
 
 	if (rect . width == 0 || rect . height == 0)
@@ -454,7 +452,7 @@ MCPath *MCPath::create_arc(const MCRectangle& rect, uint2 p_start, uint2 p_angle
 	if (p_angle == 0)
 		return create_empty();
 
-	t_arc = s_arc_cache;
+	t_arc = *s_arc_cache;
 	cache(t_arc, 7, 16);
 	s_arc_cache = t_arc;
 
@@ -491,12 +489,12 @@ MCPath *MCPath::create_arc(const MCRectangle& rect, uint2 p_start, uint2 p_angle
 		PATH_CHECK(t_arc, 7, 16);
 	PATH_END
 
-	return s_arc_cache;
+	return *s_arc_cache;
 }
 
 MCPath *MCPath::create_segment(const MCRectangle& rect, uint2 p_start, uint2 p_angle, bool adjust)
 {
-	static Meta::static_ptr_t<MCPath> s_segment_cache;
+	static MCAutoPointer<MCPath> s_segment_cache;
 	MCPath *t_segment;
 
 	if (rect . width == 0 || rect . height == 0)
@@ -505,7 +503,7 @@ MCPath *MCPath::create_segment(const MCRectangle& rect, uint2 p_start, uint2 p_a
 	if (p_angle == 0)
 		return create_empty();
 
-	t_segment = s_segment_cache;
+	t_segment = *s_segment_cache;
 	cache(t_segment, 8, 17);
 	s_segment_cache = t_segment;
 
@@ -541,15 +539,15 @@ MCPath *MCPath::create_segment(const MCRectangle& rect, uint2 p_start, uint2 p_a
 		PATH_CHECK(t_segment, 8, 17);
 	PATH_END
 
-	return s_segment_cache;
+	return *s_segment_cache;
 }
 
 MCPath *MCPath::create_dot(int2 x, int2 y, bool adjust)
 {
-	static Meta::static_ptr_t<MCPath> s_dot_cache;
+	static MCAutoPointer<MCPath> s_dot_cache;
 	MCPath *t_dot;
 
-	t_dot = s_dot_cache;
+	t_dot = *s_dot_cache;
 	cache(t_dot, 3, 2);
 	s_dot_cache = t_dot;
 
@@ -570,24 +568,24 @@ MCPath *MCPath::create_dot(int2 x, int2 y, bool adjust)
 		*t_data++ = ((int4)y << 8) + 128;
 	}
 
-	return s_dot_cache;
+	return *s_dot_cache;
 }
 
 MCPath *MCPath::create_empty(void)
 {
-	static Meta::static_ptr_t<MCPath> s_empty_cache;
+	static MCAutoPointer<MCPath> s_empty_cache;
 
-	if (s_empty_cache == NULL)
+	if (*s_empty_cache == NULL)
 	{
 		MCPath *t_empty;
 		s_empty_cache = allocate(0, 0);
-		t_empty = s_empty_cache;
+		t_empty = *s_empty_cache;
 		PATH_BEGIN(t_empty)
 		PATH_END
 	}
 
 	s_empty_cache -> retain();
-	return s_empty_cache;
+	return *s_empty_cache;
 }
 
 void MCPath::get_lengths(uint4 &r_commands, uint4 &r_points)

@@ -186,15 +186,6 @@ static void build_paths(MCStringRef &r_path)
 
 	if (MCStringGetCharAtIndex(*t_std_path, 0) == '"')
 	{
-		// Does this ever actually receive a quoted path?
-		/*Meta::itemised_string t_items(sg_chosen_files, ' ', true);
-		for(unsigned int t_index = 0; t_index < t_items . count(); ++t_index)
-		{
-			if (t_index != 0)
-				/* UNCHECKED * / MCStringAppendChar(*t_path, '\n');
-
-			build_path(*t_std_path, t_items[t_index], *t_path);
-		}*/
 		MCAutoStringRef t_item;
 		/* UNCHECKED */ MCStringCreateWithChars(s_chosen_files.Ptr(), s_chosen_files.Size()-1, &t_item);
 		build_path(*t_std_path, *t_item, *t_path);

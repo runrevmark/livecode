@@ -32,8 +32,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "path.h"
 #include "context.h"
 #include "variable.h"
-#include "meta.h"
-
 
 #include "graphic.h"
 #include "edittool.h"

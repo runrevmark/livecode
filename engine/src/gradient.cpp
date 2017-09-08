@@ -33,8 +33,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "path.h"
 
-#include "meta.h"
-
 #include "gradient.h"
 #include "packed.h"
 

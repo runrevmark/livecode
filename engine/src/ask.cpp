@@ -42,12 +42,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "globals.h"
 
-#include "meta.h"
 #include "ask.h"
 
 #include "syntax.h"
-
-
 
 MCAsk::~MCAsk(void)
 {

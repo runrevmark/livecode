@@ -432,10 +432,10 @@ static int trans_stat(Exec_stat stat)
 	return xresNotImp;
 }
 
-static Exec_stat getvarptr(MCExecContext& ctxt, const MCString &vname, MCContainer& r_container)
+static Exec_stat getvarptr(MCExecContext& ctxt, const char *vname, MCContainer& r_container)
 {
 	MCNewAutoNameRef t_name;
-    if (!MCNameCreateWithNativeChars((const char_t *)vname.getstring(), vname.getlength(), &t_name))
+    if (!MCNameCreateWithNativeChars((const char_t *)vname, strlen(vname), &t_name))
     {
         return ES_ERROR;
     }
@@ -455,12 +455,12 @@ static Exec_stat getvarptr(MCExecContext& ctxt, const MCString &vname, MCContain
 	return ES_NORMAL;
 }
 
-static Exec_stat getvarptr_utf8(MCExecContext& ctxt, const MCString &vname, MCContainer& r_container)
+static Exec_stat getvarptr_utf8(MCExecContext& ctxt, const char *vname, MCContainer& r_container)
 {
 	MCNewAutoNameRef t_name;
     MCAutoStringRef t_arg1_string;
     
-	if (!MCStringCreateWithBytes((byte_t*)vname.getstring(), vname.getlength(), kMCStringEncodingUTF8, false, &t_arg1_string)
+	if (!MCStringCreateWithBytes((byte_t*)vname, strlen(vname), kMCStringEncodingUTF8, false, &t_arg1_string)
             || !MCNameCreate(*t_arg1_string, &t_name))
         return ES_ERROR;
     
@@ -834,7 +834,7 @@ static char *set_variable(const char *arg1, const char *arg2,
 static char *get_variable_ex(const char *arg1, const char *arg2,
                              const char *arg3, int *retval)
 {
-	MCString *value = (MCString *)arg3;
+	MCstring *value = (MCstring *)arg3;
 	if (MCECptr == NULL)
 	{
 		*retval = xresFail;
@@ -856,8 +856,7 @@ static char *get_variable_ex(const char *arg1, const char *arg2,
 	}
 	else
 		var.eval(*MCECptr, &t_value);
-    
-    
+
     MCAutoStringRef t_string;
     /* UNCHECKED */ MCECptr -> ConvertToString(*t_value, &t_string);
     char *t_result;
@@ -866,7 +865,8 @@ static char *get_variable_ex(const char *arg1, const char *arg2,
     // SN-2014-04-07 [[ Bug 12118 ]] revExecuteSQL writes incomplete data into SQLite BLOB columns
     // arg3 is not a char* but rather a MCString; whence setting the length should not be forgotten,
     // in case '\0' are present in the value fetched.
-	value -> set(t_result, MCStringGetLength(*t_string));
+    value->sptr = t_result;
+    value->length = MCStringGetLength(*t_string);
 	return NULL;
 }
 
@@ -884,8 +884,9 @@ static char *set_variable_ex(const char *arg1, const char *arg2,
     if (*retval != xresSucc)
 		return NULL;
     
+    MCstring *t_string_value = (MCstring*)arg3;
     MCAutoStringRef t_string;
-    /* UNCHECKED */ MCStringCreateWithOldString(*(MCString*)arg3, &t_string);
+    /* UNCHECKED */ MCStringCreateWithNativeChars((const char_t*)t_string_value->sptr, t_string_value->length, &t_string);
 	if (arg2 != NULL && strlen(arg2) > 0)
 	{
 		MCNameRef t_key;
@@ -1011,9 +1012,9 @@ static char *set_array(const char *arg1, const char *arg2,
 	char tbuf[U4L];
 	for (unsigned int i = 0; i <value->nelements; i++)
 	{
-		MCString *s = (MCString *)&value->strings[i];
+		MCstring *s = (MCstring *)&value->strings[i];
         MCAutoStringRef t_string;
-        /* UNCHECKED */ MCStringCreateWithOldString(*s, &t_string);
+        /* UNCHECKED */ MCStringCreateWithNativeChars((const char_t*)s->sptr, s->length, &t_string);
         MCNameRef t_key;
 		if (value->keys == NULL ||  value->keys[i] == NULL)
 		{
@@ -1408,7 +1409,7 @@ static char *get_variable_ex_utf8_binary(const char *arg1, const char *arg2,
 static char *set_variable_ex_utf8(const char *arg1, const char *arg2,
                              const char *arg3, int *retval, Bool p_is_text)
 {
-    MCString *t_value = (MCString*)arg3;
+    MCstring *t_value = (MCstring*)arg3;
 	if (MCECptr == NULL)
 	{
 		*retval = xresFail;
@@ -1422,9 +1423,9 @@ static char *set_variable_ex_utf8(const char *arg1, const char *arg2,
     
     MCAutoStringRef t_string;
     if (p_is_text)
-        /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)t_value->getstring(), t_value->getlength(), kMCStringEncodingUTF8, false, &t_string);
+        /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)t_value->sptr, t_value->length, kMCStringEncodingUTF8, false, &t_string);
     else
-        /* UNCHECKED */ MCStringCreateWithOldString(*t_value, &t_string);
+        /* UNCHECKED */ MCStringCreateWithNativeChars((const char_t*)t_value->sptr, t_value->length, &t_string);
     
 	if (arg2 != NULL && strlen(arg2) > 0)
 	{
@@ -1574,12 +1575,12 @@ static char *set_array_utf8(const char *arg1, const char *arg2,
 	char tbuf[U4L];
 	for (unsigned int i = 0; i <value->nelements; i++)
 	{
-		MCString *s = (MCString *)&value->strings[i];
+		MCstring *s = (MCstring *)&value->strings[i];
         MCAutoStringRef t_string;
         if (p_is_text)
-            /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)s->getstring(), s->getlength(), kMCStringEncodingUTF8, false, &t_string);
+            /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)s->sptr, s->length, kMCStringEncodingUTF8, false, &t_string);
         else
-            /* UNCHECKED */ MCStringCreateWithOldString(*s, &t_string);
+            /* UNCHECKED */ MCStringCreateWithNativeChars((const char_t*)s->sptr, s->length, &t_string);
         
         MCNameRef t_key;
 		if (value->keys == NULL ||  value->keys[i] == NULL)

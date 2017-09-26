@@ -169,6 +169,196 @@ bool MCControl::render_simple_scenery_layer(MCContext *p_target, const MCRectang
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+void MCCard::layer_dirtyrect(const MCRectangle& p_dirty_rect)
+{
+	getstack() -> dirtyrect(p_dirty_rect);
+}
+
+void MCCard::layer_setviewport(int32_t p_x, int32_t p_y, int32_t p_width, int32_t p_height)
+{
+	// Get the current rect, before updating it.
+	MCRectangle t_old_rect;
+	t_old_rect = rect;
+	
+	// Update the rect.
+	resize(p_width, p_height);
+	
+	// Add the rects to the update region.
+
+	// MW-2012-05-01: [[ Bug 10157 ]] If the card has a border then add the whole card
+	//   rect to the update region; otherwise just add the exposed rects.
+	if (!getflag(F_SHOW_BORDER))
+	{
+        if (p_width > t_old_rect.width)
+            layer_dirtyrect(MCU_make_rect(t_old_rect.width, 0, p_width - t_old_rect.width, p_height));
+        if (p_height > t_old_rect.height)
+            layer_dirtyrect(MCU_make_rect(0, t_old_rect.height, p_width, p_height - t_old_rect.height));
+    }
+	else
+		layer_dirtyrect(rect);
+}
+
+void MCCard::layer_added(MCControl *p_control, MCObjptr *p_previous, MCObjptr *p_next)
+{
+	MCTileCacheRef t_tilecache;
+	t_tilecache = getstack() -> view_gettilecache();
+
+	// Add the rects to the update region (for clarity, would prefer this at the end
+	// but there is 'return' fall through in the rest :-( ).
+	layer_dirtyrect(p_control -> geteffectiverect());
+	
+	// Notify any tilecache of the changes.
+	if (t_tilecache != nil)
+	{
+		// Reset all the layer's attributes to defaults, including the layer id.
+		p_control -> layer_resetattrs();
+
+		// Recompute the control's attributes.
+		p_control -> layer_computeattrs(true);
+
+		// If the control is on a dynamic layer there is nothing to do (sprites will
+		// be created implicitly at first render).
+		if (p_control -> layer_issprite())
+			return;
+
+		// If the control is not being added between two existing layers then there
+		// is nothing to do.
+		if (p_previous == nil || p_next == nil)
+			return;
+
+		// If the previous (layer below) objptr has no id, then there is nothing to do
+		// also. This will only occur if only new layers have been added above,
+		// or if no rendering has been done yet.
+		uint32_t t_before_layer_id;
+		t_before_layer_id = p_previous -> getref() -> layer_getid();
+		if (t_before_layer_id == 0)
+			return;
+
+		// MW-2013-06-21: [[ Bug 10974 ]] If the previous layer is a sprite then this layer
+		//   will change the lower limit of the scenery layers above, thus there is
+		//   nothing to do.
+		if (p_previous -> getref() -> layer_issprite())
+			return;
+		
+		// Now insert the scenery.
+		// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
+		// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
+		MCRectangle32 t_device_rect;
+		t_device_rect = MCRectangle32GetTransformedBounds(p_control->geteffectiverect(), getstack()->getdevicetransform());
+		MCTileCacheInsertScenery(t_tilecache, t_before_layer_id, t_device_rect);
+
+		// Finally, set the id of the layer to that of the one before. This causes
+		// the layer to be treated 'as one' with that layer until a redraw is done.
+		// This means that any subsequent updates to the rect of the new layer will
+		// appropriately flush the tiles in the cache.
+		p_control -> layer_setid(t_before_layer_id);
+	}
+}
+
+void MCCard::layer_removed(MCControl *p_control, MCObjptr *p_previous, MCObjptr *p_next)
+{
+	MCTileCacheRef t_tilecache;
+	t_tilecache = getstack() -> view_gettilecache();
+
+	// Add the rects to the update region (for clarity, would prefer this at the end
+	// but there is 'return' fall through in the rest :-( )
+	layer_dirtyrect(p_control -> geteffectiverect());
+	
+	// Notify any tilecache of the changes.
+	if (t_tilecache != nil)
+	{
+		// If the control has no layer id then there is nothing to do.
+		if (p_control -> layer_getid() == 0)
+			return;
+
+		// If the control is on a dynamic layer then remove any associated sprite.
+		if (p_control -> layer_issprite())
+		{
+			MCTileCacheRemoveSprite(t_tilecache, p_control -> layer_getid());
+			
+			// MW-2012-09-21: [[ Bug 10005 ]] Make sure we reset the layer attrs so we
+			//   don't try and reuse a dead sprite.
+			p_control -> layer_resetattrs();
+			
+			return;
+		}
+
+		// Remove the scenery.
+
+		// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
+		// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
+		MCRectangle32 t_device_rect;
+		t_device_rect = MCRectangle32GetTransformedBounds(p_control->geteffectiverect(), getstack()->getdevicetransform());
+		MCTileCacheRemoveScenery(t_tilecache, p_control -> layer_getid(), t_device_rect);
+		
+		// MW-2012-10-11: [[ Bug ]] Redraw glitch caused by resetting the layer id
+		//   before removing the layer.
+		// MW-2012-09-21: [[ Bug 10005 ]] Make sure we reset the layer attrs so we
+		//   don't try and reuse a dead scenery layer.
+		p_control -> layer_resetattrs();
+		
+		// If there is no previous or next control we have no tweaks to ids
+		// to perform.
+		if (p_previous == nil || p_next == nil)
+			return;
+
+		// Now layer ids for new layers percolate from the next layer, so the
+		// original layers are always at the bottom of the stack. If the next
+		// layer has a different id than us, make sure all previous layers
+		// with the same id match it.
+		uint32_t t_before_layer_id;
+		t_before_layer_id = p_previous -> getref() -> layer_getid();
+
+		// The layer below us has the same id so there's nothing to do, we are
+		// removing a 'new' layer before its been redrawn.
+		if (t_before_layer_id == p_control -> layer_getid())
+			return;
+		
+		// MW-2013-06-21: [[ Bug 10974 ]] If the layer below is a sprite, then removing
+		//   this layer will increase the lower limit of the scenery stack above
+		//   thus there is nothing to do.
+		if (p_previous -> getref() -> layer_issprite())
+			return;
+
+		// The layer below us has a different id, so this is an existing layer
+		// and thus we must ensure all layers above us now use the id of the
+		// layer below.
+		MCObjptr *t_objptr;
+		t_objptr = p_next;
+		while(t_objptr != p_previous && t_objptr -> getref() -> layer_getid() == p_control -> layer_getid())
+		{
+			t_objptr -> getref() -> layer_setid(t_before_layer_id);
+			t_objptr = t_objptr -> next();
+		}
+	}
+}
+
+void MCCard::layer_selectedrectchanged(const MCRectangle& p_old_rect, const MCRectangle& p_new_rect)
+{
+	MCTileCacheRef t_tilecache;
+	t_tilecache = getstack() -> view_gettilecache();
+
+	if (t_tilecache != nil)
+	{
+		// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
+		// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
+		MCGAffineTransform t_transform;
+		t_transform = getstack()->getdevicetransform();
+		
+		MCRectangle32 t_new_device_rect, t_old_device_rect;
+		t_new_device_rect = MCRectangle32GetTransformedBounds(p_new_rect, t_transform);
+		t_old_device_rect = MCRectangle32GetTransformedBounds(p_old_rect, t_transform);
+		MCTileCacheReshapeScenery(t_tilecache, m_fg_layer_id, t_old_device_rect, t_new_device_rect);
+	}
+
+	layer_dirtyrect(p_old_rect);
+	layer_dirtyrect(p_new_rect);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 #if 0
 // This method resets the layer-related attribtues to defaults and marks them
 // as needing recomputing.
@@ -1005,30 +1195,6 @@ void MCCard::layer_removed(MCControl *p_control, MCObjptr *p_previous, MCObjptr 
 	}
 }
 
-void MCCard::layer_setviewport(int32_t p_x, int32_t p_y, int32_t p_width, int32_t p_height)
-{
-	// Get the current rect, before updating it.
-	MCRectangle t_old_rect;
-	t_old_rect = rect;
-	
-	// Update the rect.
-	resize(p_width, p_height);
-	
-	// Add the rects to the update region.
-
-	// MW-2012-05-01: [[ Bug 10157 ]] If the card has a border then add the whole card
-	//   rect to the update region; otherwise just add the exposed rects.
-	if (!getflag(F_SHOW_BORDER))
-	{
-	if (p_width > t_old_rect.width)
-		layer_dirtyrect(MCU_make_rect(t_old_rect.width, 0, p_width - t_old_rect.width, p_height));
-	if (p_height > t_old_rect.height)
-		layer_dirtyrect(MCU_make_rect(0, t_old_rect.height, p_width, p_height - t_old_rect.height));
-}
-	else
-		layer_dirtyrect(rect);
-}
-
 void MCCard::layer_selectedrectchanged(const MCRectangle& p_old_rect, const MCRectangle& p_new_rect)
 {
 	MCTileCacheRef t_tilecache;
@@ -1049,11 +1215,6 @@ void MCCard::layer_selectedrectchanged(const MCRectangle& p_old_rect, const MCRe
 
 	layer_dirtyrect(p_old_rect);
 	layer_dirtyrect(p_new_rect);
-}
-
-void MCCard::layer_dirtyrect(const MCRectangle& p_dirty_rect)
-{
-	getstack() -> dirtyrect(p_dirty_rect);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

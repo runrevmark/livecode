@@ -962,6 +962,21 @@ void MCWidget::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
 	}
 }
 
+void MCWidget::render(MCTileCacheRef p_tilecache, bool p_reset, const MCGAffineTransform& p_transform, const MCRectangle& p_visible_rect)
+{
+    MCTileCacheLayerId t_layer_id = m_layer_id;
+    MCLayerModeHint t_layer_mode = m_layer_mode;
+    render_simple_layer(p_tilecache,
+                        p_reset,
+                        p_transform,
+                        p_visible_rect,
+                        t_layer_id,
+                        t_layer_mode,
+                        false);
+    m_layer_id = t_layer_id;
+    m_layer_mode = t_layer_mode;
+}
+
 Boolean MCWidget::maskrect(const MCRectangle& p_rect)
 {
 	if (!(getflag(F_VISIBLE) || showinvisible()))

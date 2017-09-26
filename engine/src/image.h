@@ -357,6 +357,10 @@ private:
 	int2 irepeatcount;
 	uint1 resizequality;
 	MCStringRef filename;
+
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
+    
 	static int2 magmx;
 	static int2 magmy;
 	static MCRectangle magrect;
@@ -437,6 +441,11 @@ public:
 	// MW-2011-09-06: [[ Redraw ]] Added 'sprite' option - if true, ink and opacity are not set.
 	virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_sprite);
 	
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect);
+    
 	// MW-2012-03-28: [[ Bug 10130 ]] No-op for images as there is no font.
 	virtual bool recomputefonts(MCFontRef parent_font, bool force);
 

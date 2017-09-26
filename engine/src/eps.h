@@ -33,7 +33,6 @@ public:
     using MCMixinObjectHandle<MCEPS>::GetHandle;
     
 private:
-    
 	uint4 size;
 	char *postscript;
 	char *prolog;
@@ -48,6 +47,10 @@ private:
 	uint2 pagecount;
 	uint4 *pageIndex;
 	MCImage *image;
+    
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
+    
 	static real8 xf;
 	static real8 yf;
 	static char defs[];
@@ -73,6 +76,11 @@ public:
 	// MW-2011-09-06: [[ Redraw ]] Added 'sprite' option - if true, ink and opacity are not set.
 	virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_sprite);
 
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect);
+    
 	// Eps functions
 	void setextents();
 	void resetscale();

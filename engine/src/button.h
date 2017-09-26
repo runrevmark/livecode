@@ -144,6 +144,14 @@ private:
 	bool menuhasitemtags : 1;
 
 	Boolean ishovering;
+	MCButtonMenuHandler *m_menu_handler;
+	
+    // MM-2014-07-31: [[ ThreadedRendering ]] Used to ensure the default button animate message is only posted from a single thread.
+    bool m_animate_posted : 1;
+    
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
+
 	static uint2 focusedtab;
 	static uint2 mnemonicoffset;
 	static MCRectangle optionrect;
@@ -160,13 +168,7 @@ private:
 	static MCPropertyInfo kProperties[];
 	static MCObjectPropertyTable kPropertyTable;
     
-	MCButtonMenuHandler *m_menu_handler;
-	
-    // MM-2014-07-31: [[ ThreadedRendering ]] Used to ensure the default button animate message is only posted from a single thread.
-    bool m_animate_posted : 1;
-
 public:
-    
 	MCButton();
 	MCButton(const MCButton &bref);
 	// virtual functions from MCDLlist
@@ -227,6 +229,8 @@ public:
 	virtual void compactdata();
 	virtual void resetfontindex(MCStack *oldstack);
 	virtual void getwidgetthemeinfo(MCWidgetInfo &widgetinfo);
+    
+    virtual void render(MCTileCacheRef p_tilecache, bool p_reset, const MCGAffineTransform& p_transform, const MCRectangle& p_visible_rect);
 	
 	// MCButton functions
 	void activate(Boolean notify, KeySym p_key);

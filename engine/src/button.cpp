@@ -313,6 +313,8 @@ MCButton::MCButton()
     m_animate_posted = false;
 	
 	m_menu_handler = nil;
+    
+    m_layer_id = 0;
 }
 
 MCButton::MCButton(const MCButton &bref) : MCControl(bref)
@@ -365,6 +367,8 @@ MCButton::MCButton(const MCButton &bref) : MCControl(bref)
     m_animate_posted = false;
 
 	m_menu_handler = nil;
+    
+    m_layer_id = 0;
 }
 
 MCButton::~MCButton()

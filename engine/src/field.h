@@ -240,6 +240,9 @@ private:
     MCTextDirection text_direction;
     MCInterfaceFieldCursorMovement cursor_movement;
     
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
+    
     // MM-2014-08-11: [[ Bug 13149 ]] Used to flag if a recompute is required during the next draw.
     bool m_recompute : 1;
 	
@@ -329,6 +332,11 @@ public:
 	// MW-2011-09-06: [[ Redraw ]] Added 'sprite' option - if true, ink and opacity are not set.
 	virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_sprite);
 	
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect);
+    
 	virtual MCCdata *getdata(uint4 cardid, Boolean clone);
 	virtual void replacedata(MCCdata *&data, uint4 newid);
 	virtual void compactdata();

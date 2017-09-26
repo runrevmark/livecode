@@ -45,6 +45,131 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void MCControl::render_simple_layer(MCTileCacheRef p_tilecache,
+                                    bool p_reset,
+                                    const MCGAffineTransform& p_transform,
+                                    const MCRectangle& p_visible_rect,
+                                    MCTileCacheLayerId& x_layer_id,
+                                    MCLayerModeHint& x_layer_mode,
+                                    bool p_is_opaque)
+{
+    /* If we must reset, then clear the id and revert the layer mode to static. */
+    if (p_reset)
+    {
+        x_layer_id = 0;
+        x_layer_mode = kMCLayerModeHintStatic;
+    }
+
+    /* Normalize the layermode hint to a layermode. */
+    MCLayerModeHint t_layer_mode = kMCLayerModeHintStatic;
+    if (m_layer_mode_hint == kMCLayerModeHintStatic &&
+        (ink == GXcopy || ink == GXblendSrcOver))
+    {
+        t_layer_mode = kMCLayerModeHintStatic;
+    }
+    else
+    {
+        t_layer_mode = kMCLayerModeHintDynamic;
+    }
+
+    /* The region of a simple layer is just the effective rect */
+    MCRectangle t_layer_region = geteffectiverect();
+    
+    /* The clip of a simple layer is either 0,0,0,0 if the control is not
+     * visible, or the region. */
+    MCRectangle t_layer_clip;
+    if (!getflag(F_VISIBLE) && !showinvisible())
+    {
+        t_layer_clip = MCU_make_rect(0, 0, 0, 0);
+    }
+    else
+    {
+        t_layer_clip = t_layer_region;
+    }
+    
+    /* The clip must be intersected with the visible rect. */
+    t_layer_clip = MCU_intersect_rect(t_layer_clip, p_visible_rect);
+    
+    /****/
+
+    MCTileCacheLayer t_layer;
+    t_layer.id = x_layer_id;
+    t_layer.region = MCRectangle32GetTransformedBounds(t_layer_region, p_transform);
+    t_layer.clip = MCRectangle32GetTransformedBounds(t_layer_clip, p_transform);
+    t_layer.is_opaque = p_is_opaque;
+    t_layer.opacity = getopacity();
+    t_layer.ink = getink();
+    t_layer.context = this;
+    
+    /* If the layer mode is dynamic, then we render as a sprite, otherwise we
+     * render as scenery. */
+    if (t_layer_mode == kMCLayerModeHintDynamic)
+    {
+        /* If this was previously a scenery layer, then remove it */
+        if (x_layer_id != 0 && x_layer_mode == kMCLayerModeHintStatic)
+        {
+            MCTileCacheRemoveScenery(p_tilecache, t_layer.id, t_layer.region);
+            t_layer.id = 0;
+        }
+        
+        /* Set the callback to the sprite variant */
+        t_layer.callback = MCRedrawRenderDeviceSpriteLayer<MCControl, &MCControl::render_simple_sprite_layer>;
+        
+        /* Render as a sprite layer */
+        MCTileCacheRenderSprite(p_tilecache, t_layer);
+    }
+    else
+    {
+        /* If this was previously a scenery layer, then remove it */
+        if (x_layer_id != 0 && x_layer_mode == kMCLayerModeHintDynamic)
+        {
+            MCTileCacheRemoveSprite(p_tilecache, t_layer.id);
+            t_layer.id = 0;
+        }
+        
+        /* Scenery layers region must be clipped to the clip (else bug 11349) */
+        t_layer.region = MCRectangle32Intersect(t_layer.region, t_layer.clip);
+        
+        /* Set the callback to the scenery variant */
+        t_layer.callback = MCRedrawRenderDeviceSceneryLayer<MCControl, &MCControl::render_simple_scenery_layer>;
+        
+        /* Render as a scenery layer */
+        MCTileCacheRenderScenery(p_tilecache, t_layer);
+    }
+    
+    /* Update the layer id and mode */
+    x_layer_id = t_layer.id;
+    x_layer_mode = t_layer_mode;
+}
+
+bool MCControl::render_simple_sprite_layer(MCContext *p_target, const MCRectangle& p_rectangle)
+{
+    MCRectangle t_control_rect = geteffectiverect();
+    MCRectangle t_dirty_rect = MCU_intersect_rect(t_control_rect,
+                                                  MCU_offset_rect(p_rectangle,
+                                                                  t_control_rect.x, t_control_rect.y));
+    if (MCU_empty_rect(t_dirty_rect))
+    {
+        return true;
+    }
+    
+	p_target -> setorigin(-t_control_rect . x, -t_control_rect . y);
+	p_target -> cliprect(t_dirty_rect);
+	p_target -> setfunction(GXcopy);
+	p_target -> setopacity(255);
+
+	draw(p_target, t_dirty_rect, false, true);
+    
+    return true;
+}
+
+bool MCControl::render_simple_scenery_layer(MCContext *p_target, const MCRectangle& p_rectangle)
+{
+    redraw(p_target, p_rectangle);
+    return true;
+}
+
+#if 0
 // This method resets the layer-related attribtues to defaults and marks them
 // as needing recomputing.
 void MCControl::layer_resetattrs(void)
@@ -1239,6 +1364,7 @@ void MCCard::render(void)
 	MCTileCacheRenderScenery(t_tiler, t_bg_layer);
 	m_bg_layer_id = t_bg_layer . id;
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -18,6 +18,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define	CARD_H
 
 #include "object.h"
+#include "tilecache.h"
 
 typedef MCObjectProxy<MCCard>::Handle MCCardHandle;
 
@@ -39,11 +40,12 @@ protected:
 	MCButton *odefbutton;
 	Boolean mgrabbed;
 	MCCdata *savedata;
-
-	// MW-2011-08-26: [[ TileCache ]] The layer id of the background.
-	uint32_t m_bg_layer_id;
-	// MW-2011-09-23: [[ TileCache ]] The layer id of the foreground (selection rect).
-	uint32_t m_fg_layer_id;
+    
+    /* The card's background layer contains the background of the card. */
+	MCTileCacheLayerId m_bg_layer_id;
+    /* The card's foreground layer contains the selection marquee, border and
+     * individual control's selection handles and rects. */
+	MCTileCacheLayerId m_fg_layer_id;
 	
 	// MM-2012-11-05: [[ Object selection started/ended message ]]
 	bool m_selecting_objects : 1;
@@ -122,8 +124,18 @@ public:
     
     virtual bool isdeletable(bool p_check_flag);
     
-    void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated);
+    /* The draw method is used to rasterize directly into a graphics context */
+    virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated);
 
+	/* The render method is used to draw into tilecache */
+    void render(void);
+    /* The render_foreground method renders the card's foreground layer */
+    bool render_foreground(MCContext *target, const MCRectangle& dirty);
+    static bool render_foreground_shim(void *context, MCGContextRef target, const MCRectangle32& region);
+    /* The render_background method renders the card's background layer */
+    bool render_background(MCContext *target, const MCRectangle& dirty);
+    static bool render_background_shim(void *context, MCGContextRef target, const MCRectangle32& region);
+    
 	MCObject *hittest(int32_t x, int32_t y);
 	
 	// MCCard functions
@@ -242,9 +254,6 @@ public:
 	void layer_setviewport(int32_t x, int32_t y, int32_t width, int32_t height);
 	// MW-2011-09-23: [[ Layers ]] The selected rectangle has changed.
 	void layer_selectedrectchanged(const MCRectangle& old_rect, const MCRectangle& new_rect);
-
-	// MW-2011-08-26: [[ TileCache ]] Render all layers into the stack's tilecache.
-	void render(void);
 
 	// IM-2013-09-13: [[ RefactorGraphics ]] add tilecache_ prefix to render methods to make their purpose clearer
 	// MW-2011-09-23: [[ TileCache ]] Render the card's bg layer.

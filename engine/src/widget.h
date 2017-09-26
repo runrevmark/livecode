@@ -174,6 +174,12 @@ public:
 	virtual MCControl *clone(Boolean p_attach, Object_pos p_position, bool invisible);
 
 	virtual void draw(MCDC *p_dc, const MCRectangle& p_dirty, bool p_isolated, bool p_sprite);
+    
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect);
+    
 	virtual Boolean maskrect(const MCRectangle& p_rect);
 	
     virtual bool getprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_which, MCNameRef p_index, Boolean p_effective, MCExecValue& r_value);
@@ -223,6 +229,9 @@ private:
     
     // The LCB Widget object.
     MCWidgetRef m_widget;
+    
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

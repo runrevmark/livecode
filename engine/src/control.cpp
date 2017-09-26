@@ -139,14 +139,8 @@ void MCControl::open()
 {
 	if (opened == 0)
 	{
-		// MW-2011-10-01: [[ Bug 9777 ]] Special case for when 'open' / 'close' used to
-		//   reinitialize object (i.e. MCImage::reopen) - don't update layer attrs if
-		//   KEEP_LAYER is set.
-		if (!getstate(CS_KEEP_LAYER))
-			layer_resetattrs();
-		
         // Make sure we keep state which should be preserved across open.
-		state = (state & (CS_NO_MESSAGES | CS_NO_FILE | CS_SELECTED)) | (state & CS_KEEP_LAYER);
+		state = (state & (CS_NO_MESSAGES | CS_NO_FILE | CS_SELECTED));
 	}
 	
 	MCObject::open();
@@ -428,10 +422,6 @@ void MCControl::select()
 	state |= CS_SELECTED;
 	kunfocus();
 
-	// MW-2011-09-23: [[ Layers ]] Mark the layer attrs as having changed - the selection
-	//   setting can influence the layer type.
-	m_layer_attr_changed = true;
-
 	// MW-2011-08-18: [[ Layers ]] Invalidate the whole object.
 	layer_redrawall();
 	
@@ -442,10 +432,6 @@ void MCControl::deselect()
 {
 	if (state & CS_SELECTED)
 	{
-		// MW-2011-09-23: [[ Layers ]] Mark the layer attrs as having changed - the selection
-		//   setting can influence the layer type.
-		m_layer_attr_changed = true;
-
 		// MW-2011-08-18: [[ Layers ]] Invalidate the whole object.
 		layer_redrawall();
         
@@ -1615,10 +1601,6 @@ Exec_stat MCControl::setsbprop(Properties which, bool p_enable,
 				if (opened)
 					setsbrects();
 			}
-
-			// MW-2011-09-21: [[ Layers ]] Changing the property affects the
-			//   object's adorned status.
-			m_layer_attr_changed = true;
 		}
 		break;
 	case P_VSCROLLBAR:
@@ -1658,10 +1640,6 @@ Exec_stat MCControl::setsbprop(Properties which, bool p_enable,
 				if (opened)
 					setsbrects();
 			}
-
-			// MW-2011-09-21: [[ Layers ]] Changing the property affects the
-			//   object's adorned status.
-			m_layer_attr_changed = true;
 		}
 		break;
 			

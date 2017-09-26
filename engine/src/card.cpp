@@ -65,6 +65,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "stackfileformat.h"
 
+#include "graphics_util.h"
+
 MCRectangle MCCard::selrect;
 int2 MCCard::startx;
 int2 MCCard::starty;
@@ -3139,6 +3141,94 @@ void MCCard::draw(MCDC *dc, const MCRectangle& dirty, bool p_isolated)
 	
 	if (getstate(CS_SIZE))
 		drawselectionrect(dc);
+}
+
+/* The render method is called when in tilecache mode. It computes/updates and
+ * emits all the layers which currently make up the card. Layers are rendered
+ * front to back as this allows opacity of nearer layers to be obscure further
+ * ones. */
+void MCCard::render(void)
+{
+	MCTileCacheRef t_tilecache;
+	t_tilecache = getstack() -> view_gettilecache();
+    
+	bool t_reset_ids;
+	t_reset_ids = MCTileCacheIsClean(t_tilecache);
+    
+    MCGAffineTransform t_transform;
+	t_transform = getstack()->getdevicetransform();
+    
+	MCRectangle t_visible_rect;
+	t_visible_rect = getstack()->getvisiblerect();
+    
+    /* The topmost layer consists of:
+     *   - the marquee selection rect (if any) [ foreground ]
+     *   - the card border (if any) [ foreground ]
+     *   - selected controls selection handles (if any) [ foreground ]
+     *   - the layers of the controls on the card
+     *   - the background [ background ] */
+    
+    /* First emit the foreground layer */
+    MCTileCacheLayer t_fg_layer;
+    t_fg_layer.id = m_fg_layer_id;
+    t_fg_layer.region = MCRectangle32GetTransformedBounds(rect, t_transform);
+    t_fg_layer.clip = MCRectangle32GetTransformedBounds(t_visible_rect, t_transform);
+    t_fg_layer.is_opaque = false;
+    t_fg_layer.opacity = 255;
+    t_fg_layer.ink = GXblendSrcOver;
+    t_fg_layer.callback = MCRedrawRenderDeviceSceneryLayer<MCCard, &MCCard::render_foreground>;
+    t_fg_layer.context = this;
+    MCTileCacheRenderScenery(t_tilecache, t_fg_layer);
+    m_fg_layer_id = t_fg_layer.id;
+    
+    /* Next emit the object layers - not that we start at the last object in the
+     * list which is the topmost, and then work back. */
+    MCObjptr *t_objptrs = getobjptrs();
+    if (t_objptrs != nullptr)
+    {
+        MCObjptr *t_objptr = t_objptrs->prev();
+        do
+        {
+            /* Fetch the control and call its render method. */
+            MCControl *t_control = t_objptr->getref();
+            t_control->render(t_tilecache, t_reset_ids, t_transform, t_visible_rect);
+            
+            /* Step to the control below */
+            t_objptr = t_objptr->prev();
+        }
+		while(t_objptr != t_objptrs -> prev());
+    }
+    
+    /* Finally emit the background layer */
+    MCTileCacheLayer t_bg_layer;
+    t_bg_layer.id = m_bg_layer_id;
+    t_bg_layer.region = MCRectangle32GetTransformedBounds(rect, t_transform);
+    t_bg_layer.clip = MCRectangle32GetTransformedBounds(t_visible_rect, t_transform);
+    t_bg_layer.is_opaque = true;
+    t_bg_layer.opacity = 255;
+    t_bg_layer.ink = GXblendSrcOver;
+    t_bg_layer.callback = MCRedrawRenderDeviceSceneryLayer<MCCard, &MCCard::render_background>;
+    t_bg_layer.context = this;
+    MCTileCacheRenderScenery(t_tilecache, t_bg_layer);
+    m_bg_layer_id = t_bg_layer.id;
+}
+
+bool MCCard::render_background(MCContext *dc, const MCRectangle& dirty)
+{
+    drawbackground(dc, dirty);
+    return true;
+}
+
+bool MCCard::render_foreground(MCContext *dc, const MCRectangle& dirty)
+{
+    drawselectedchildren(dc);
+
+    drawcardborder(dc, dirty);
+	
+	if (getstate(CS_SIZE))
+		drawselectionrect(dc);
+        
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

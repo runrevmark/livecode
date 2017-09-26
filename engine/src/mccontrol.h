@@ -22,6 +22,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define __CONTROL_H
 
 #include "object.h"
+#include "tilecache.h"
 
 // This enum describes the 'hint' that is applied to the object via
 // the 'layerMode' property. The engine uses this to derive the actual
@@ -63,14 +64,15 @@ protected:
 	
 	MCBitmapEffectsRef m_bitmap_effects;
 
+	// The layer mode as specified by the user
+	MCLayerModeHint m_layer_mode_hint : 3;
+    /* The layer mode as computed in the last rendering */
+    MCLayerModeHint m_layer_mode : 3;
+
+/*
 	// MW-2011-08-24: [[ Layers ]] The layer id of the control.
 	uint32_t m_layer_id;
 	
-	// MW-2011-09-21: [[ Layers ]] Whether something about the control has
-	//   changed requiring a recompute the layer attributes.
-	bool m_layer_attr_changed : 1;
-	// MW-2011-09-21: [[ Layers ]] The layerMode as specified by the user
-	MCLayerModeHint m_layer_mode_hint : 3;
 	// MW-2011-09-21: [[ Layers ]] The effective layerMode as used in the
 	//   last frame.
 	MCLayerModeHint m_layer_mode : 3;
@@ -89,7 +91,7 @@ protected:
 	bool m_layer_is_unadorned : 1;
 	// MW-2011-09-21: [[ Layers ]] Whether the layer is a sprite or scenery
 	//   layer.
-	bool m_layer_is_sprite : 1;
+	bool m_layer_is_sprite : 1;*/
 
 	static int2 defaultmargin;
 	static int2 xoffset;
@@ -152,6 +154,11 @@ public:
 	virtual void flipv();
 	virtual void getwidgetthemeinfo(MCWidgetInfo &widgetinfo);
 	virtual void unlink(MCControl *p_control);
+    
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect) = 0;
 	
 	virtual MCObject *hittest(int32_t x, int32_t y);
 
@@ -161,6 +168,16 @@ public:
 	void attach(Object_pos p, bool invisible);
 
 	void redraw(MCDC *dc, const MCRectangle &dirty);
+
+    void render_simple_layer(MCTileCacheRef p_tilecache,
+                             bool p_reset,
+                             const MCGAffineTransform& p_transform,
+                             const MCRectangle& p_visible_rect,
+                             MCTileCacheLayerId& x_layer_id,
+                             MCLayerModeHint& x_layer_mode,
+                             bool p_is_opaque);
+    bool render_simple_sprite_layer(MCContext *p_target, const MCRectangle& p_rectangle);
+    bool render_simple_scenery_layer(MCContext *p_target, const MCRectangle& p_rectangle);
 
 	// IM-2016-09-26: [[ Bug 17247 ]] Return rect of selection handles for the given object rect
 	static void sizerects(const MCRectangle &p_object_rect, MCRectangle rects[8]);
@@ -206,62 +223,60 @@ public:
 	// effects applied to this control (and its parents) when using the given rect.
 	MCRectangle computeeffectsrect(const MCRectangle& area) const;
 
+	// MW-2011-09-22: [[ Layers ]] Returns the layer mode hint.
+	MCLayerModeHint layer_getmodehint(void) { return m_layer_mode_hint; }
+	// MW-2011-11-24: [[ LayerMode Save ]] Sets the layer mode hint (used by object unpickling).
+	void layer_setmodehint(MCLayerModeHint p_mode) { m_layer_mode_hint = p_mode; }
+	// MW-2011-09-21: [[ Layers ]] Calculates the effective layer mode.
+	MCLayerModeHint layer_geteffectivemode(void) { return m_layer_mode_hint; }
+    
+	// MW-2011-09-21: [[ Layers ]] Reset the attributes to defaults.
+	void layer_resetattrs(void);
 	// MW-2011-08-18: [[ Layers ]] Mark the whole object's layer as needing redrawn.
 	void layer_redrawall(void);
 	// MW-2011-08-18: [[ Layers ]] Mark a portion of the object's layer as needing redrawn.
 	void layer_redrawrect(const MCRectangle& rect);
-	// MW-2011-08-18: [[ Layers ]] Take note of any changes to 'transient' and mark the whole object's layer as needing redrawn.
-	void layer_transientchangedandredrawall(int32_t old_transient);
 	// MW-2011-08-18: [[ Layers ]] Set the rect of the control, invalidating as necessary.
 	void layer_setrect(const MCRectangle& new_rect, bool redrawall);
 	// MW-2011-08-18: [[ Layers ]] Take note of the fact that the rect has changed and invalidate the layer.
 	void layer_rectchanged(const MCRectangle& old_rect, bool redrawall);
+	// MW-2011-08-18: [[ Layers ]] Take note of any changes to 'transient' and mark the whole object's layer as needing redrawn.
+	void layer_transientchangedandredrawall(int32_t old_transient);
 	// MW-2011-08-18: [[ Layers [[ Take note of the fact that the effective rect has changed and invalidate the layer.
 	void layer_effectiverectchangedandredrawall(const MCRectangle& old_effective_rect);
 	// MW-2011-08-18: [[ Layers ]] Take note of any changes in effects, only invalidating as necessary.
 	void layer_effectschanged(const MCRectangle& old_effective_rect);
-	// MW-2011-09-30: [[ Layers ]] The content origin has changed by the given amount.
-	void layer_contentoriginchanged(int32_t dx, int32_t dy);
 	// MW-2011-08-18: [[ Layers ]] Take note of a change in visibility.
 	void layer_visibilitychanged(const MCRectangle& old_effective_rect);
 	// MW-2011-09-26: [[ Layers ]] Mark the layer as having scrolled.
 	void layer_scrolled(void);
-	
+    
+	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is scrolling or not.
+	bool layer_isscrolling(void);
+	// MW-2011-09-07: [[ Layers ]] Used internally to apply an update to a scrolling layer. If
+	//   'update_card' is true then the dirty rect of the stack will be updated too.
+	void layer_dirtycontentrect(const MCRectangle& content_rect, bool update_card);
+	// MW-2011-09-30: [[ Layers ]] The content origin has changed by the given amount.
+	void layer_contentoriginchanged(int32_t dx, int32_t dy);
+    
+	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is a sprite or not.
+	bool layer_issprite(void);
+    
+private:
 	// MW-2011-10-04: [[ Layers ]] Used internally to apply an update. If 'update_card' is
 	//   true then the dirty rect of the stack will be updated too.
 	void layer_dirtyeffectiverect(const MCRectangle& effective_rect, bool update_card);
 	// MW-2011-08-24: [[ Layers ]] Used internally to apply a size change. If 'update_card' is
 	//   true then the dirty rect of the stack will be updated too.
 	void layer_changeeffectiverect(const MCRectangle& old_effective_rect, bool force_update, bool update_card);
-	// MW-2011-09-07: [[ Layers ]] Used internally to apply an update to a scrolling layer. If
-	//   'update_card' is true then the dirty rect of the stack will be updated too.
-	void layer_dirtycontentrect(const MCRectangle& content_rect, bool update_card);
 
-	// MW-2011-08-24: [[ TileCache ]] Returns the current layer id.
-	uint32_t layer_getid(void) { return m_layer_id; }
-	// MW-2011-08-24: [[ TileCache ]] Set thes layer id.
-	void layer_setid(uint32_t p_id) { m_layer_id = p_id; }
-
-	// MW-2011-09-22: [[ Layers ]] Returns the layer mode hint.
-	MCLayerModeHint layer_getmodehint(void) { return m_layer_mode_hint; }
-	// MW-2011-11-24: [[ LayerMode Save ]] Sets the layer mode hint (used by object unpickling).
-	void layer_setmodehint(MCLayerModeHint p_mode) { m_layer_mode_hint = p_mode; m_layer_attr_changed = true; }
-	// MW-2011-09-21: [[ Layers ]] Calculates the effective layer mode.
-	MCLayerModeHint layer_geteffectivemode(void) { return layer_computeattrs(false); }
 	// MW-2011-09-07: [[ Layers ]] Returns the content rect of the layer (if scrolling).
 	MCRectangle layer_getcontentrect(void);
 
-	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is a sprite or not.
-	bool layer_issprite(void) { return m_layer_is_sprite; }
-	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is scrolling or not.
-	bool layer_isscrolling(void) { return m_layer_mode == kMCLayerModeHintScrolling; }
-	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is opaque or not.
-	bool layer_isopaque(void) { return m_layer_is_opaque; }
-
 	// MW-2011-09-21: [[ Layers ]] Make sure the layerMode attr's are accurate.
 	MCLayerModeHint layer_computeattrs(bool commit);
-	// MW-2011-09-21: [[ Layers ]] Reset the attributes to defaults.
-	void layer_resetattrs(void);
+
+public:
 
 	static MCControl *getfocused()
 	{
@@ -376,9 +391,7 @@ public:
     void SetOuterGlowProperty(MCExecContext& ctxt, MCNameRef index, MCExecValue p_value);
     void GetColorOverlayProperty(MCExecContext& ctxt, MCNameRef index, MCExecValue& r_value);
     void SetColorOverlayProperty(MCExecContext& ctxt, MCNameRef index, MCExecValue p_value);
-
 };
-
 
 // MCControl has lots of derived classes so this (fragile!) specialisation is
 // needed to account for them. It depends on the correctness of the CT_x_CONTROL

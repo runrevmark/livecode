@@ -90,6 +90,9 @@ private:
 #endif
 	MCPlayerHandle nextplayer;
     
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
+    
 	static MCPropertyInfo kProperties[];
 	static MCObjectPropertyTable kPropertyTable;
 
@@ -129,6 +132,11 @@ public:
     
 	// MW-2011-09-06: [[ Redraw ]] Added 'sprite' option - if true, ink and opacity are not set.
 	virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_sprite);
+    
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect);
     
     virtual void removereferences(void);
     void removefromplayers(void);

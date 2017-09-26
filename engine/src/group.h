@@ -52,6 +52,9 @@ private:
 	uint2 number;
 	Boolean mgrabbed;
 	
+    /* The control's layer id */
+    MCTileCacheLayerId m_layer_id;
+    
 	// MERG-2013-06-02: [[ GrpLckUpdates ]] True if updates to bounding rect and
 	//   parents locked.
     bool m_updates_locked : 1;
@@ -111,6 +114,11 @@ public:
 	// MW-2011-09-06: [[ Redraw ]] Added 'sprite' option - if true, ink and opacity are not set.
 	virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_sprite);
 
+    virtual void render(MCTileCacheRef p_tilecache,
+                        bool p_reset,
+                        const MCGAffineTransform& p_transform,
+                        const MCRectangle& p_visible_rect);
+    
 	virtual MCControl *findnum(Chunk_term type, uint2 &num);
 	virtual MCControl *findname(Chunk_term type, MCNameRef);
 	virtual MCControl *findid(Chunk_term type, uint4 inid, Boolean alt);

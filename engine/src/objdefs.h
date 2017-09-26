@@ -389,10 +389,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define CS_SIZEB                (1UL << 11)
 #define CS_SIZE                 (CS_SIZEL | CS_SIZER | CS_SIZET | CS_SIZEB)
 
-// MW-2011-01-10: [[ Bug 9777 ]] The image object uses this flag to prevent
-//   the layer attributes being ditched when it 'reopens'.
-#define CS_KEEP_LAYER           (1UL << 29) // was CS_DONT_DRAW
-
 #define CS_GRAB                 (1UL << 30)
 #define CS_MENU_ATTACHED        (1UL << 31)
 // MCButton state

@@ -90,6 +90,7 @@ public:
     AVPlayer *getPlayer(void);
     
     static void DoUpdateCurrentFrame(void *ctxt);
+    void HandleCurrentTimeChanged(void);
     
 protected:
 	virtual void Realize(void);
@@ -105,7 +106,6 @@ private:
     
     void SeekToTimeAndWait(uint32_t p_lc_time);
     
-    void HandleCurrentTimeChanged(void);
     
     void CacheCurrentFrame(void);
     static CVReturn MyDisplayLinkCallback (CVDisplayLinkRef displayLink,
@@ -214,6 +214,11 @@ private:
 - (void)updateCurrentFrame
 {
     m_av_player -> DoUpdateCurrentFrame(m_av_player);
+}
+
+- (void)handleCurrentTimeChanged
+{
+    m_av_player->HandleCurrentTimeChanged();
 }
 
 @end
@@ -437,8 +442,12 @@ void MCAVFoundationPlayer::MovieFinished(void)
     }
 }
 
+#include <pthread.h>
+
 void MCAVFoundationPlayer::HandleCurrentTimeChanged(void)
 {
+    MCAssert(pthread_main_np() != 0);
+
     int32_t t_current_time;
     t_current_time = CMTimeToLCTime([m_player currentTime]);
     
@@ -546,7 +555,7 @@ CVReturn MCAVFoundationPlayer::MyDisplayLinkCallback (CVDisplayLinkRef displayLi
     
     if (!t_has_video)
     {
-        t_self -> HandleCurrentTimeChanged();
+        [t_self -> m_observer performSelectorOnMainThread: @selector(handleCurrentTimeChanged) withObject: nil waitUntilDone: NO];
         return kCVReturnSuccess;
     }
     

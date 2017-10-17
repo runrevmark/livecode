@@ -136,16 +136,17 @@ struct MCEval_UInt16Type: MCEval_UIntType
     static bool eval_async(MCExecContext& ctxt, MCExpression* p_expr, uinteger_t& r_value, Func &&remainder_function) __attribute__((noinline))
     {
         uinteger_t t_value;
-        if (!MCEval_UIntType::eval_async(ctxt, p_expr, t_value, remainder_function))
+        auto internal_remainder = [&, ctxt, t_value, remainder_function](uinteger_t &comp_r_value) mutable
         {
-            return false;
-        }
-        if (t_value > UINT16_MAX)
-        {
-            return false;
-        }
-        r_value = t_value;
-        return remainder_function(r_value);
+            if (t_value > UINT16_MAX)
+            {
+                return false;
+            }
+            
+            return remainder_function(r_value);
+        };
+        
+        MCEval_UInt16Type::eval_async(ctxt, p_expr, t_value, internal_remainder);
     }
     
     static bool eval(MCExecContext& ctxt, MCExpression* p_expr, uinteger_t& r_value) __attribute__((noinline))
@@ -179,6 +180,17 @@ struct MCEval_BoxedType
     static void drop(T p_value)
     {
         MCValueRelease(p_value);
+    }
+    
+    template<typename Func>
+    static bool eval_async(MCExecContext &ctxt, MCExpression *p_expr, ValueType &r_value, Func &&completion) __attribute__((noinline))
+    {
+        p_expr -> eval_typed(ctxt, exec_value_type, &r_value);
+        if (ctxt.HasError())
+        {
+            return false;
+        }
+        return completion(r_value);
     }
     
     static bool eval(MCExecContext& ctxt, MCExpression* p_expr, ValueType& r_value) __attribute__((noinline))
@@ -458,27 +470,27 @@ inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType
 
 template<typename Desc>
 inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType p_arg_1, typename Desc::Arg2::EvalType p_arg_2)
-{/*
+{
+    /*
     typedef MCEval_Auto<typename Desc::Arg1::Type> Arg1_Type;
     Arg1_Type t_arg_1;
     
-    auto remainder_function = [&, ctxt, p_arg_2](Arg1_Type &r_value) mutable
+    auto remainder_function = [&, ctxt, p_arg_2](typename Desc::Arg1::Type::ValueType &r_value) mutable
     {
         typedef MCEval_Auto<typename Desc::Arg2::Type> Arg2_Type;
         Arg2_Type t_arg_2;
         
-        auto inside_remainder_function = [&, ctxt, r_value](Arg2_Type &r_value_2) mutable
+        auto inside_remainder_function = [&, ctxt, r_value](typename Desc::Arg2::Type::ValueType &r_value_2) mutable
         {
-            Desc::Func(ctxt, *r_value, *r_value_2);
+            Desc::Func(ctxt, r_value, r_value_2);
             return true;
         };
         
-        return Desc::Arg2::eval(ctxt, p_arg_2, t_arg_2, inside_remainder_function);
+        return Desc::Arg2::eval_async(ctxt, p_arg_2, t_arg_2, inside_remainder_function);
     };
     
-    Desc::Arg1::eval(ctxt, p_arg_1, t_arg_1, remainder_function);
-      */
-  
+    Desc::Arg1::eval_async(ctxt, p_arg_1, t_arg_1, remainder_function);
+     */
   }
 
 template<typename Desc>

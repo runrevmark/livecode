@@ -471,7 +471,6 @@ inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType
 template<typename Desc>
 inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType p_arg_1, typename Desc::Arg2::EvalType p_arg_2)
 {
-    /*
     typedef MCEval_Auto<typename Desc::Arg1::Type> Arg1_Type;
     Arg1_Type t_arg_1;
     
@@ -480,7 +479,7 @@ inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType
         typedef MCEval_Auto<typename Desc::Arg2::Type> Arg2_Type;
         Arg2_Type t_arg_2;
         
-        auto inside_remainder_function = [&, ctxt, r_value](typename Desc::Arg2::Type::ValueType &r_value_2) mutable
+        auto inside_remainder_function = [&, r_value](typename Desc::Arg2::Type::ValueType &r_value_2) mutable
         {
             Desc::Func(ctxt, r_value, r_value_2);
             return true;
@@ -490,7 +489,6 @@ inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType
     };
     
     Desc::Arg1::eval_async(ctxt, p_arg_1, t_arg_1, remainder_function);
-     */
   }
 
 template<typename Desc>

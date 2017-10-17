@@ -79,7 +79,7 @@ struct MCEval_PrimitiveType
     }
     
     template<typename Func>
-    static bool eval(MCExecContext& ctxt, MCExpression* p_expr, ValueType& r_value, Func &&remainder_function) __attribute__((noinline))
+    static bool eval_async(MCExecContext& ctxt, MCExpression* p_expr, ValueType& r_value, Func &&remainder_function) __attribute__((noinline))
     {
         MCExecValue t_value;
         p_expr->eval_ctxt(ctxt, t_value);
@@ -96,7 +96,25 @@ struct MCEval_PrimitiveType
             return false;
         }
         
-        return remainder_function(t_value);
+        return remainder_function(r_value);
+    }
+    
+    static bool eval(MCExecContext& ctxt, MCExpression* p_expr, ValueType& r_value) __attribute__((noinline))
+    {
+        MCExecValue t_value;
+        p_expr->eval_ctxt(ctxt, t_value);
+        if (ctxt.HasError())
+        {
+            return false;
+        }
+        
+        MCExecTypeConvertAndReleaseAlways(ctxt, t_value.type, &t_value, exec_value_type, &r_value);
+        if (ctxt.HasError())
+        {
+            return false;
+        }
+        
+        return true;
     }
 };
 
@@ -115,10 +133,10 @@ struct MCEval_IntType: MCEval_PrimitiveType<integer_t, kMCExecValueTypeInt>
 struct MCEval_UInt16Type: MCEval_UIntType
 {
     template<typename Func>
-    static bool eval(MCExecContext& ctxt, MCExpression* p_expr, uinteger_t& r_value, Func &&remainder_function) __attribute__((noinline))
+    static bool eval_async(MCExecContext& ctxt, MCExpression* p_expr, uinteger_t& r_value, Func &&remainder_function) __attribute__((noinline))
     {
         uinteger_t t_value;
-        if (!MCEval_UIntType::eval(ctxt, p_expr, t_value, remainder_function))
+        if (!MCEval_UIntType::eval_async(ctxt, p_expr, t_value, remainder_function))
         {
             return false;
         }
@@ -128,6 +146,21 @@ struct MCEval_UInt16Type: MCEval_UIntType
         }
         r_value = t_value;
         return remainder_function(r_value);
+    }
+    
+    static bool eval(MCExecContext& ctxt, MCExpression* p_expr, uinteger_t& r_value) __attribute__((noinline))
+    {
+        uinteger_t t_value;
+        if (!MCEval_UIntType::eval(ctxt, p_expr, t_value))
+        {
+            return false;
+        }
+        if (t_value > UINT16_MAX)
+        {
+            return false;
+        }
+        r_value = t_value;
+        return true;
     }
 };
 
@@ -165,7 +198,7 @@ struct MCEval_PartlessObjectPtrType
     }
     
     template<typename Func>
-    static bool eval(MCExecContext& ctxt, MCChunk* p_chunk, ValueType& r_value, Func &&remainder_function) __attribute__((noinline))
+    static bool eval_async(MCExecContext& ctxt, MCChunk* p_chunk, ValueType& r_value, Func &&remainder_function) __attribute__((noinline))
     {
         MCObject* t_object;
         uint32_t t_part_id;
@@ -176,6 +209,18 @@ struct MCEval_PartlessObjectPtrType
         r_value = t_object;
         return remainder_function(r_value);
     }
+    
+    static bool eval(MCExecContext &ctxt, MCChunk *p_chunk, ValueType &r_value)
+    {
+        MCObject* t_object;
+        uint32_t t_part_id;
+        if (!p_chunk->getobj(ctxt, t_object, t_part_id, True))
+        {
+            return false;
+        }
+        r_value = t_object;
+        return true;
+    }
 };
 
 struct MCEval_PartlessControlPtrType: public MCEval_PartlessObjectPtrType
@@ -183,7 +228,7 @@ struct MCEval_PartlessControlPtrType: public MCEval_PartlessObjectPtrType
     typedef MCControl* ValueType;
     
     template<typename Func>
-    static bool eval(MCExecContext& ctxt, MCChunk *p_chunk, ValueType& r_value, Func &&remainder_function) __attribute__((noinline))
+    static bool eval_async(MCExecContext& ctxt, MCChunk *p_chunk, ValueType& r_value, Func &&remainder_function) __attribute__((noinline))
     {
         MCObject* t_object;
         if (!MCEval_PartlessObjectPtrType::eval(ctxt, p_chunk, t_object, remainder_function) ||
@@ -193,6 +238,18 @@ struct MCEval_PartlessControlPtrType: public MCEval_PartlessObjectPtrType
         }
         r_value = static_cast<MCControl*>(t_object);
         return remainder_function(r_value);
+    }
+    
+    static bool eval(MCExecContext& ctxt, MCChunk *p_chunk, ValueType& r_value) __attribute__((noinline))
+    {
+        MCObject* t_object;
+        if (!MCEval_PartlessObjectPtrType::eval(ctxt, p_chunk, t_object) ||
+            !MCChunkTermIsControl(t_object->gettype()))
+        {
+            return false;
+        }
+        r_value = static_cast<MCControl*>(t_object);
+        return true;
     }
 };
 
@@ -210,10 +267,16 @@ struct MCEval_ConstantArg
     typedef typename T::ValueType EvalType;
     
     template<typename Func>
-    static Exec_errors eval(MCExecContext& ctxt, typename T::ValueType p_value, typename T::ValueType& r_value, Func &&remainder_function)
+    static Exec_errors eval_async(MCExecContext& ctxt, typename T::ValueType p_value, typename T::ValueType& r_value, Func &&remainder_function)
     {
         r_value = p_value;
         return remainder_function(r_value);
+    }
+    
+    static Exec_errors eval(MCExecContext &ctxt, typename T::ValueType p_value, typename T::ValueType &r_value)
+    {
+        r_value = p_value;
+        return EE_UNDEFINED;
     }
 };
 
@@ -224,9 +287,18 @@ struct MCEval_RequiredArg
     typedef MCExpression* EvalType;
     
     template<typename Func>
-    static Exec_errors eval(MCExecContext& ctxt, typename T::EvalType p_expr, typename T::ValueType& r_value, Func &&remainder_function)
+    static Exec_errors eval_async(MCExecContext& ctxt, typename T::EvalType p_expr, typename T::ValueType& r_value, Func &&remainder_function)
     {
-        if (!T::eval(ctxt, p_expr, r_value, remainder_function))
+        if (!T::eval_async(ctxt, p_expr, r_value, remainder_function))
+        {
+            return Error;
+        }
+        return EE_UNDEFINED;
+    }
+    
+    static Exec_errors eval(MCExecContext &ctxt, typename T::EvalType p_expr, typename T::ValueType &r_value)
+    {
+        if (!T::eval(ctxt, p_expr, r_value))
         {
             return Error;
         }
@@ -238,14 +310,24 @@ template<typename T, typename T::ValueType Default, Exec_errors Error>
 struct MCEval_OptionalArg: public MCEval_RequiredArg<T, Error>
 {
     template<typename Func>
-    static Exec_errors eval(MCExecContext& ctxt, typename T::EvalType p_expr, typename T::ValueType& r_value, Func &&remainder_function)
+    static Exec_errors eval_async(MCExecContext& ctxt, typename T::EvalType p_expr, typename T::ValueType& r_value, Func &&remainder_function)
     {
         if (p_expr == nullptr)
         {
             r_value = Default;
             return EE_UNDEFINED;
         }
-        return MCEval_RequiredArg<T, Error>::eval(ctxt, p_expr, r_value, remainder_function);
+        return MCEval_RequiredArg<T, Error>::eval_async(ctxt, p_expr, r_value, remainder_function);
+    }
+    
+    static Exec_errors eval(MCExecContext &ctxt, typename T::EvalType p_expr, typename T::ValueType &r_value)
+    {
+        if (p_expr == nullptr)
+        {
+            r_value = Default;
+            return EE_UNDEFINED;
+        }
+        return MCEval_RequiredArg<T, Error>::eval(ctxt, p_expr, r_value);
     }
 };
 
@@ -255,14 +337,24 @@ struct MCEval_DefaultArg: public MCEval_RequiredArg<T, Error>
     typedef std::pair<MCExpression*, typename T::ValueType> EvalType;
     
     template<typename Func>
-    static Exec_errors eval(MCExecContext& ctxt, std::pair<typename T::EvalType, typename T::ValueType> p_exp_def, typename T::ValueType& r_value, Func &&remainder_function)
+    static Exec_errors eval_async(MCExecContext& ctxt, std::pair<typename T::EvalType, typename T::ValueType> p_exp_def, typename T::ValueType& r_value, Func &&remainder_function)
     {
         if (p_exp_def.first == nullptr)
         {
             r_value = p_exp_def.second;
             return EE_UNDEFINED;
         }
-        return MCEval_RequiredArg<T, Error>::eval(ctxt, p_exp_def.first, r_value, remainder_function);
+        return MCEval_RequiredArg<T, Error>::eval_async(ctxt, p_exp_def.first, r_value, remainder_function);
+    }
+    
+    static Exec_errors eval(MCExecContext& ctxt, std::pair<typename T::EvalType, typename T::ValueType> p_exp_def, typename T::ValueType& r_value)
+    {
+        if (p_exp_def.first == nullptr)
+        {
+            r_value = p_exp_def.second;
+            return EE_UNDEFINED;
+        }
+        return MCEval_RequiredArg<T, Error>::eval(ctxt, p_exp_def.first, r_value);
     }
 };
 
@@ -355,18 +447,18 @@ inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType
     typedef MCEval_Auto<typename Desc::Arg1::Type> Arg1_Type;
     Arg1_Type t_arg_1;
     
-    auto remainder_function = [&, ctxt](Arg1_Type &r_value) mutable
+    auto remainder_function = [&, ctxt](typename Desc::Arg1::Type::ValueType r_value) mutable
     {
-        Desc::Func(ctxt, *r_value);
+        Desc::Func(ctxt, r_value);
         return true;
     };
     
-    Desc::Arg1::eval(ctxt, p_arg_1, &t_arg_1, remainder_function);
+    Desc::Arg1::eval_async(ctxt, p_arg_1, &t_arg_1, remainder_function);
 }
 
 template<typename Desc>
 inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType p_arg_1, typename Desc::Arg2::EvalType p_arg_2)
-{
+{/*
     typedef MCEval_Auto<typename Desc::Arg1::Type> Arg1_Type;
     Arg1_Type t_arg_1;
     
@@ -385,7 +477,9 @@ inline void MCEval_Exec_Async(MCExecContext &ctxt, typename Desc::Arg1::EvalType
     };
     
     Desc::Arg1::eval(ctxt, p_arg_1, t_arg_1, remainder_function);
-}
+      */
+  
+  }
 
 template<typename Desc>
 inline void MCEval_Exec_Async(MCExecContext  &ctxt,  typename Desc::Arg1::EvalType p_arg_1, typename Desc::Arg2::EvalType p_arg_2, typename Desc::Arg3::EvalType p_arg_3)

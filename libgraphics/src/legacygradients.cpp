@@ -19,6 +19,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#if 0
+
 #if __BIG_ENDIAN__
 #define iman_ 1
 #else
@@ -861,5 +863,7 @@ void MCGLegacyGradientShader::MCGLegacyGradientShaderContext::shadeSpan(int x, i
 		m_gradient_combiner -> combine(m_gradient_combiner, x, x + count);
 	}
 }
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////

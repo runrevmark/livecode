@@ -362,15 +362,20 @@ void shape(const unichar_t* p_text, uindex_t p_char_count, MCGPoint p_location, 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern bool MCGContextSetupFill(MCGContextRef p_context, SkPaint& r_paint);
+
 void MCGContextDrawPlatformText(MCGContextRef self, const unichar_t *p_text, uindex_t p_length, MCGPoint p_location, const MCGFont &p_font, bool p_rtl)
 {
     if (!MCGContextIsValid(self))
 		return;	
     
     SkPaint t_paint;
-    t_paint . setStyle(SkPaint::kFill_Style);
-    t_paint . setAntiAlias(true);
-    t_paint . setColor(MCGColorToSkColor(self -> state -> fill_color));
+    if (!MCGContextSetupFill(self, t_paint))
+    {
+        self->is_valid = false;
+        return;
+    }
+    
     t_paint . setTextSize(p_font . size);
     t_paint . setTextEncoding(SkPaint::kGlyphID_TextEncoding);
     

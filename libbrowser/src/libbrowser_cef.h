@@ -51,13 +51,17 @@ public:
 	
 	virtual bool GetBoolProperty(MCBrowserProperty p_property, bool &r_value);
 	virtual bool SetBoolProperty(MCBrowserProperty p_property, bool p_value);
-	
 	virtual bool GetStringProperty(MCBrowserProperty p_property, char *&r_utf8_string);
 	virtual bool SetStringProperty(MCBrowserProperty p_property, const char *p_utf8_string);
-	
+	virtual bool GetIntegerProperty(MCBrowserProperty p_property, int32_t &r_value);
+	virtual bool SetIntegerProperty(MCBrowserProperty p_property, int32_t p_value);
+
 	virtual bool GoBack();
 	virtual bool GoForward();
 	virtual bool GoToURL(const char *p_url);
+	virtual bool LoadHTMLText(const char *p_htmltext, const char *p_base_url);
+	virtual bool StopLoading();
+	virtual bool Reload();
 	virtual bool EvaluateJavaScript(const char *p_script, char *&r_result);
 	
 	virtual void Destroy();
@@ -124,7 +128,12 @@ public:
 	
 	virtual char *GetURL(void);
 	virtual bool GetImage(void*& r_data, int& r_length);
-	
+
+	virtual bool GetIsSecure();
+
+	virtual bool GetAllowUserInteraction(void);
+	virtual void SetAllowUserInteraction(bool p_allow);
+
 	// Browser Actions
 	
 	virtual bool SetJavaScriptHandlers(const char *p_handlers);
@@ -133,7 +142,6 @@ public:
 	// Platform-specific methods
 	
 	virtual void PlatformConfigureWindow(CefWindowInfo &r_info) = 0;
-	virtual void PlatformCloseBrowserWindow(CefRefPtr<CefBrowser> p_browser) = 0;
 	
 	virtual bool PlatformGetRect(MCBrowserRect &r_rect) = 0;
 	virtual bool PlatformSetRect(const MCBrowserRect &p_rect) = 0;
@@ -141,7 +149,10 @@ public:
 	virtual bool PlatformGetNativeLayer(void *&r_layer) = 0;
 	
 	virtual bool PlatformGetAuthCredentials(bool p_is_proxy, const CefString &p_url, const CefString &p_realm, MCCefAuthScheme p_auth_scheme, CefString &r_user, CefString &r_password) = 0;
-	
+
+	virtual bool PlatformGetAllowUserInteraction(bool &r_allow_interaction) = 0;
+	virtual bool PlatformSetAllowUserInteraction(bool p_allow_interaction) = 0;
+
 	// Access methods
 	
 	CefRefPtr<CefBrowser> GetCefBrowser(void);

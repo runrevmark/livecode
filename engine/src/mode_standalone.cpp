@@ -66,6 +66,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "resolution.h"
 #include "libscript/script.h"
+#include <libscript/script-auto.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -387,32 +388,111 @@ bool MCStandaloneCapsuleCallback(void *p_self, const uint8_t *p_digest, MCCapsul
             MCresult -> sets("failed to read module");
             return false;
         }
-    
-        bool t_success;
-        t_success = true;
         
-        MCStreamRef t_stream;
-        t_stream = nil;
-        if (t_success)
-            t_success = MCMemoryInputStreamCreate(t_module_data.Bytes(), p_length, t_stream);
-        
-        MCScriptModuleRef t_module;
-        if (t_success)
-            t_success = MCScriptCreateModuleFromStream(t_stream, t_module);
-        
-        if (t_stream != nil)
-            MCValueRelease(t_stream);
-        
-        if (!t_success)
+        // This section is raw file data either a module or a name to resolve which should
+        // have been added as a builtin
+        bool t_is_module = true;
+        if (p_length >= 4 &&
+            !(t_module_data.Bytes()[0] == 'L' &&
+            t_module_data.Bytes()[1] == 'C' &&
+            t_module_data.Bytes()[2] == ((kMCScriptCurrentModuleVersion >> 0) & 0xFF) &&
+            t_module_data.Bytes()[3] == ((kMCScriptCurrentModuleVersion >> 8) & 0xFF)))
         {
-            MCresult -> sets("failed to load module");
-            return false;
+            t_is_module = false;
         }
         
-        extern bool MCEngineAddExtensionFromModule(MCScriptModuleRef module);
-        if (!MCEngineAddExtensionFromModule(t_module))
+        MCAutoScriptModuleRefArray t_modules;
+        MCScriptModuleRef t_main;
+        
+        if (t_is_module)
         {
-            MCScriptReleaseModule(t_module);
+            MCAutoValueRefBase<MCStreamRef> t_stream;
+            if (!MCMemoryInputStreamCreate(t_module_data.Bytes(),
+                                           p_length, &t_stream))
+            {
+                MCresult -> sets("out of memory");
+                return false;
+            }
+            
+            if (!MCScriptCreateModulesFromStream(*t_stream, t_modules))
+            {
+                MCAutoErrorRef t_error;
+                if (MCErrorCatch(&t_error))
+                    MCresult->setvalueref(MCErrorGetMessage(*t_error));
+                else
+                    MCresult->sets("out of memory");
+                
+                return false;
+            }
+            
+            t_main = t_modules[0];
+        }
+        else
+        {
+            MCNewAutoNameRef t_name;
+            if (!MCNameCreateWithNativeChars(t_module_data.Bytes(), p_length, &t_name) ||
+                !MCScriptLookupModule(*t_name, t_main) ||
+                !t_modules.Push(t_main))
+            {
+                MCresult->sets("out of memory");
+                return false;
+            }
+        }
+        
+        MCAutoStringRef t_module_resources;
+        if (!MCStringFormat(&t_module_resources, "%@/resources",
+                            MCScriptGetNameOfModule(t_main)))
+        {
+            MCresult->sets("out of memory");
+            return false;
+        }
+
+        MCAutoStringRef t_resources_path;
+        MCAutoStringRef t_resolved_path;
+        if (MCdispatcher -> fetchlibrarymapping(*t_module_resources,
+                                                &t_resources_path))
+        {
+            // Resolve the relative path
+            if (MCStringBeginsWith(*t_resources_path, MCSTR("./"),
+                                   kMCStringOptionCompareExact) && MCcmd)
+            {
+                uindex_t t_last_slash_index;
+                // On Android, we need to substitute in the whole of MCcmd so
+                // that the apk path resolution works
+#ifndef TARGET_SUBPLATFORM_ANDROID
+                if (!MCStringLastIndexOfChar(MCcmd, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_last_slash_index))
+#endif
+                    t_last_slash_index = MCStringGetLength(MCcmd);
+                
+                MCRange t_range;
+                t_range = MCRangeMake(0, t_last_slash_index);
+                if (!MCStringFormat(&t_resolved_path, "%*@/%@", &t_range, MCcmd, *t_resources_path))
+                {
+                    MCresult->sets("out of memory");
+                    return false;
+                }
+            }
+            else
+                t_resolved_path = *t_resources_path;
+            
+#ifdef _MACOSX
+            // As we are in a standalone we need to redirect the path on macOS to Resources/_MacOS
+            extern bool MCS_apply_redirect(MCStringRef p_path, bool p_is_file, MCStringRef& r_redirected);
+            MCAutoStringRef t_redirected_path;
+            if (MCS_apply_redirect(*t_resolved_path, false, &t_redirected_path))
+            {
+                t_resolved_path.Reset(*t_redirected_path);
+            }
+#endif
+        }
+        
+        extern void MCEngineAddExtensionsFromModulesArray(MCAutoScriptModuleRefArray&, MCStringRef, MCStringRef&);
+        
+        MCAutoStringRef t_error;
+        MCEngineAddExtensionsFromModulesArray(t_modules, *t_resolved_path, &t_error);
+        if (*t_error != nullptr)
+        {
+            MCresult->setvalueref(*t_error);
             return false;
         }
     }
@@ -544,10 +624,8 @@ IO_stat MCDispatch::startup(void)
 		
 		t_stack -> extraopen(false);
 		
-		// Resolve parent scripts *after* we've loaded aux stacks.
-		if (t_stack -> getextendedstate(ECS_USES_PARENTSCRIPTS))
-			t_stack -> resolveparentscripts();
-		
+        MCdispatcher->resolveparentscripts();
+        
 		MCscreen->resetcursors();
 		MCImage::init();
 		
@@ -643,10 +721,8 @@ IO_stat MCDispatch::startup(void)
 	{
 		t_info . stack -> extraopen(false);
 	
-		// Resolve parent scripts *after* we've loaded aux stacks.
-		if (t_info . stack -> getextendedstate(ECS_USES_PARENTSCRIPTS))
-			t_info . stack -> resolveparentscripts();
-		
+        MCdispatcher->resolveparentscripts();
+        
 		MCscreen->resetcursors();
 		MCImage::init();
 	}
@@ -661,59 +737,49 @@ IO_stat MCDispatch::startup(void)
 #include "stacksecurity.h"
 
 #define kMCEmscriptenBootStackFilename "/boot/standalone/__boot.livecode"
-#define kMCEmscriptenStartupStackFilename "/boot/__startup.livecode"
+#define kMCEmscriptenStartupCapsuleFilename "/boot/__startup.data"
 
+// Important: This function is on the emterpreter whitelist. If its
+// signature function changes, the mangled name must be updated in
+// em-whitelist.json
 IO_stat
 MCDispatch::startup()
 {
 	/* The standalone data should already have been unpacked by now */
 
-	/* Load & run the startup script in a temporary stack */
-	MCStack *t_startup_stack = nil;
-	if (IO_NORMAL != MCdispatcher->loadfile(MCSTR(kMCEmscriptenStartupStackFilename),
-	                                        t_startup_stack))
+	/* Load the standalone capsule data */
+
+	// The info structure that will be filled in while parsing the capsule.
+	MCStandaloneCapsuleInfo t_info;
+	memset(&t_info, 0, sizeof(MCStandaloneCapsuleInfo));
+
+	// Create a capsule and fill with the standalone data
+	MCCapsuleRef t_capsule;
+	t_capsule = nil;
+	if (!MCCapsuleOpen(MCStandaloneCapsuleCallback, &t_info, t_capsule))
 	{
-		MCresult->sets("failed to load startup stack");
+		MCresult->sets("failed to create startup capsule");
+		return IO_ERROR;
+	}
+	
+	if (!MCCapsuleFillFromFile(t_capsule, MCSTR(kMCEmscriptenStartupCapsuleFilename), 4, true))
+	{
+		MCresult->sets("failed to read startup data file");
+		MCCapsuleClose(t_capsule);
+		return IO_ERROR;
+	}
+	
+	// Process the capsule
+	if (!MCCapsuleProcess(t_capsule))
+	{
+		MCLog("failed to process startup data file");
+		MCresult->sets("failed to process startup data file");
+		MCCapsuleClose(t_capsule);
 		return IO_ERROR;
 	}
 
-	/* Check the stack */
-	if (!MCStackSecurityEmscriptenStartupCheck(t_startup_stack))
-	{
-		MCresult->sets("startup stack checks failed");
-		return IO_ERROR;
-	}
-
-	MCdefaultstackptr = MCstaticdefaultstackptr = t_startup_stack;
-
-	/* Attempt to run the startup handler */
-	if (ES_NORMAL != t_startup_stack->message(MCM_start_up, nil, false, true))
-	{
-		/* Handler couldn't be run at all, or threw an error */
-		MCresult->sets("failed to run startup stack");
-	}
-	/* The startup stack *should* set the result on failure */
-	{
-		MCExecContext ctxt;
-		MCAutoValueRef t_result;
-		MCresult->eval(ctxt, &t_result);
-		if (!MCValueIsEmpty(*t_result))
-		{
-			return IO_ERROR;
-		}
-	}
-
-	/* Delete the startup stack */
-	MCdispatcher->destroystack(t_startup_stack, true);
-
-	/* Load the initial stack */
-	MCStack *t_stack;
-	if (IO_NORMAL != MCdispatcher->loadfile(MCSTR(kMCEmscriptenBootStackFilename),
-	                                        t_stack))
-	{
-		MCresult->sets("failed to read initial stackfile");
-		return IO_ERROR;
-	}
+	MCStack *t_stack = t_info . stack;
+	MCCapsuleClose(t_capsule);
 
 	MCdefaultstackptr = MCstaticdefaultstackptr = t_stack;
     
@@ -730,6 +796,8 @@ MCDispatch::startup()
 
 	MCdefaultstackptr->extraopen(false);
 
+    MCdispatcher->resolveparentscripts();
+    
 	send_startup_message();
 
 	if (!MCquit)
@@ -742,9 +810,6 @@ MCDispatch::startup()
 
 #else
 
-// Important: This function is on the emterpreter whitelist. If its
-// signature function changes, the mangled name must be updated in
-// em-whitelist.json
 IO_stat MCDispatch::startup(void)
 {
     char *t_mccmd;
@@ -851,7 +916,7 @@ IO_stat MCDispatch::startup(void)
 		
 		MCCapsuleClose(t_capsule);
 		
-		t_mainstack = t_info . stack;
+        t_mainstack = t_info . stack;
 	}
 	else if (MCnstacks > 1 && MClicenseparameters . license_class == kMCLicenseClassCommunity)
 	{
@@ -945,6 +1010,9 @@ IO_stat MCDispatch::startup(void)
 	
 	// Now open the main stack.
 	t_mainstack-> extraopen(false);
+    
+    MCdispatcher->resolveparentscripts();
+    
 	send_startup_message();
 	if (!MCquit)
 		t_mainstack -> open();

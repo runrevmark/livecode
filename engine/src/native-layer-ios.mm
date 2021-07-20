@@ -201,6 +201,7 @@ MCNativeLayer *MCNativeLayer::CreateNativeLayer(MCObject *p_object, void *p_nati
 @interface com_runrev_livecode_MCContainerView: UIView
 
 - (void)setFrame:(CGRect)frame;
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event;
 
 @end
 
@@ -214,6 +215,20 @@ MCNativeLayer *MCNativeLayer::CreateNativeLayer(MCObject *p_object, void *p_nati
 	[self setBounds:frame];
 }
 
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
+{
+	UIView *t_hit_view = [super hitTest:point withEvent:event];
+	
+	/* The container view should not trap any events so if the hitTest returns self we
+	 * return nil so the heirarchy continues to be navigated to find a view */
+	if (t_hit_view == self)
+	{
+		return nil;
+	}
+	
+	return t_hit_view;
+}
+
 @end
 
 bool MCNativeLayer::CreateNativeContainer(MCObject *p_object, void *&r_view)
@@ -225,7 +240,8 @@ bool MCNativeLayer::CreateNativeContainer(MCObject *p_object, void *&r_view)
 		return false;
 	
 	[t_view setAutoresizesSubviews:NO];
-	
+    [t_view setClipsToBounds:YES];
+    
 	r_view = t_view;
 	
 	return true;

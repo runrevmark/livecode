@@ -223,6 +223,11 @@ static inline MCPoint MCPointMake(int16_t x, int16_t y)
 	return t_point;
 }
 
+static inline bool MCPointIsEqual(const MCPoint &a, const MCPoint &b)
+{
+	return a.x == b.x && a.y == b.y;
+}
+
 static inline MCPoint MCGPointToMCPoint(const MCGPoint &p_point)
 {
 	return MCPointMake(int16_t(MCClamp(p_point.x, INT16_MIN, INT16_MAX)),
@@ -235,6 +240,11 @@ inline MCGPoint MCPointToMCGPoint(MCPoint p_point, MCGFloat p_adjustment = 0.0f)
 	t_point . x = (MCGFloat) p_point . x + p_adjustment;
 	t_point . y = (MCGFloat) p_point . y + p_adjustment;
 	return t_point;
+}
+
+static inline MCPoint MCPointOffset(const MCPoint &p_point, int16_t p_x, int16_t p_y)
+{
+	return MCPointMake(MCClamp(p_point.x + p_x, INT16_MIN, INT16_MAX), MCClamp(p_point.y + p_y, INT16_MIN, INT16_MAX));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -332,21 +342,21 @@ inline MCGRectangle MCGRectangleCenterOnRect(const MCGRectangle &p_rect_a, const
 // MM-2014-06-02: [[ CoreText ]] We now no longer need the style attribute of the MCGFont Struct.
 //   Was only used by the ATSUI routines.
 
-#if defined(TARGET_SUBPLATFORM_ANDROID)
+#if defined(TARGET_SUBPLATFORM_ANDROID) || defined(__EMSCRIPTEN__)
 
-#include "mblandroidtypeface.h"
+#include "skiatypeface.h"
 
 static inline MCGFont MCFontStructToMCGFont(MCFontStruct *p_font)
 {
-	MCAndroidFont *t_android_font;
-	t_android_font = (MCAndroidFont*)p_font-> fid;
+	MCSkiaFont *t_skia_font;
+	t_skia_font = (MCSkiaFont*)p_font -> fid;
 	
 	MCGFont t_font;
-	t_font . size = t_android_font -> size;
+	t_font . size = t_skia_font -> size;
 	t_font . m_ascent = p_font -> m_ascent;
 	t_font . m_descent = p_font -> m_descent;
-    t_font . m_leading = p_font -> m_leading;
-	t_font . fid = t_android_font -> typeface;
+	t_font . m_leading = p_font -> m_leading;
+	t_font . fid = t_skia_font -> typeface;
 	t_font . ideal = false;
 	return t_font;
 }
@@ -404,24 +414,6 @@ static inline MCGFont MCFontStructToMCGFont(MCFontStruct *p_font)
     t_font . m_leading = p_font -> m_leading;
 	t_font . fid = p_font -> fid;
 	t_font . ideal = false;
-	return t_font;
-}
-
-#elif defined(__EMSCRIPTEN__)
-
-static inline MCGFont
-MCFontStructToMCGFont(MCFontStruct *p_font)
-{
-	MCGFont t_font;
-	MCMemoryClear(&t_font, sizeof(t_font));
-
-	t_font . size = p_font -> size;
-	t_font . m_ascent = p_font -> m_ascent;
-	t_font . m_descent = p_font -> m_descent;
-    t_font . m_leading = p_font -> m_leading;
-    t_font . fid = p_font -> fid;
-	t_font . ideal = false;
-
 	return t_font;
 }
 

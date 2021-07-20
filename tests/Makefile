@@ -7,24 +7,27 @@ include $(top_srcdir)/Makefile.common
 
 TEST_DIR ?= $(top_srcdir)/_tests
 LCM_DIR ?= $(TEST_DIR)/_build
-
+TESTS_DIR ?= $(top_srcdir)/tests
 # When running on headless Linux, run tests in -ui mode.
+
+# Used for emulation in cross-compiles. Usually empty.
+INTERPRETER ?=
 
 LCS_ENGINE ?= $(guess_engine)
 LCS_ENGINE_FLAGS ?= $(guess_engine_flags)
 
 LCS_LOG = _lcs_test_suite.log
-LCS_TESTRUNNER ?= $(top_srcdir)/tests/_testrunner.livecodescript
-LCS_TESTS_DIR ?= $(top_srcdir)/tests/lcs
+LCS_TESTRUNNER ?= $(TESTS_DIR)/_testrunner.livecodescript
+LCS_TESTS_DIR ?= $(TESTS_DIR)/lcs
 
 ifeq ($(LCS_TESTENGINE),development)
-LCS_CMD = $(LCS_ENGINE) $(LCS_ENGINE_FLAGS) $(LCS_TESTRUNNER) run $(guess_dev_engine) $(LCS_ENGINE_FLAGS)
+LCS_CMD = $(INTERPRETER) $(LCS_ENGINE) $(LCS_ENGINE_FLAGS) $(LCS_TESTRUNNER) run $(guess_dev_engine) $(LCS_ENGINE_FLAGS)
 else
-LCS_CMD = $(LCS_ENGINE) $(LCS_ENGINE_FLAGS) $(LCS_TESTRUNNER) run $(LCS_TESTS_DIR)
+LCS_CMD = $(INTERPRETER) $(LCS_ENGINE) $(LCS_ENGINE_FLAGS) $(LCS_TESTRUNNER) run $(LCS_TESTS_DIR)
 endif
 
 LCS_SERVER_ENGINE ?= $(bin_dir)/server-community
-LCS_SERVER_TESTRUNNER ?= $(top_srcdir)/tests/_testrunner.lc
+LCS_SERVER_TESTRUNNER ?= $(TESTS_DIR)/_testrunner.lc
 LCS_SERVER_CMD = $(LCS_SERVER_ENGINE) $(LCS_SERVER_TESTRUNNER) run $(LCS_TESTS_DIR)
 
 ########## LiveCode Builder test parameters
@@ -43,24 +46,24 @@ LCB_TESTLIB = $(LCM_DIR)/_testlib.lcm
 
 ########## LiveCode Builder Compiler test parameters
 
-LCC_COMPILERTESTRUNNER ?= $(top_srcdir)/tests/_compilertestrunner.livecodescript
+LCC_COMPILERTESTRUNNER ?= $(TESTS_DIR)/_compilertestrunner.livecodescript
 
-LCC_CMD = $(LCS_ENGINE) -ui $(LCC_COMPILERTESTRUNNER) run
+LCC_CMD = $(INTERPRETER) $(LCS_ENGINE) -ui $(LCC_COMPILERTESTRUNNER) run
 
 LCC_LOG = _compiler_test_suite.log
 
 ########## LiveCode Script Parser test parameters
 
-LCP_COMPILERTESTRUNNER ?= $(top_srcdir)/tests/_parsertestrunner.livecodescript
+LCP_COMPILERTESTRUNNER ?= $(TESTS_DIR)/_parsertestrunner.livecodescript
 
-LCP_CMD = $(LCS_ENGINE) -ui $(LCP_COMPILERTESTRUNNER) run
+LCP_CMD = $(INTERPRETER) $(LCS_ENGINE) -ui $(LCP_COMPILERTESTRUNNER) run
 
 LCP_LOG = _parser_test_suite.log
 
 ########## lc-run test params
 
-LC_RUN_TESTS ?= $(top_srcdir)/tests/_lcruntests.livecodescript
-LC_RUN_TEST_CMD = $(LCS_ENGINE) -ui $(LC_RUN_TESTS)
+LC_RUN_TESTS ?= $(TESTS_DIR)/_lcruntests.livecodescript
+LC_RUN_TEST_CMD = $(INTERPRETER) $(LCS_ENGINE) -ui $(LC_RUN_TESTS)
 
 LC_RUN_LOG = _lc_run_test_suite.log
 
@@ -68,9 +71,9 @@ LC_RUN_LOG = _lc_run_test_suite.log
 
 LC_COMPILE_FFI_JAVA ?= $(bin_dir)/lc-compile-ffi-java
 
-LC_COMPILE_FFI_JAVA_TESTRUNNER ?= $(top_srcdir)/tests/_lc_compile_ffi_java_testrunner.livecodescript
+LC_COMPILE_FFI_JAVA_TESTRUNNER ?= $(TESTS_DIR)/_lc_compile_ffi_java_testrunner.livecodescript
 
-LC_COMPILE_FFI_JAVA_CMD = $(LCS_ENGINE) -ui $(LC_COMPILE_FFI_JAVA_TESTRUNNER) run
+LC_COMPILE_FFI_JAVA_CMD = $(INTERPRETER) $(LCS_ENGINE) -ui $(LC_COMPILE_FFI_JAVA_TESTRUNNER) run
 
 LC_COMPILE_FFI_JAVA_LOG = _lc-compile-ffi-java_test_suite.log
 
@@ -91,17 +94,17 @@ clean:
 # LCB test compilation rules
 ################################################################
 
-LCM_SOURCES ?= $(patsubst ./%,%,$(shell find . -name '*.lcb' | sort))
-LCM_LIB_SOURCES = $(shell for f in $(LCM_SOURCES); do echo $$f | grep '_[^/]*.lcb$$'; done)
+LCB_SOURCES ?= $(patsubst ./%,%,$(shell find . -name '*.lcb' | sort))
+LCB_LIB_SOURCES = $(shell for f in $(LCB_SOURCES); do echo $$f | grep '_[^/]*\.lcb$$'; done)
+LCB_TEST_SOURCES ?= $(shell for f in $(LCB_SOURCES); do echo $$f | grep '^lcb/.*\.lcb$$'; done)
+LCS_EXTENSION_SOURCES ?= $(patsubst "$(TESTS_DIR)/%",%,$(shell find "$(TESTS_DIR)/lcs/extensions" -name '*.lcb' | sort))
 
-LCM_TEST_SOURCES ?= $(shell for f in $(LCM_SOURCES); do echo $$f | grep -v '_[^/]*.lcb$$'; done)
-
-LCM_MODULES = $(patsubst %.lcb,$(LCM_DIR)/%.lcm,$(LCM_SOURCES))
-LCM_TEST_MODULES = $(patsubst %.lcb,$(LCM_DIR)/%.lcm,$(LCM_TEST_SOURCES))
+LCM_MODULES = $(patsubst %.lcb,$(LCM_DIR)/%.lcm,$(LCB_SOURCES))
+LCM_TEST_MODULES = $(patsubst %.lcb,$(LCM_DIR)/%.lcm,$(LCB_TEST_SOURCES))
 
 ########## Build dependencies rules
 
-ifneq ($(LCM_SOURCES),)
+ifneq ($(LCB_SOURCES),)
 	include $(LCM_DIR)/deps.mk
 endif
 
@@ -112,19 +115,25 @@ $(LCM_DIR):
 # inherit the correct dependencies.  Specifically, we need to make
 # sure that .lcm files depend on all the same things that their
 # corresponding .lci files depend on.
-$(LCM_DIR)/deps.mk: $(LCM_SOURCES) Makefile $(LC_COMPILE) | $(LCM_DIR)
+$(LCM_DIR)/deps.mk: $(LCB_SOURCES) Makefile $(LC_COMPILE) | $(LCM_DIR)
 	@set -e; rm -f $@; \
-	for lcb in $(LCM_SOURCES); do \
+	for lcb in $(LCB_SOURCES); do \
 	  lcm=`echo $$lcb | sed 's/lcb$$/lcm/'` ; \
-	  $(LC_COMPILE) $(LC_COMPILE_FLAGS) --deps make \
+	  $(INTERPRETER) $(LC_COMPILE) $(LC_COMPILE_FLAGS) --deps make \
 	    --output $(LCM_DIR)/$$lcm -- $$lcb >> $@; \
 	done; \
-	$(LC_COMPILE) $(LC_COMPILE_FLAGS) --deps make -- $(LCM_SOURCES) >> $@ ; \
+	$(INTERPRETER) $(LC_COMPILE) $(LC_COMPILE_FLAGS) --deps make -- $(LCB_SOURCES) >> $@ ; \
 	sed -i -e 's,\(.* \([^ ]*\)\.lcb\)$$,$(LCM_DIR)/\2.lcm \1,g' $@
 
 ########## Build rules
 
-lcm_compile: $(LCM_MODULES)
+extensions_compile: $(LCM_DIR) $(LCS_EXTENSION_SOURCES)
+	@set -e; \
+	echo "$(LCS_EXTENSION_SOURCES)" $(_PRINT_RULE); \
+	cp -r "$(MODULE_DIR)/." "$(LCM_DIR)"; \
+	"$(LCS_SERVER_ENGINE)" "${top_srcdir}/extensions/script-libraries/extension-utils/resources/extension-utils.lc" "buildlcbextensions" "${top_srcdir}/ide-support/revdocsparser.livecodescript" "$(LCM_DIR)/packaged_extensions" "false" "$(LC_COMPILE)" "$(LCM_DIR)" "$(NOTHING)" $(LCS_EXTENSION_SOURCES)
+
+lcm_compile: $(LCM_MODULES) extensions_compile
 
 $(LCM_DIR)/%.lcm: %.lcb | $(LCM_DIR)
 	@set -e; \
@@ -132,7 +141,7 @@ $(LCM_DIR)/%.lcm: %.lcb | $(LCM_DIR)
 	echo "$$cmd" $(_PRINT_RULE); \
 	$$cmd
 	@set -e; \
-	cmd="$(LC_COMPILE) $(LC_COMPILE_FLAGS) --output $@ -- $<" ; \
+	cmd="$(INTERPRETER) $(LC_COMPILE) $(LC_COMPILE_FLAGS) --output $@ -- $<" ; \
 	echo "$$cmd" $(_PRINT_RULE); \
 	$$cmd
 
@@ -206,26 +215,26 @@ lc-run-check: $(LC_RUN) lcm_compile
 # LCB-only tests
 ################################################################
 
-LCB_TEST_LOGS = $(patsubst %.lcb,$(TEST_DIR)/%.log,$(LCM_TEST_SOURCES))
+LCB_TEST_LOGS = $(patsubst %.lcb,$(TEST_DIR)/%.log,$(LCB_TEST_SOURCES))
 
 LC_RUN_FLAGS += -l $(LCB_TESTLIB)
 
 lcb-check: lcm_compile
 	@set -e; \
 	export TEST_SUITE_LOG_FILE="$(LCB_LOG)"; \
-	for lcbfile in $(LCM_TEST_SOURCES); do \
+	for lcbfile in $(LCB_TEST_SOURCES); do \
 	    lcmfile="$(LCM_DIR)/`echo $$lcbfile | sed -e 's:lcb$$:lcm:'`" ; \
 	    logfile="$(TEST_DIR)/`echo $$lcbfile | sed -e's:lcb$$:log:'`" ; \
 	    parent="`echo $$lcbfile | sed -e 's:.*/\([^/]*\)/tests.*$$:\1:'`"; \
 	    loadfile="$(LCM_DIR)/`echo $$lcbfile | sed -e 's:tests/.*\.lcb$$::'`$$parent.lcm"; \
 	    mkdir -p `dirname $$logfile`; \
 	    if [ -e $$loadfile ] ; then \
-	    	$(LC_RUN) $(LC_RUN_FLAGS) --handler RunModuleTests -- $(LCB_TESTRUNNER) --lc-run "$(LC_RUN) --load $$loadfile $(LC_RUN_FLAGS)" $$lcmfile > $$logfile; \
+	    	$(INTERPRETER) $(LC_RUN) $(LC_RUN_FLAGS) --handler RunModuleTests -- $(LCB_TESTRUNNER) --lc-run "$(LC_RUN) --load $$loadfile $(LC_RUN_FLAGS)" $$lcmfile > $$logfile; \
 	    else \
-	    	$(LC_RUN) $(LC_RUN_FLAGS) --handler RunModuleTests -- $(LCB_TESTRUNNER) --lc-run "$(LC_RUN) $(LC_RUN_FLAGS)" $$lcmfile > $$logfile; \
+	    	$(INTERPRETER) $(LC_RUN) $(LC_RUN_FLAGS) --handler RunModuleTests -- $(LCB_TESTRUNNER) --lc-run "$(LC_RUN) $(LC_RUN_FLAGS)" $$lcmfile > $$logfile; \
 	    fi; \
 	done; \
-	$(LC_RUN) $(LC_RUN_FLAGS) --handler SummarizeTests -- $(LCB_TESTRUNNER) --summary-log $(LCB_LOG) $(LCB_TEST_LOGS)
+	$(INTERPRETER) $(LC_RUN) $(LC_RUN_FLAGS) --handler SummarizeTests -- $(LCB_TESTRUNNER) --summary-log $(LCB_LOG) $(LCB_TEST_LOGS)
 
 ################################################################
 # lc-compile-ffi-java tests

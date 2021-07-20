@@ -472,8 +472,9 @@ Boolean MCcursorcanbecolor = False;
 Boolean MCcursorbwonly = True;
 int32_t MCcursormaxsize = 32;
 
-uint32_t MCstacklimit = 8 * 1024 * 1024;
-uint32_t MCpendingstacklimit = 1024 * 1024;
+#define kMCStackLimit 8 * 1024 * 1024
+uint32_t MCstacklimit = kMCStackLimit;
+uint32_t MCpendingstacklimit = kMCStackLimit;
 
 Boolean MCappisactive = False;
 
@@ -855,6 +856,8 @@ void X_clear_globals(void)
     
     MChooks = nil;
 
+    memset(&MClicenseparameters, 0, sizeof(MCLicenseParameters));
+    
 #if defined(MCSSL)
     MCSocketsInitialize();
 #endif
@@ -883,6 +886,8 @@ void X_clear_globals(void)
 #endif
 	
 	MCDateTimeInitialize();
+    
+    MClogmessage = MCNAME("log");
 }
 
 /* ---------------------------------------------------------------- */
@@ -1087,7 +1092,7 @@ bool X_open(int argc, MCStringRef argv[], MCStringRef envp[])
     
 #if defined(_MACOSX) && defined(FEATURE_QUICKTIME)
     // MW-2014-07-21: Make AVFoundation the default on 10.8 and above.
-    if (MCmajorosversion < 0x1080)
+    if (MCmajorosversion < MCOSVersionMake(10,8,0))
     {
         MCdontuseQT = False;
         MCdontuseQTeffects = False;
@@ -1272,9 +1277,6 @@ int X_close(void)
     // MW-2012-02-23: [[ FontRefs ]] Finalize the font module.
     MCFontFinalize();
     
-    /* Finalize all builtin extensions */
-    MCExtensionFinalize();
-
 	// MW-2008-01-18: [[ Bug 5711 ]] Make sure we disable the backdrop here otherwise we
 	//   get crashiness on Windows due to hiding the backdrop calling WindowProc which
 	//   attempts to access stacks that have been deleted...
@@ -1288,6 +1290,12 @@ int X_close(void)
 	MCInterfaceFinalize(ctxt);
 
 	MCstacks->closeall();
+    
+    MCscreen->DoRunloopActions();
+    
+    /* Finalize all builtin extensions */
+    MCExtensionFinalize();
+
 	MCselected->clear(False);
     MCundos->freestate();
     
@@ -1339,6 +1347,7 @@ int X_close(void)
 	while (MCsavegroupptr != NULL)
 	{
 		MCControl *gptr = MCsavegroupptr->remove(MCsavegroupptr);
+        gptr -> removereferences();
 		delete gptr;
 	}
 
@@ -1541,6 +1550,8 @@ int X_close(void)
         MCValueRelease(MCappcodepath);
     if (MCcmd != nullptr)
         MCValueRelease(MCcmd);
+    
+    MCValueRelease(MClogmessage);
     
 	return MCretcode;
 }

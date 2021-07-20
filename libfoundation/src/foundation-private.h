@@ -41,6 +41,13 @@ enum
 {
 	// If set, then this value is in the unique table.
 	kMCValueFlagIsInterred = 1 << 27,
+    
+    // The mask for the typecode bits.
+    kMCValueFlagsTypeCodeMask = 0xf0000000,
+    
+    // Names store the hash value in the flags word.
+    kMCValueFlagsNameHashBits = 28,
+    kMCValueFlagsNameHashMask = (1 << kMCValueFlagsNameHashBits) - 1,
 };
 
 struct __MCValue
@@ -250,14 +257,30 @@ struct __MCString: public __MCValue
         MCStringRef string;
         struct
         {
+#ifdef __32_BIT__
             uindex_t char_count;
             union
             {
                 unichar_t *chars;
                 char_t *native_chars;
             };
-            uindex_t capacity;
             double numeric_value;
+            uindex_t capacity;
+            /* The padding is here to ensure the size of the struct is 32-bytes
+             * on all platforms. This ensures consistency between Win and UNIX
+             * ABIs which have slightly different rules concerning double
+             * alignment. */
+            uint32_t __padding;
+#else
+            uindex_t char_count;
+            uindex_t capacity;
+            union
+            {
+                unichar_t *chars;
+                char_t *native_chars;
+            };
+            double numeric_value;
+#endif
         };
     };
 };
@@ -281,8 +304,8 @@ struct __MCData: public __MCValue
         struct
         {
             uindex_t byte_count;
-            byte_t *bytes;
             uindex_t capacity;
+            byte_t *bytes;
         };
     };
 };
@@ -291,10 +314,16 @@ struct __MCData: public __MCValue
 
 struct __MCName: public __MCValue
 {
-	__MCName *next;
-	__MCName *key;
+#ifdef __32_BIT__
+    __MCName *next;
+    __MCName *key;
+    MCStringRef string;
+    hash_t hash;
+#else
+	uintptr_t next;
+	uintptr_t key;
 	MCStringRef string;
-	hash_t hash;
+#endif
 };
 
 //////////
@@ -431,12 +460,27 @@ struct __MCForeignValue: public __MCValue
 
 ////////
 
+#ifdef __HAS_MULTIPLE_ABIS__
+struct __MCHandlerClosureWithAbi
+{
+	__MCHandlerClosureWithAbi *next;
+	int abi;
+	void *closure;
+	void *function_ptr;
+};
+#endif
+
 struct __MCHandler: public __MCValue
 {
     MCTypeInfoRef typeinfo;
     const MCHandlerCallbacks *callbacks;
+	/* We store the closure with default ABI in the value. */
     void *closure;
     void *function_ptr;
+#ifdef __HAS_MULTIPLE_ABIS__
+	/* All closures with non-default ABIs are stored in a linked list. */
+	__MCHandlerClosureWithAbi *other_closures;
+#endif
     char context[1];
 };
 

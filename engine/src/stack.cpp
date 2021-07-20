@@ -613,6 +613,7 @@ MCStack::~MCStack()
 		MCstaticdefaultstackptr = MCtopstackptr;
 	if (MCdefaultstackptr.IsBoundTo(this))
 		MCdefaultstackptr = MCstaticdefaultstackptr;
+    delete[] needs; /* Allocated with new[] */
 	if (stackfiles != NULL)
 	{
 		while (nstackfiles--)
@@ -1419,8 +1420,17 @@ Boolean MCStack::del(bool p_check_flag)
 
     while (substacks)
     {
+        /* When a substack is deleted it removes itself from its mainstack,
+         * however it isn't actually destroyed - it must be explicitly
+         * scheduled for deletion. */
+        MCStack *t_substack = substacks;
         if (!substacks -> del(false))
             return False;
+        
+        /* Schedule the substack for deletion - unlike a main stack we don't
+         * need to check for it being in the MCtodestroy list as only mainstacks
+         * can ever be in that list. */
+        t_substack->scheduledelete();
     }
     
     return dodel();
@@ -2128,7 +2138,7 @@ void MCStack::sethiddenobjectvisibility(MCStackObjectVisibility p_visibility)
 	if (t_visible != showinvisible())
 	{
 		// Visibility of objects has changed so redraw the stack.
-		view_dirty_all();
+		dirtyall();
 	}
 }
 
@@ -2149,4 +2159,17 @@ bool MCStack::geteffectiveshowinvisibleobjects()
 			MCUnreachable();
 			return false;
 	}
+}
+
+void MCStack::startparsingscript(MCObject *p_object, MCDataRef& r_data)
+{
+    unichar_t *t_unicode_string;
+    uint32_t t_length;
+    /* UNCHECKED */ MCStringConvertToUnicode(p_object->_getscript(), t_unicode_string, t_length);
+    /* UNCHECKED */ MCDataCreateWithBytesAndRelease((byte_t *)t_unicode_string, (t_length + 1) * 2, r_data);
+}
+
+void MCStack::stopparsingscript(MCObject *p_object, MCDataRef p_data)
+{
+    MCValueRelease(p_data);
 }

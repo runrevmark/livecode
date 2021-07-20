@@ -162,9 +162,18 @@ void MCStack::setmodalhints()
 {
 	if (mode == WM_MODAL || mode == WM_SHEET)
 	{
+		Window t_window = nullptr;
 		if (mode == WM_SHEET)
-            gdk_window_set_transient_for(window, (mode == WM_SHEET) ? getparentwindow() : NULL);
-        gdk_window_set_modal_hint(window, TRUE);
+		{
+			t_window = getparentwindow();
+		}
+		
+		if (nullptr == t_window && MCtopstackptr.IsValid()) 
+		{
+			t_window = MCtopstackptr->getwindow();
+		}
+		gdk_window_set_transient_for(window, t_window);
+		gdk_window_set_modal_hint(window, TRUE);
 	}
 }
 
@@ -267,7 +276,7 @@ void MCStack::sethints()
     
     gdk_window_set_type_hint(window, t_type_hint);
     
-    if ((mode >= WM_PULLDOWN && mode <= WM_LICENSE) || getextendedstate(ECS_FULLSCREEN))
+    if ((mode >= WM_PULLDOWN && mode <= WM_LICENSE))
     {
         gdk_window_set_override_redirect(window, TRUE);
     }
@@ -298,7 +307,7 @@ void MCStack::sethints()
         
         MCAutoStringRef t_edition_name;
         if (MCStringCreateMutable(0, &t_app_name) &&
-            MCStringFromLicenseClass(MClicenseparameters.license_class, true, &t_edition_name))
+            MCEditionStringFromLicenseClass(MClicenseparameters.license_class, &t_edition_name))
 		{
 			bool t_success = true;
 			if (t_env == kMCModeEnvironmentTypeEditor)
@@ -439,6 +448,8 @@ void MCStack::sethints()
 	{
 		gdk_window_set_keep_above(window, TRUE);
 	}
+	
+	MCstacks->restack(this);
 }
 
 void MCStack::destroywindowshape()
@@ -463,6 +474,11 @@ void MCStack::destroywindowshape()
 	m_window_shape = nil;
 }
 
+bool MCStack::view_platform_dirtyviewonresize() const
+{
+	return false;
+}
+
 // IM-2014-01-29: [[ HiDPI ]] Placeholder method for Linux HiDPI support
 MCRectangle MCStack::view_platform_getwindowrect(void) const
 {
@@ -473,7 +489,23 @@ MCRectangle MCStack::view_device_getwindowrect(void) const
 {
     GdkRectangle t_frame;
     gdk_window_get_frame_extents(window, &t_frame);
-    return MCRectangleMake(t_frame . x, t_frame . y, t_frame . width, t_frame . height);
+    MCRectangle t_frame_rect;
+    t_frame_rect = MCRectangleMake(t_frame . x, t_frame . y, t_frame . width, t_frame . height);
+    
+    if (MClockscreen != 0)
+    {
+        MCRectangle t_content_rect, t_diff_rect;
+        MCscreen->platform_getwindowgeometry(window, t_content_rect);
+        // the content rect of a window should always be contained (or equal) to the frame rect
+        // so compute these 4 margins and then apply them to the rect of the stack
+        t_diff_rect.x = rect.x - (t_content_rect.x - t_frame_rect.x);
+        t_diff_rect.y = rect.y - (t_content_rect.y - t_frame_rect.y);
+        t_diff_rect.width = rect.width + (t_frame_rect.width - t_content_rect.width);
+        t_diff_rect.height = rect.height + (t_frame_rect.height - t_content_rect.height);
+        return t_diff_rect;
+    }
+    
+    return t_frame_rect;
 }
 
 // IM-2014-01-29: [[ HiDPI ]] Placeholder method for Linux HiDPI support

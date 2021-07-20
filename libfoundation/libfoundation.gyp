@@ -6,11 +6,18 @@
 		[
 			'libFoundation',
 		],
+        'module_test_include_dirs':
+        [
+            'include',
+            'src',
+        ],
 		'module_test_sources':
 		[
 			'test/environment.cpp',
             'test/test_foreign.cpp',
 			'test/test_hash.cpp',
+            'test/test_memory.cpp',
+            'test/test_name.cpp',
 			'test/test_proper-list.cpp',
 			'test/test_string.cpp',
 			'test/test_typeconvert.cpp',
@@ -40,8 +47,8 @@
 			[
 				'../prebuilt/libicu.gyp:libicu',
 				'../prebuilt/libicu.gyp:encode_minimal_icu_data',
+                '../prebuilt/thirdparty.gyp:thirdparty_prebuilt_z',
 				'../thirdparty/libffi/libffi.gyp:libffi',
-				'../thirdparty/libz/libz.gyp:libz',
 			],
 			
 			'include_dirs':
@@ -67,11 +74,13 @@
 				'include/foundation-text.h',
 				'include/foundation-unicode.h',
 				'include/system-commandline.h',
+				'include/system-error.h',
 				'include/system-file.h',
 				'include/system-init.h',
                 'include/system-library.h',
 				'include/system-random.h',
 				'include/system-stream.h',
+				'include/system-info.h',
 				
 				'src/foundation-private.h',
 				'src/foundation-unicode-private.h',
@@ -79,7 +88,8 @@
 				
 				'src/foundation-array.cpp',
 				'src/foundation-bidi.cpp',
-				'src/foundation-chunk.cpp',
+                'src/foundation-chunk.cpp',
+                'src/foundation-cf.cpp',
 				'src/foundation-core.cpp',
 				'src/foundation-custom.cpp',
 				'src/foundation-data.cpp',
@@ -102,7 +112,6 @@
 				'src/foundation-set.cpp',
 				'src/foundation-stream.cpp',
 				'src/foundation-string.cpp',
-				'src/foundation-string-cf.cpp',
                 'src/foundation-string-native.cpp.h',
 				'src/foundation-text.cpp',
 				'src/foundation-typeconvert.cpp',
@@ -113,6 +122,7 @@
 				'src/foundation-objc.mm',
 				'src/foundation-ffi-js.cpp',
 				'src/system-commandline.cpp',
+				'src/system-error.cpp',
 				'src/system-file.cpp',
 				'src/system-file-posix.cpp',
 				'src/system-file-w32.cpp',
@@ -128,6 +138,7 @@
                 'src/system-library-w32.hpp',
 				'src/system-random.cpp',
 				'src/system-stream.cpp',
+				'src/system-info.cpp',
 				
 				'<(SHARED_INTERMEDIATE_DIR)/src/icudata-minimal.cpp',
 			],
@@ -169,7 +180,7 @@
                     
 						'sources!':
 						[
-							'src/foundation-string-cf.cpp',
+							'src/foundation-cf.cpp',
                             'src/foundation-objc.mm',
 						],
 					},

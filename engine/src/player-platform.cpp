@@ -180,13 +180,9 @@ public:
         MCRectangle t_volume_well;
         t_volume_well = getVolumeBarPartRect(dirty, kMCPlayerControllerPartVolumeWell);
         
-        MCGBitmapEffects t_effects;
-        t_effects . has_drop_shadow = false;
-        t_effects . has_outer_glow = false;
-        t_effects . has_inner_glow = false;
+        MCGBitmapEffects t_effects = MCGBitmapEffects();
         t_effects . has_inner_shadow = true;
-        t_effects . has_color_overlay = false;
-        
+		
         MCGShadowEffect t_inner_shadow;
         t_inner_shadow . color = MCGColorMakeRGBA(0.0f, 0.0f, 0.0f, 56.0 / 255.0);
         t_inner_shadow . blend_mode = kMCGBlendModeClear;
@@ -526,13 +522,9 @@ public:
         MCRectangle t_rate_well;
         t_rate_well = getRateBarPartRect(dirty, kMCPlayerControllerPartRateWell);
         
-        MCGBitmapEffects t_effects;
-        t_effects . has_drop_shadow = false;
-        t_effects . has_outer_glow = false;
-        t_effects . has_inner_glow = false;
+        MCGBitmapEffects t_effects = MCGBitmapEffects();
         t_effects . has_inner_shadow = true;
-        t_effects . has_color_overlay = false;
-        
+
         MCGShadowEffect t_inner_shadow;
         t_inner_shadow . color = MCGColorMakeRGBA(0.0f, 0.0f, 0.0f, 56.0 / 255.0);
         t_inner_shadow . blend_mode = kMCGBlendModeClear;
@@ -816,6 +808,10 @@ MCPlayer::MCPlayer()
     m_scrub_forward_is_pressed = false;
     m_modify_selection_while_playing = false;
     
+	m_left_balance = 100.0;
+	m_right_balance = 100.0;
+	m_audio_pan = 0.0;
+	
     // MW-2014-07-16: [[ Bug ]] Put the player in the list.
     nextplayer = MCplayers;
     MCplayers = this;
@@ -854,6 +850,10 @@ MCPlayer::MCPlayer(const MCPlayer &sref) : MCControl(sref)
     m_scrub_forward_is_pressed = false;
     m_modify_selection_while_playing = false;
     
+	m_left_balance = sref.m_left_balance;
+	m_right_balance = sref.m_right_balance;
+	m_audio_pan = sref.m_audio_pan;
+	
     // MW-2014-07-16: [[ Bug ]] Put the player in the list.
     nextplayer = MCplayers;
     MCplayers = this;
@@ -896,24 +896,24 @@ void MCPlayer::open()
 void MCPlayer::close()
 {
 	MCControl::close();
+
+    if (s_volume_popup != nil)
+        s_volume_popup -> close();
+
 	if (opened == 0)
 	{
 		state |= CS_CLOSING;
 		playstop();
 		state &= ~CS_CLOSING;
-	}
-    
-    if (s_volume_popup != nil)
-        s_volume_popup -> close();
-	
-	detachplayer();
 
-    
-    if (m_platform_player != nil)
-    {
-        MCPlatformPlayerRelease(m_platform_player);
-        m_platform_player = nullptr;
-    }
+		detachplayer();
+
+		if (m_platform_player != nil)
+		{
+			MCPlatformPlayerRelease(m_platform_player);
+			m_platform_player = nullptr;
+		}
+	}
 }
 
 Boolean MCPlayer::kdown(MCStringRef p_string, KeySym key)
@@ -1386,10 +1386,17 @@ void MCPlayer::setplayrate()
 {
 	if (m_platform_player != nil && hasfilename())
 	{
-		MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPlayRate, kMCPlatformPropertyTypeDouble, &rate);
-		if (rate != 0.0f)
-        // PM-2014-05-28: [[ Bug 12523 ]] Take into account the playRate property
+		if (rate == 0.0f)
+		{
+			// Setting playrate to 0 should pause the player (if playing)
+			MCPlatformStopPlayer(m_platform_player);
+		}
+		else
+		{
+			// start / resume at the new rate
+			MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPlayRate, kMCPlatformPropertyTypeDouble, &rate);
 			MCPlatformStartPlayer(m_platform_player, rate);
+		}
 	}
     
 	if (rate != 0)
@@ -1625,8 +1632,10 @@ Boolean MCPlayer::playpause(Boolean on)
 		if (!on)
         {
             playselection(getflag(F_PLAY_SELECTION) && !m_modify_selection_while_playing);
-            // PM-2014-08-06: [[ Bug 13104 ]] Force playRate to 1.0 (needed when starting player by pressing space/enter keys 
-            rate = 1.0;
+            // PM-2014-08-06: [[ Bug 13104 ]] Remember existing playrate when starting player after a pause
+            double t_rate;
+            MCPlatformGetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPlayRate, kMCPlatformPropertyTypeDouble, &t_rate);
+            rate = t_rate;
 			MCPlatformStartPlayer(m_platform_player, rate);
 		}
         else
@@ -1806,6 +1815,54 @@ void MCPlayer::setloudness()
 			MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyVolume, kMCPlatformPropertyTypeUInt16, &loudness);
 }
 
+double MCPlayer::getleftbalance()
+{
+	if (state & CS_PREPARED)
+		if (m_platform_player != nil)
+			MCPlatformGetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyLeftBalance, kMCPlatformPropertyTypeDouble, &m_left_balance);
+	return m_left_balance;
+}
+
+void MCPlayer::setleftbalance(double p_left_balance)
+{
+	m_left_balance = p_left_balance;
+	if (state & CS_PREPARED)
+		if (m_platform_player != nil)
+			MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyLeftBalance, kMCPlatformPropertyTypeDouble, &m_left_balance);
+}
+
+double MCPlayer::getrightbalance()
+{
+	if (state & CS_PREPARED)
+		if (m_platform_player != nil)
+			MCPlatformGetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyRightBalance, kMCPlatformPropertyTypeDouble, &m_right_balance);
+	return m_right_balance;
+}
+
+void MCPlayer::setrightbalance(double p_right_balance)
+{
+	m_right_balance = p_right_balance;
+	if (state & CS_PREPARED)
+		if (m_platform_player != nil)
+			MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyRightBalance, kMCPlatformPropertyTypeDouble, &m_right_balance);
+}
+
+double MCPlayer::getaudiopan()
+{
+	if (state & CS_PREPARED)
+		if (m_platform_player != nil)
+			MCPlatformGetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPan, kMCPlatformPropertyTypeDouble, &m_audio_pan);
+	return m_audio_pan;
+}
+
+void MCPlayer::setaudiopan(double p_pan)
+{
+	m_audio_pan = p_pan;
+	if (state & CS_PREPARED)
+		if (m_platform_player != nil)
+			MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPan, kMCPlatformPropertyTypeDouble, &m_audio_pan);
+}
+
 void MCPlayer::setenabledtracks(uindex_t p_count, uint32_t *p_tracks_id)
 {
 	if (getstate(CS_PREPARED))
@@ -1820,7 +1877,7 @@ void MCPlayer::setenabledtracks(uindex_t p_count, uint32_t *p_tracks_id)
 				MCPlatformSetPlayerTrackProperty(m_platform_player, i, kMCPlatformPlayerTrackPropertyEnabled, kMCPlatformPropertyTypeBool, &t_enabled);
 			}
 			
-            for (uindex_t i = 0; i < t_track_count; i++)
+            for (uindex_t i = 0; i < p_count; i++)
             {
 				// If the list of enabledtracks we set contains 0 (empty), just skip it
 				if (p_tracks_id[i] == 0)
@@ -2525,13 +2582,9 @@ void MCPlayer::drawControllerWellButton(MCGContextRef p_gcontext)
     t_drawn_well_rect . x += 4;
     t_drawn_well_rect . width -= 10;
     
-    MCGBitmapEffects t_effects;
-	t_effects . has_drop_shadow = false;
-	t_effects . has_outer_glow = false;
-	t_effects . has_inner_glow = false;
-	t_effects . has_inner_shadow = true;
-    t_effects . has_color_overlay = false;
-    
+    MCGBitmapEffects t_effects = MCGBitmapEffects();
+    t_effects . has_inner_shadow = true;
+
     MCGShadowEffect t_inner_shadow;
     t_inner_shadow . color = MCGColorMakeRGBA(56.0 / 255.0, 56.0 / 255.0, 56.0 / 255.0, 56.0 / 255.0);
     t_inner_shadow . blend_mode = kMCGBlendModeClear;
@@ -3286,6 +3339,9 @@ void MCPlayer::handle_mdown(int p_which)
         }
             break;
         case kMCPlayerControllerPartScrubBack:
+            
+            push_current_rate();
+
             // PM-2014-08-12: [[ Bug 13120 ]] Cmd + click on scrub buttons starts playing in the appropriate direction
             if (hasfilename() && (MCmodifierstate & MS_CONTROL) != 0)
             {
@@ -3320,6 +3376,9 @@ void MCPlayer::handle_mdown(int p_which)
             break;
             
         case kMCPlayerControllerPartScrubForward:
+            
+            push_current_rate();
+
             // PM-2014-08-12: [[ Bug 13120 ]] Cmd + click on scrub buttons starts playing in the appropriate direction
             if (hasfilename() && (MCmodifierstate & MS_CONTROL) != 0)
             {
@@ -3362,6 +3421,21 @@ void MCPlayer::handle_mdown(int p_which)
         default:
             break;
     }
+}
+
+void MCPlayer::push_current_rate()
+{
+    // get current rate
+    double t_old_rate;
+    MCPlatformGetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPlayRate, kMCPlatformPropertyTypeDouble, &t_old_rate);
+    m_rate_before_scrub_buttons_pressed = t_old_rate;
+}
+
+void MCPlayer::pop_current_rate()
+{
+    // get current rate
+    double t_old_rate = m_rate_before_scrub_buttons_pressed;
+    MCPlatformSetPlayerProperty(m_platform_player, kMCPlatformPlayerPropertyPlayRate, kMCPlatformPropertyTypeDouble, &t_old_rate);
 }
 
 void MCPlayer::handle_mfocus(int x, int y)
@@ -3518,12 +3592,14 @@ void MCPlayer::handle_mup(int p_which)
     switch (m_grabbed_part)
     {
         case kMCPlayerControllerPartScrubBack:
+            pop_current_rate();
             m_scrub_back_is_pressed = false;
             playpause(m_was_paused);
             layer_redrawall();
             break;
             
         case kMCPlayerControllerPartScrubForward:
+            pop_current_rate();
             m_scrub_forward_is_pressed = false;
             playpause(m_was_paused);
             layer_redrawall();

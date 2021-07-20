@@ -37,7 +37,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "globals.h"
 
-#include "syntax.h"
 #include "redraw.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -330,84 +329,6 @@ void MCStatement::initpoint(MCScriptPoint &sp)
 {
 	line = sp.getline();
 	pos = sp.getpos();
-}
-
-void MCStatement::compile(MCSyntaxFactoryRef ctxt)
-{
-	MCSyntaxFactoryBeginStatement(ctxt, line, pos);
-	MCSyntaxFactoryExecUnimplemented(ctxt);
-	MCSyntaxFactoryEndStatement(ctxt);
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-
-MCComref::MCComref(MCNameRef n)
-{
-    name = MCValueRetain(n);
-	handler = nil;
-	params = NULL;
-	resolved = false;
-    global_handler = false;
-}
-
-MCComref::~MCComref()
-{
-	while (params != NULL)
-	{
-		MCParameter *tmp = params;
-		params = params->getnext();
-		delete tmp;
-	}
-	MCValueRelease(name);
-}
-
-Parse_stat MCComref::parse(MCScriptPoint &sp)
-{
-	initpoint(sp);
-	if (getparams(sp, &params) != PS_NORMAL)
-	{
-		MCperror->add(PE_STATEMENT_BADPARAMS, sp);
-		return PS_ERROR;
-	}
-    
-    if (MCIsGlobalHandler(name))
-    {
-        global_handler = true;
-        resolved = true;
-    }
-    
-	return PS_NORMAL;
-}
-
-void MCComref::exec_ctxt(MCExecContext& ctxt)
-{
-    MCKeywordsExecCommandOrFunction(ctxt, resolved, handler, params, name, line, pos, global_handler, false);
-    
-    if (MCresultmode == kMCExecResultModeReturn)
-    {
-        // Do nothing!
-    }
-    else if (MCresultmode == kMCExecResultModeReturnValue)
-    {
-        // Set 'it' to the result and clear the result
-        MCAutoValueRef t_value;
-        if (!MCresult->eval(ctxt, &t_value))
-        {
-            ctxt.Throw();
-            return;
-        }
-        
-        ctxt.SetItToValue(*t_value);
-        ctxt.SetTheResultToEmpty();
-    }
-    else if (MCresultmode == kMCExecResultModeReturnError)
-    {
-        // Set 'it' to empty
-        ctxt.SetItToEmpty();
-        // Leave the result as is but make sure we reset the 'return mode' to default.
-        MCresultmode = kMCExecResultModeReturn;
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

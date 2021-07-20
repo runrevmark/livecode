@@ -23,6 +23,8 @@ import android.content.*;
 import android.content.res.*;
 import android.widget.*;
 import android.util.*;
+import android.content.pm.PackageManager;
+import android.graphics.*;
 
 // This is the main activity exported by the application. This is
 // split into two parts, a customizable sub-class that gets dynamically
@@ -75,6 +77,15 @@ public class LiveCodeActivity extends Activity
         
         // prevent soft keyboard from resizing our view when shown
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        
+        s_main_layout.getRootView().getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener()
+        {
+            @Override
+            public void onGlobalLayout()
+            {
+                s_main_view.updateKeyboardVisible();
+            }
+        });
 	}
 
 	@Override
@@ -198,4 +209,13 @@ public class LiveCodeActivity extends Activity
 	{
 		s_main_view.onActivityResult(requestCode, resultCode, data);
 	}
+    
+    // Callback sent when the app requests permissions on runtime (Android API 23+)
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
+    {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        s_main_view.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
 }

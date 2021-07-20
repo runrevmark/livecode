@@ -310,6 +310,10 @@ public:
 				else
 					t_item_highlight = kMCPlatformMenuItemHighlightTick;
 			}
+			else
+			{
+				t_item_highlight = kMCPlatformMenuItemHighlightNone;
+			}
 			
 			MCPlatformMenuItemAction t_action;
 			t_action = ComputeAction(p_menuitem -> label, p_menuitem -> tag);
@@ -374,17 +378,17 @@ void MCButton::macopenmenu(void)
 	{
 		case WM_COMBO:
 		case WM_OPTION:
-			trect = MCU_recttoroot(MCmousestackptr, rect);
+			trect = MCU_recttoroot(getstack(), rect);
 			tmenux = trect.x;
 			tmenuy = trect.y;
 			break;
 		case WM_PULLDOWN:
-			trect = MCU_recttoroot(MCmousestackptr, rect);
+			trect = MCU_recttoroot(getstack(), rect);
 			tmenux = trect.x;
 			tmenuy = trect.y+trect.height + 1;
 			break;
 		case WM_CASCADE:
-			trect = MCU_recttoroot(MCmousestackptr, rect);
+			trect = MCU_recttoroot(getstack(), rect);
 			tmenux = trect.x + trect.width + 1;
 			tmenuy = trect.y;
 			break;
@@ -411,7 +415,7 @@ void MCButton::macopenmenu(void)
 				MCAutoStringRef t_label;
 				MCPlatformGetMenuItemProperty(m_system_menu, s_popup_menuitem, kMCPlatformMenuItemPropertyTitle, kMCPlatformPropertyTypeMCString, &(&t_label));
                 
-				/* UNCHECKED */ MCStringCopy(*t_label, label);
+                MCValueAssign(label, *t_label);
 				flags |= F_LABEL;
 				
                 // SN-2014-08-25: [[ Bug 13240 ]] We need to keep the actual popup_menustring,

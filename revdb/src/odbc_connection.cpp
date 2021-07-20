@@ -22,6 +22,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #define stricmp strcasecmp
 #endif
 
+#if defined(_WINDOWS)
+#pragma optimize("", off)
+#endif
+
 #if not defined(min)
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #endif
@@ -393,13 +397,17 @@ bool DBConnection_ODBC::ExecuteQuery(char *p_query, DBString *p_arguments, int p
 #else
 		t_result = SQLPrepareA(t_statement, (SQLCHAR *)t_parsed_query , t_query_length);
 #endif
-	
 		if (t_result == SQL_SUCCESS || t_result == SQL_SUCCESS_WITH_INFO)
 		{
-			int *t_argument_sizes;
-			t_argument_sizes = new (nothrow) int[t_placeholder_map . length];
-			BindVariables(t_statement, p_arguments, p_argument_count, t_argument_sizes, &t_placeholder_map);
-			t_result = SQLExecute(t_statement);
+			SQLLEN *t_argument_sizes = new (nothrow) SQLLEN[t_placeholder_map . length];
+			if (BindVariables(t_statement, p_arguments, p_argument_count, t_argument_sizes, &t_placeholder_map))
+			{
+				t_result = SQLExecute(t_statement);
+			}
+			else
+			{
+				t_result = SQL_ERROR;
+			}
 			delete[] t_argument_sizes;
 		}
 		
@@ -519,14 +527,15 @@ char *DBConnection_ODBC::getErrorMessage(Bool p_last)
 
 
 /*BindVariables-parses querystring and binds variables*/
-Bool DBConnection_ODBC::BindVariables(SQLHSTMT p_cursor, DBString *p_arguments, int p_argument_count, int *p_argument_sizes, PlaceholderMap *p_placeholder_map)
+Bool DBConnection_ODBC::BindVariables(SQLHSTMT p_cursor, DBString *p_arguments, int p_argument_count, SQLLEN *p_argument_sizes, PlaceholderMap *p_placeholder_map)
 {
 	if (p_argument_count == 0)
 		return True;
 	
 	DBString t_default("", 0, False);
-	
-	for(int i = 0; i < p_placeholder_map -> length; ++i)
+
+	int t_length = p_placeholder_map->length;
+	for(int i = 0; i < t_length; ++i)
 	{
 		DBString *t_value;
 		if (p_placeholder_map -> elements[i] > p_argument_count)
@@ -546,18 +555,23 @@ Bool DBConnection_ODBC::BindVariables(SQLHSTMT p_cursor, DBString *p_arguments, 
 		bool t_use_data_at_execution;
 		t_use_data_at_execution = useDataAtExecution();
 		
+		SQLRETURN t_result;
+
 		if (!t_use_data_at_execution) 
 		{
 			p_argument_sizes[i] = t_value -> length;
 
 			// MW-2008-07-30: [[ Bug 6415 ]] Inserting data into SQL Server doesn't work.
 			//   This is because the bind parameter call was only being issued for binary columns!
-			SQLLEN t_argument_size;
-			SQLBindParameter(p_cursor, i + 1, SQL_PARAM_INPUT,
+            
+            SQLLEN * t_argument_size = &p_argument_sizes[i];
+            t_result = SQLBindParameter(p_cursor, i + 1, SQL_PARAM_INPUT,
 				t_value -> isbinary ? SQL_C_BINARY : SQL_C_CHAR, t_data_type,
-				t_value -> length, 0, (void *)t_value -> sptr, t_value -> length, &t_argument_size);
-			p_argument_sizes[i] = t_argument_size;
-			}
+				t_value -> length, 0, (void *)t_value -> sptr, t_value -> length, t_argument_size);
+
+			if (!(t_result == SQL_SUCCESS || t_result == SQL_SUCCESS_WITH_INFO))
+				return False;
+		}
 		else
 		{
 			// To use data_at_execution, it seems that the only thing required is to put the result of this macro
@@ -569,9 +583,13 @@ Bool DBConnection_ODBC::BindVariables(SQLHSTMT p_cursor, DBString *p_arguments, 
 			// of the value buffer. This pointer will be returned by ODBC for us later, meaning that we don't need to look up
 			// which parameter is needed again.
 			SQLLEN t_argument_size;
-			SQLBindParameter(p_cursor, i + 1, SQL_PARAM_INPUT,
+			t_result = SQLBindParameter(p_cursor, i + 1, SQL_PARAM_INPUT,
 				t_value -> isbinary ? SQL_C_BINARY : SQL_C_CHAR, t_data_type,
 				t_value -> length, 0, (void *)t_value, t_value -> length, &t_argument_size);
+			
+			if (!(t_result == SQL_SUCCESS || t_result == SQL_SUCCESS_WITH_INFO))
+				return False;
+			
 			p_argument_sizes[i] = t_argument_size;
 		}
 	}

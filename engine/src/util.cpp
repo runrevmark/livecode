@@ -266,9 +266,9 @@ void MCU_setnumberformat(MCStringRef d, uint2 &fw,
                          uint2 &trailing, uint2 &force)
 {
 	fw = MCStringGetLength(d);
-    char *temp_d;
-    /* UNCHECKED */ MCStringConvertToCString(d, temp_d);
-	const char *sptr = temp_d;
+    MCAutoPointer<char> temp_d;
+    /* UNCHECKED */ MCStringConvertToCString(d, &temp_d);
+	const char *sptr = *temp_d;
 	const char *eptr = sptr;
 	while (eptr - sptr < fw && *eptr != '.')
 		eptr++;
@@ -624,8 +624,16 @@ uint4 MCU_r8tos(char *&d, uint4 &s, real8 n,
 	}
 	if (n < 0.0 && n >= -MC_EPSILON)
 		n = 0.0;
-	sprintf(d, "%0*.*f", fw, trailing, n);
-	MCU_strip(d, trailing, force);
+    
+    if (MCS_isfinite(n))
+    {
+        sprintf(d, "%0*.*f", fw, trailing, n);
+        MCU_strip(d, trailing, force);
+    }
+    else
+    {
+        sprintf(d, "%f", n);
+    }
 	
 	// 2007-09-11: [[ Bug 5321 ]] If the first character is '-', we must check
 	//   to see if the value is actually '0', and if it is remove the '-'.
@@ -2185,61 +2193,6 @@ void MCU_cleaninserted()
 		;
 }
 
-void MCU_dofunc(Functions func, uint4 nparams, real8 &n,
-                real8 tn, real8 oldn, MCSortnode *titems)
-{
-	real8 tp;
-	switch (func)
-	{
-    // JS-2013-06-19: [[ StatsFunctions ]] Support for 'arithmeticMean' (was average)
-    case F_ARI_MEAN:
-        n += tn;
-        break;
-	// JS-2013-06-19: [[ StatsFunctions ]] Support for 'averageDeviation'
-	case F_AVG_DEV:
-		tn = tn - oldn;
-		// IM-2014-02-28: [[ Bug 11778 ]] Make sure we're using the floating-point version of 'abs'
-		n += fabs(tn);
-		break;
-	// JS-2013-06-19: [[ StatsFunctions ]] Support for 'geometricMean'
-	case F_GEO_MEAN:
-		if (nparams == 0)
-			n = 1;
-		tp = 1 / oldn;
-		n *= pow(tn, tp);
-		break;
-	// JS-2013-06-19: [[ StatsFunctions ]] Support for 'harmonicMean'
-	case F_HAR_MEAN:
-		n += 1/tn;
-		break;
-	case F_MAX:
-		if (nparams++ == 0 || tn > n)
-			n = tn;
-		break;
-	case F_MIN:
-		if (nparams++ == 0 || tn < n)
-			n = tn;
-		break;
-	case F_SUM:
-		n += tn;
-		break;
-	case F_MEDIAN:
-        /* UNCHECKED */ MCNumberCreateWithReal(tn, titems[nparams].nvalue);
-		break;
-	// JS-2013-06-19: [[ StatsFunctions ]] Support for 'populationStdDev', 'populationVariance', 'sampleStdDev' (was stdDev), 'sampleVariance'
-	case F_POP_STD_DEV:
-	case F_POP_VARIANCE:
-	case F_SMP_STD_DEV:
-	case F_SMP_VARIANCE:
-		tn = tn - oldn;
-		n += tn * tn;
-		break;
-	case  F_UNDEFINED:
-	default:
-		break;
-	}
-}
-
 // MW-2013-06-25: [[ Bug 10983 ]] This function returns true if the given string
 //   could be a url. It checks for strings of the form:
 //     <letter> (<letter> | <digit> | '+' | '.' | '-')+ ':' <char>+
@@ -3193,19 +3146,36 @@ __MCU_library_map_path(MCStringRef p_path,
         !MCdispatcher->fetchlibrarymapping(*t_base_path,
                                            &t_mapped_path))
     {
-        t_mapped_path = *t_base_path;
+        // If there is no mapping, restore the original path including ./
+        // if it was there.
+        t_mapped_path = p_path;
     }
     
-    // Concatenate the mapped path onto the app code path, and then resolve
-    // it to ensure that all '.' and '..' type components are removed.
-    // (otherwise things might go awry if we have a //?/ type path on
-    // Windows).
+    // If the mapped path does not begin with './', then we just resolve.
     MCAutoStringRef t_unresolved_library_path;
-    if (!MCStringFormat(&t_unresolved_library_path,
-                        "%@/%@",
-                        MCappcodepath,
-                        *t_mapped_path) ||
-        !MCS_resolvepath(*t_unresolved_library_path,
+    if (MCStringBeginsWithCString(*t_mapped_path,
+                                  reinterpret_cast<const char_t *>("./"),
+                                  kMCStringOptionCompareExact))
+    {
+        
+        // Concatenate the mapped path onto the app code path
+        if (!MCStringFormat(&t_unresolved_library_path,
+                            "%@/%@",
+                            MCappcodepath,
+                            *t_mapped_path))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        t_unresolved_library_path = *t_mapped_path;
+    }
+    
+    // resolve the oath to ensure that all '.' and '..' type components are
+    // removed. (otherwise things might go awry if we have a //?/ type path on
+    // Windows).
+    if (!MCS_resolvepath(*t_unresolved_library_path,
                          r_mapped_library_path))
     {
         return false;
@@ -3297,7 +3267,24 @@ void *MCSupportLibraryLoad(const char *p_name_cstr)
         return nullptr;
     }
 
-    return MCU_library_load(*t_name);
+    MCSAutoLibraryRef t_module;
+    &t_module = MCU_library_load(*t_name);
+    if (!t_module.IsSet())
+    {
+        // try a relative path
+        MCAutoStringRef t_relative_filename;
+        if (MCStringFormat(&t_relative_filename, "./%@", *t_name))
+        {
+            &t_module = MCU_library_load(*t_relative_filename);
+        }
+    }
+    
+    if (!t_module.IsSet())
+    {
+        return nullptr;
+    }
+    
+    return t_module.Take();
 }
 
 void MCSupportLibraryUnload(void *p_handle)
@@ -3379,4 +3366,13 @@ MCU_is_token(MCStringRef p_string)
 	}
 
 	return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Color conversion utilities
+
+bool MCU_format_color(const MCColor p_color, MCStringRef& r_string)
+{
+    return MCStringFormat(r_string, "%d,%d,%d", p_color.red >> 8, p_color.green >> 8, p_color.blue >> 8);
 }

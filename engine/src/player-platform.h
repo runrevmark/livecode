@@ -85,6 +85,7 @@ private:
     bool m_scrub_back_is_pressed : 1;
     bool m_scrub_forward_is_pressed : 1;
     bool m_modify_selection_while_playing : 1;
+    double m_rate_before_scrub_buttons_pressed;
 
 	static MCPropertyInfo kProperties[];
     static MCObjectPropertyTable kPropertyTable;
@@ -101,6 +102,8 @@ public:
     
 	// virtual functions from MCObject    
 	virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
+    
+    virtual bool visit_self(MCObjectVisitor *p_visitor);
     
 	virtual Chunk_term gettype() const;
 	virtual const char *gettypestring();
@@ -172,6 +175,12 @@ public:
 	virtual uint2 getloudness();
     virtual void updateloudness(int2 newloudness);
 	virtual void setloudness();
+	virtual double getleftbalance();
+	virtual void setleftbalance(double p_left_balance);
+	virtual double getrightbalance();
+	virtual void setrightbalance(double p_right_balance);
+	virtual double getaudiopan();
+	virtual void setaudiopan(double p_pan);
 
     virtual Boolean prepare(MCStringRef options);
     virtual Boolean playstart(MCStringRef options);
@@ -325,7 +334,13 @@ public:
 	virtual void SetTilt(MCExecContext& ctxt, double p_tilt);
 	virtual void GetZoom(MCExecContext& ctxt, double& r_zoom);
 	virtual void SetZoom(MCExecContext& ctxt, double p_zoom);
-    
+	virtual void GetLeftBalance(MCExecContext& ctxt, double &r_left_balance);
+	virtual void SetLeftBalance(MCExecContext& ctxt, double p_left_balance);
+	virtual void GetRightBalance(MCExecContext& ctxt, double &r_right_balance);
+	virtual void SetRightBalance(MCExecContext& ctxt, double p_right_balance);
+	virtual void GetAudioPan(MCExecContext& ctxt, double &r_pan);
+	virtual void SetAudioPan(MCExecContext& ctxt, double p_pan);
+
 	virtual void GetTracks(MCExecContext& ctxt, MCStringRef& r_tracks);
     
 	virtual void GetConstraints(MCExecContext& ctxt, MCMultimediaQTVRConstraints& r_constraints);
@@ -421,6 +436,9 @@ public:
     
     void handle_mup(int which);
     void handle_mfocus(int x, int y);
+    
+    void push_current_rate();
+    void pop_current_rate();
     
     void popup_closed(void);
     

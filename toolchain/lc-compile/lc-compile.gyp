@@ -12,6 +12,11 @@
 			'type': 'none',
 			
 			'toolsets': ['host','target'],
+
+			'dependencies':
+			[
+				'../../prebuilt/thirdparty.gyp:thirdparty_prebuilt_ffi',
+			],
 			
 			'conditions':
 			[
@@ -54,7 +59,7 @@
 										{
 											'dist_files':
 											[
-												'<(lc-compile_target)',
+												'>(lc-compile_target)',
 											],
 										},
 									},

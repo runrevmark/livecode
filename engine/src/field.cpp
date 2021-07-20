@@ -130,6 +130,9 @@ MCPropertyInfo MCField::kProperties[] =
     DEFINE_RW_OBJ_LIST_PROPERTY(P_TAB_WIDTHS, ItemsOfLooseUInt, MCField, TabWidths)
     DEFINE_RO_OBJ_LIST_PROPERTY(P_PAGE_HEIGHTS, LinesOfLooseUInt, MCField, PageHeights)
     DEFINE_RO_OBJ_CUSTOM_PROPERTY(P_PAGE_RANGES, InterfaceFieldRanges, MCField, PageRanges)
+    
+    DEFINE_RW_OBJ_ENUM_PROPERTY(P_KEYBOARD_TYPE, InterfaceKeyboardType, MCField, KeyboardType)
+    DEFINE_RW_OBJ_ENUM_PROPERTY(P_RETURN_KEY_TYPE, InterfaceReturnKeyType, MCField, ReturnKeyType)
 
     DEFINE_RW_OBJ_NON_EFFECTIVE_OPTIONAL_ENUM_PROPERTY(P_TEXT_ALIGN, InterfaceTextAlign, MCField, TextAlign)
 	DEFINE_RO_OBJ_EFFECTIVE_ENUM_PROPERTY(P_TEXT_ALIGN, InterfaceTextAlign, MCField, TextAlign)
@@ -257,6 +260,9 @@ MCField::MCField()
     
     // MM-2014-08-11: [[ Bug 13149 ]] Used to flag if a recompute is required during the next draw.
     m_recompute = false;
+    
+    keyboard_type = kMCInterfaceKeyboardTypeNone;
+    return_key_type = kMCInterfaceReturnKeyTypeNone;
 }
 
 MCField::MCField(const MCField &fref) : MCControl(fref)
@@ -273,6 +279,9 @@ MCField::MCField(const MCField &fref) : MCControl(fref)
 	foundlength = 0;
     cursor_movement = fref.cursor_movement;
     text_direction= fref.text_direction;
+    keyboard_type = fref.keyboard_type;
+    return_key_type = fref.return_key_type;
+    
 	if (fref.vscrollbar != NULL)
 	{
 		vscrollbar = new (nothrow) MCScrollbar(*fref.vscrollbar);
@@ -375,6 +384,8 @@ MCField::~MCField()
 		delete vscrollbar;
 
 	delete[] tabs; /* Allocated with new[] */
+    
+    MCMemoryDeallocate(alignments);
 
 	MCValueRelease(label);
 }
@@ -2523,7 +2534,7 @@ void MCField::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool p
 
 	// MW-2009-06-14: If the field is opaque, then render the contents with that
 	//   marked.
-	bool t_was_opaque;
+	bool t_was_opaque = false;
 	if (getflag(F_OPAQUE))
 		t_was_opaque = dc -> changeopaque(true);
 	drawrect(dc, dirty);
@@ -2558,6 +2569,8 @@ void MCField::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool p
 #define FIELD_EXTRA_TEXTDIRECTION   (1 << 0)
 // SN-2015-04-30: [[ Bug 15175 ]] TabAlignment flag added
 #define FIELD_EXTRA_TABALIGN        (1 << 1)
+#define FIELD_EXTRA_KEYBOARDTYPE    (1 << 2)
+#define FIELD_EXTRA_RETURNKEYTYPE    (1 << 3)
 
 IO_stat MCField::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint32_t p_version)
 {
@@ -2573,12 +2586,24 @@ IO_stat MCField::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint
     }
     
     // SN-2015-04-30: [[ Bug 15175 ]] Save the tabalign property of the field
-    if (ntabs != 0)
+    if (nalignments != 0)
     {
         t_flags |= FIELD_EXTRA_TABALIGN;
         // Save number of tab alignments, and then each of them.
         t_size += sizeof(uint16_t);
         t_size += sizeof(int8_t) * nalignments;
+    }
+    
+    if (keyboard_type != kMCInterfaceKeyboardTypeNone)
+    {
+        t_flags |= FIELD_EXTRA_KEYBOARDTYPE;
+        t_size += sizeof(int8_t);
+    }
+    
+    if (return_key_type != kMCInterfaceReturnKeyTypeNone)
+    {
+        t_flags |= FIELD_EXTRA_RETURNKEYTYPE;
+        t_size += sizeof(int8_t);
     }
 
 	IO_stat t_stat;
@@ -2595,7 +2620,17 @@ IO_stat MCField::extendedsave(MCObjectOutputStream& p_stream, uint4 p_part, uint
             t_stat = p_stream . WriteS8((int8_t)alignments[i]);
     }
     
-	if (t_stat == IO_NORMAL)
+    if (t_stat == IO_NORMAL && (t_flags & FIELD_EXTRA_KEYBOARDTYPE))
+    {
+        t_stat = p_stream . WriteS8((int8_t)keyboard_type);
+    }
+    
+    if (t_stat == IO_NORMAL && (t_flags & FIELD_EXTRA_RETURNKEYTYPE))
+    {
+        t_stat = p_stream . WriteS8((int8_t)return_key_type);
+    }
+    
+    if (t_stat == IO_NORMAL)
 		t_stat = MCObject::extendedsave(p_stream, p_part, p_version);
     
 	return t_stat;
@@ -2654,6 +2689,26 @@ IO_stat MCField::extendedload(MCObjectInputStream& p_stream, uint32_t p_version,
             }
         }
         
+        if (t_stat == IO_NORMAL && (t_flags & FIELD_EXTRA_KEYBOARDTYPE) != 0)
+        {
+            int8_t t_value;
+            t_stat = checkloadstat(p_stream . ReadS8(t_value));
+            if (t_stat == IO_NORMAL)
+            {
+                keyboard_type = static_cast<MCInterfaceKeyboardType>(t_value);
+            }
+        }
+        
+        if (t_stat == IO_NORMAL && (t_flags & FIELD_EXTRA_RETURNKEYTYPE) != 0)
+        {
+            int8_t t_value;
+            t_stat = checkloadstat(p_stream . ReadS8(t_value));
+            if (t_stat == IO_NORMAL)
+            {
+                return_key_type =  static_cast<MCInterfaceReturnKeyType>(t_value);
+            }
+        }
+        
         if (t_stat == IO_NORMAL)
             t_stat = checkloadstat(p_stream . Skip(t_length));
         
@@ -2679,7 +2734,10 @@ IO_stat MCField::save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t
     // AL-2014-09-12: [[ Bug 13315 ]] Force an extension if field has explicit textDirection.
     // SN-2015-04-30: [[ Bug 15175 ]] Force an extension if field has tabalign.
     bool t_has_extension;
-    t_has_extension = text_direction != kMCTextDirectionAuto || nalignments != 0;
+    t_has_extension = text_direction != kMCTextDirectionAuto ||
+                      nalignments != 0 ||
+                      keyboard_type != kMCInterfaceKeyboardTypeNone ||
+                      return_key_type != kMCInterfaceReturnKeyTypeNone;
     
     if ((stat = MCObject::save(stream, p_part, t_has_extension || p_force_ext, p_version)) != IO_NORMAL)
 		return stat;
@@ -2875,17 +2933,20 @@ bool MCField::imagechanged(MCImage *p_image, bool p_deleting)
 	bool t_used = false;
 	MCParagraph *t_para = paragraphs;
 
-	do
+	if (t_para != NULL)
 	{
-		t_used = t_para->imagechanged(p_image, p_deleting) || t_used;
-		t_para = t_para->next();
-	}
-	while (t_para != paragraphs);
-
-	if (t_used)
-	{
-		do_recompute(true);
-		layer_redrawall();
+		do
+		{
+			t_used = t_para->imagechanged(p_image, p_deleting) || t_used;
+			t_para = t_para->next();
+		}
+		while (t_para != paragraphs);
+		
+		if (t_used)
+		{
+			do_recompute(true);
+			layer_redrawall();
+		}
 	}
 
 	return t_used;

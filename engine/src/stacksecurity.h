@@ -45,23 +45,11 @@ void MCStackSecuritySetIOEncryptionEnabled(bool p_encrypted);
 
 IO_stat MCStackSecurityWrite(const char *p_string, uint32_t p_length, IO_handle p_stream);
 IO_stat MCStackSecurityRead(char *r_string, uint32_t p_length, IO_handle p_stream);
+IO_stat MCStackSecurityReadUTF8StringRef(MCStringRef& r_string, uint32_t p_length, IO_handle p_stream);
 
 //////////
 
 void MCStackSecurityProcessCapsule(void *p_start, void *p_finish);
-
-//////////
-
-/* Create a startup stack for an Emscripten standalone. */
-bool MCStackSecurityEmscriptenPrepareStartupStack(MCStack *r_stack);
-
-#if defined(__EMSCRIPTEN__)
-
-/* Perform any standalone-specific initialisation tasks, and load the
- * default stack. */
-bool MCStackSecurityEmscriptenStartupCheck(MCStack *p_stack);
-
-#endif /* __EMSCRIPTEN__ */
 
 //////////
 

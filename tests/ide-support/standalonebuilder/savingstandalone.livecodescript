@@ -76,7 +76,7 @@ on TestSavingStandalone
    
    revIDESaveStack tStackID
 	 
-	 local tStandalonePath
+   local tStandalonePath
    _TestBuildStandalone tStackFilename, tStandalonePath
    if the result is not empty then
       TestAssert "building standalone", false
@@ -99,7 +99,7 @@ on TestSavingStandalone
    end if
    get shell(tShellCmd)
    put the result into tResult
-   
+
    if tResult is not empty then
       TestDiagnostic "standalone quit with" && tResult & ":" && it
    end if

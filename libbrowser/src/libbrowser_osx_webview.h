@@ -19,9 +19,11 @@
 
 #include "libbrowser_internal.h"
 
+@class MCWebView;
 @class MCWebViewFrameLoadDelegate;
 @class MCWebViewPolicyDelegate;
 @class MCWebUIDelegate;
+@class MCWebViewProgressDelegate;
 
 class MCWebViewBrowser : public MCBrowserBase
 {
@@ -38,13 +40,17 @@ public:
 	
 	virtual bool GetBoolProperty(MCBrowserProperty p_property, bool &r_value);
 	virtual bool SetBoolProperty(MCBrowserProperty p_property, bool p_value);
-	
 	virtual bool GetStringProperty(MCBrowserProperty p_property, char *&r_utf8_string);
 	virtual bool SetStringProperty(MCBrowserProperty p_property, const char *p_utf8_string);
-	
+	virtual bool GetIntegerProperty(MCBrowserProperty p_property, int32_t &r_value);
+	virtual bool SetIntegerProperty(MCBrowserProperty p_property, int32_t p_value);
+
 	virtual bool GoBack();
 	virtual bool GoForward();
 	virtual bool GoToURL(const char *p_url);
+	virtual bool LoadHTMLText(const char *p_htmltext, const char *p_base_url);
+	virtual bool StopLoading();
+	virtual bool Reload();
 	virtual bool EvaluateJavaScript(const char *p_script, char *&r_result);
 	
 	void SyncJavaScriptHandlers();
@@ -65,12 +71,14 @@ protected:
 	
 	bool GetJavaScriptHandlers(char *&r_handlers);
 	bool SetJavaScriptHandlers(const char *p_handlers);
-	
+
+	bool GetIsSecure(bool& r_value);
+
+	bool GetAllowUserInteraction(bool& r_value);
+	bool SetAllowUserInteraction(bool p_value);
+
 	// Browser-specific actions
-	bool ExecReload();
-	bool ExecStop();
 	bool ExecExecute(const char * p_script, char *&r_result);
-	bool ExecLoad(const char *p_url, const char *p_html);
 	
 	//UIScrollView *GetScrollView(void);
 	
@@ -78,12 +86,15 @@ private:
 	bool GetView(WebView *&r_view);
 	
 	bool SyncJavaScriptHandlers(NSArray *p_handlers);
+
+	bool FrameIsSecure(WebFrame *p_frame);
 	
-	WebView *m_view;
+	MCWebView *m_view;
 	MCWebViewFrameLoadDelegate *m_delegate;
 	MCWebViewPolicyDelegate *m_policy_delegate;
 	MCWebUIDelegate *m_ui_delegate;
-	
+	MCWebViewProgressDelegate *m_progress_delegate;
+
 	char *m_js_handlers;
 	NSArray *m_js_handler_list;
 };

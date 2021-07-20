@@ -432,6 +432,24 @@ static int trans_stat(Exec_stat stat)
 	return xresNotImp;
 }
 
+static MCAutoPointer<MCNameRef[]>
+__join_paths(MCSpan<MCNameRef> p_base,
+             MCSpan<MCNameRef> p_extra)
+{
+    MCAutoPointer<MCNameRef[]> t_result =
+    new (nothrow) MCNameRef[p_base.size() + p_extra.size()];
+    if (t_result)
+    {
+        int t_count = 0;
+        for (MCNameRef t_name : p_base)
+            t_result[t_count++] = t_name;
+        for (MCNameRef t_name : p_extra)
+            t_result[t_count++] = t_name;
+    }
+    
+    return t_result;
+}
+
 static Exec_stat getvarptr(MCExecContext& ctxt, const MCString &vname, MCContainer& r_container)
 {
 	MCNewAutoNameRef t_name;
@@ -477,6 +495,30 @@ static Exec_stat getvarptr_utf8(MCExecContext& ctxt, const MCString &vname, MCCo
     }
     
 	return ES_NORMAL;
+}
+
+static bool var_setonpath(MCExecContext& ctxt, MCContainer& p_var, MCSpan<MCNameRef> p_path, MCValueRef p_value)
+{
+    MCAutoPointer<MCNameRef[]> t_full_path = __join_paths(p_var.getpath(), p_path);
+    
+    if (!t_full_path)
+        return false;
+    
+    return p_var.getvar()->set(ctxt,
+                               p_value,
+                               {*t_full_path, p_path.size() + p_var.getpath().size()});
+}
+
+static bool var_evalonpath(MCExecContext& ctxt, MCContainer& p_var, MCSpan<MCNameRef> p_path, MCValueRef& r_value)
+{
+    MCAutoPointer<MCNameRef[]> t_full_path = __join_paths(p_var.getpath(), p_path);
+    
+    if (!t_full_path)
+        return false;
+    
+    return p_var.getvar()->eval(ctxt,
+                                {*t_full_path, p_path.size() + p_var.getpath().size()},
+                                r_value);
 }
 
 static MCControl *getobj(Chunk_term otype, Chunk_term etype,
@@ -851,7 +893,7 @@ static char *get_variable_ex(const char *arg1, const char *arg2,
 	{
 		MCNameRef t_key;
 		/* UNCHECKED */ MCNameCreateWithNativeChars((const char_t*)arg2, strlen(arg2), t_key);
-		var.eval_on_path(*MCECptr, {&t_key, 1}, &t_value);
+		var_evalonpath(*MCECptr, var, {&t_key, 1}, &t_value);
 		MCValueRelease(t_key);
 	}
 	else
@@ -862,6 +904,10 @@ static char *get_variable_ex(const char *arg1, const char *arg2,
     /* UNCHECKED */ MCECptr -> ConvertToString(*t_value, &t_string);
     char *t_result;
     /* UNCHECKED */ MCStringNormalizeAndConvertToCString(*t_string, t_result);
+    
+    /* Add the generated cstring to the pool that must be released when the
+     * external call finishes as the caller isn't responsible for freeing it. */
+    MCExternalAddAllocatedString(MCexternalallocpool, t_result);
     
     // SN-2014-04-07 [[ Bug 12118 ]] revExecuteSQL writes incomplete data into SQLite BLOB columns
     // arg3 is not a char* but rather a MCString; whence setting the length should not be forgotten,
@@ -890,7 +936,7 @@ static char *set_variable_ex(const char *arg1, const char *arg2,
 	{
 		MCNameRef t_key;
 		/* UNCHECKED */ MCNameCreateWithNativeChars((const char_t*)arg2, strlen(arg2), t_key);
-		var.set_on_path(*MCECptr, {&t_key, 1}, *t_string);
+		var_setonpath(*MCECptr, var, {&t_key, 1}, *t_string);
 		MCValueRelease(t_key);
 	}
 	else
@@ -1022,7 +1068,7 @@ static char *set_array(const char *arg1, const char *arg2,
 		}
 		else
 			/* UNCHECKED */ MCNameCreateWithNativeChars((const char_t*)value -> keys[i], strlen(value -> keys[i]), t_key);
-		var.set_on_path(*MCECptr, {&t_key, 1}, *t_string);
+		var_setonpath(*MCECptr, var, {&t_key, 1}, *t_string);
 	}
 	return NULL;
 }
@@ -1370,7 +1416,7 @@ static char *get_variable_ex_utf8(const char *arg1, const char *arg2,
         MCAutoStringRef t_key_as_string;
         /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)arg2, strlen(arg2), kMCStringEncodingUTF8, false, &t_key_as_string);
 		/* UNCHECKED */ MCNameCreate(*t_key_as_string, t_key);
-		var.eval_on_path(*MCECptr, {&t_key, 1}, &t_value);
+		var_evalonpath(*MCECptr, var, {&t_key, 1}, &t_value);
 		MCValueRelease(t_key);
 	}
 	else
@@ -1383,7 +1429,11 @@ static char *get_variable_ex_utf8(const char *arg1, const char *arg2,
     char *t_result = nullptr;
     uindex_t t_char_count = 0;
     /* UNCHECKED */ convert_from_string(*t_string, p_is_text, t_result, t_char_count);
-
+    
+    /* Add the generated cstring/data to the pool that must be released when the
+     * external call finishes as the caller isn't responsible for freeing it. */
+    MCExternalAddAllocatedString(MCexternalallocpool, t_result);
+    
     // SN-2014-04-07 [[ Bug 12118 ]] revExecuteSQL writes incomplete data into SQLite BLOB columns
     // arg3 is not a char* but rather a MCString; whence setting the length should not be forgotten,
     // in case '\0' are present in the value fetched.
@@ -1432,7 +1482,7 @@ static char *set_variable_ex_utf8(const char *arg1, const char *arg2,
         MCAutoStringRef t_key_as_string;
         /* UNCHECKED */ MCStringCreateWithBytes((byte_t*)arg2, strlen(arg2), kMCStringEncodingUTF8, false, &t_key_as_string);
 		/* UNCHECKED */ MCNameCreate(*t_key_as_string, t_key);
-		var.set_on_path(*MCECptr, {&t_key, 1}, *t_string);
+		var_setonpath(*MCECptr, var, {&t_key, 1}, *t_string);
 		MCValueRelease(t_key);
 	}
 	else
@@ -1593,7 +1643,7 @@ static char *set_array_utf8(const char *arg1, const char *arg2,
             MCStringCreateWithBytes((byte_t*)value -> keys[i], strlen(value -> keys[i]), kMCStringEncodingUTF8, false, &t_key_as_string);
             /* UNCHECKED */ MCNameCreate(*t_key_as_string, t_key);
         }
-		var.set_on_path(*MCECptr, {&t_key, 1}, *t_string);
+		var_setonpath(*MCECptr, var, {&t_key, 1}, *t_string);
         
         MCValueRelease(t_key);
 	}

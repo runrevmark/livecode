@@ -14,25 +14,25 @@
 			'dependencies':
 			[
 				'../libfoundation/libfoundation.gyp:libFoundation',
-				#'../libexternal/libexternal.gyp:libExternal',
 				'../libgraphics/libgraphics.gyp:libGraphics',
 				'../libscript/libscript.gyp:libScript',
+				'../libscript/libscript.gyp:stdscript',
 				
 				'../libbrowser/libbrowser.gyp:libbrowser',
 
-				'../thirdparty/libgif/libgif.gyp:libgif',
-				'../thirdparty/libjpeg/libjpeg.gyp:libjpeg',
 				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl_stubs',
-				'../thirdparty/libpcre/libpcre.gyp:libpcre',
-				'../thirdparty/libpng/libpng.gyp:libpng',
-				'../thirdparty/libz/libz.gyp:libz',
 				
 				'../prebuilt/libopenssl.gyp:libopenssl_headers',
 
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_pcre',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_jpeg',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_gif',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_png',
+
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_z',
+
 				'engine-common.gyp:encode_version',
 				'engine-common.gyp:quicktime_stubs',
-				
-				'lcb-modules.gyp:engine_lcb_modules',
 			],
 			
 			'include_dirs':
@@ -70,12 +70,6 @@
 				[
 					'OS == "android"',
 					{
-						'dependencies':
-						[
-							'../thirdparty/libfreetype/libfreetype.gyp:libfreetype',
-							'../thirdparty/libskia/libskia.gyp:libskia',
-						],
-						
 						'sources!':
 						[
 							# Not yet supported on Android
@@ -83,7 +77,13 @@
 							'src/mblcamera.cpp',
 						],
 										
-						
+						'dependencies':
+						[
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_skia',
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_freetype',
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_harfbuzz',
+						],
+
 						'link_settings':
 						{
 							'ldflags':
@@ -102,13 +102,15 @@
 				[
 					'OS == "emscripten"',
 					{
-						'dependencies':
-						[
-							'../thirdparty/libskia/libskia.gyp:libskia',
-						],
 						'sources':
 						[
 							'<@(engine_minizip_source_files)',
+						],
+
+						'dependencies':
+						[
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_skia',
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_freetype',
 						],
 					},
 				],
@@ -150,9 +152,11 @@
 							'libraries':
 							[
 								'$(SDKROOT)/usr/lib/libcups.dylib',
+								'$(SDKROOT)/System/Library/Frameworks/Accelerate.framework',
 								'$(SDKROOT)/System/Library/Frameworks/ApplicationServices.framework',
 								'$(SDKROOT)/System/Library/Frameworks/Carbon.framework',
 								'$(SDKROOT)/System/Library/Frameworks/Cocoa.framework',
+								'$(SDKROOT)/System/Library/Frameworks/MediaToolbox.framework',
 								'$(SDKROOT)/System/Library/Frameworks/Quartz.framework',
 							],
 						},
@@ -176,8 +180,19 @@
                         {
                             'libraries!':
                             [
+								'$(SDKROOT)/System/Library/Frameworks/Accelerate.framework',
                                 '$(SDKROOT)/System/Library/Frameworks/AVFoundation.framework',
                                 '$(SDKROOT)/System/Library/Frameworks/CoreMedia.framework',
+								'$(SDKROOT)/System/Library/Frameworks/MediaToolbox.framework',
+                            ],
+                        },
+                    ],
+                    [
+                        'OS == "ios" and ("11" not in target_sdk) and ("12" not in target_sdk) and ("13" not in target_sdk)',
+                        {
+                            'libraries':
+                            [
+                                '$(SDKROOT)/System/Library/Frameworks/AppTrackingTransparency.framework',
                             ],
                         },
                     ],
@@ -189,6 +204,7 @@
 								'$(SDKROOT)/System/Library/Frameworks/AddressBook.framework',
 								'$(SDKROOT)/System/Library/Frameworks/AddressBookUI.framework',
 								'$(SDKROOT)/System/Library/Frameworks/AVFoundation.framework',
+								'$(SDKROOT)/System/Library/Frameworks/AVKit.framework',
 								'$(SDKROOT)/System/Library/Frameworks/CFNetwork.framework',
 								'$(SDKROOT)/System/Library/Frameworks/CoreLocation.framework',
 								'$(SDKROOT)/System/Library/Frameworks/CoreMedia.framework',
@@ -230,7 +246,8 @@
 						{
 							'libraries':
 							[
-								'-lGLESv1_CM',
+								'-lGLESv3',
+								'-lEGL',
 								'-ljnigraphics',
 								'-llog',
 								'-lm',

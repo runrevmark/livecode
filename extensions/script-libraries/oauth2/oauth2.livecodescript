@@ -1,4 +1,4 @@
-﻿script "com.livecode.script-library.oauth2"
+﻿script "com.livecode.library.oauth2"
 /*
 Copyright (C) 2016 LiveCode Ltd.
 
@@ -17,34 +17,41 @@ You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>. 
 */
 
-on revLoadLibrary
+on extensionInitialize
    if the target is not me then
-      pass revLoadLibrary
+      pass extensionInitialize
    end if
    
    insert the script of me into back
    
    if the environment contains "development" then
       set the _ideoverride of me to true
-      revSBAddAvailableLibrary the short name of me, "OAuth2"
-      revSBAddDependencyForInclusion "scriptLibraries", "OAuth2", "externals", "mergJSON"
+      local tName
+      put the short name of me into tName
+      revSBAddDependencyForInclusion "extensions", tName, "scriptLibraries", "Internet"
+      revSBAddDependencyForInclusion "extensions", tName, "externals", "mergJSON"
+      revSBAddDependencyForInclusion "extensions", tName, "extensions", "com.livecode.widget.browser"
    end if
-end revLoadLibrary
+end extensionInitialize
 
-on revUnloadLibrary
+on extensionFinalize
    if the target is not me then
-      pass revUnloadLibrary
+      pass extensionFinalize
    end if
    
    remove the script of me from back
-end revUnloadLibrary
+end extensionFinalize
 
 /**
+Title: OAuth2 Library
 
-Present an authorization dialog for any web service that supports OAuth2 Authorization Code Flow 
+Version: 1.0.0
 
-Requires mergJSON
+Author: LiveCode
 
+Description: 
+Present an authorization dialog for any web service that supports 
+OAuth2 Authorization Code Flow 
 */
 
 constant kRedirectURL = "http://127.0.0.1"
@@ -146,6 +153,13 @@ command OAuth2 pAuthURL, pTokenURL, pClientID, pClientSecret, pScopes, pPort, pP
    
    put "&redirect_uri=" & urlEncode(kRedirectURL & ":" & pPort & "/") after tURL
    
+   local tCancelScript
+   put "on mouseUp;send" && \
+         quote & "__OAuth2Cancel" & quote && "&&" && quote & \
+         tUniqueRef & quote && "to me in 0;end mouseUp" into tCancelScript
+   
+   lock screen
+   
    local tBrowserRect
    if the environment is not "mobile" then
       reset the templateStack
@@ -158,15 +172,44 @@ command OAuth2 pAuthURL, pTokenURL, pClientID, pClientSecret, pScopes, pPort, pP
       
       set the resizable of stack tUniqueRef to false
       set the width of stack tUniqueRef to 640
-      set the height of stack tUniqueRef to 600
+      set the height of stack tUniqueRef to 640
       put 0,0,640,600 into tBrowserRect
+      
+      reset the templateButton
+      create button "Cancel"
+      set the script of it to tCancelScript
+      set the rect of it to 8,608,78,631
+      reset the templateButton
    else
-      put the effective working screenrect into tBrowserRect
+      put the rect of this card of the topStack into tBrowserRect
+      
+      local tGraphicRect
+      put tBrowserRect into tGraphicRect
+      put item 4 of tGraphicRect - 40 into item 2 of tGraphicRect
+      put item 2 of tGraphicRect into item 4 of tBrowserRect
+      
+      reset the templateGraphic
+      set the showName of the templateGraphic to true
+      set the opaque of the templateGraphic to true
+      set the lineSize of the templateGraphic to 0
+      set the backColor of the templateGraphic to "white"
+      set the style of the templateGraphic to "rectangle"
+      set the label of the templateGraphic to "Cancel"
+      create graphic tUniqueRef
+      set the rect of it to tGraphicRect
+      set the script of it to tCancelScript
+      reset the templateGraphic
+   end if
+
+   if the platform is not "Linux" then
+      create widget tUniqueRef as "com.livecode.widget.browser"
+      set the rect of widget tUniqueRef to tBrowserRect
+      set the url of widget tUniqueRef to tURL
+   else
+      launch url tUrl
    end if
    
-   create widget tUniqueRef as "com.livecode.widget.browser"
-   set the rect of widget tUniqueRef to tBrowserRect
-   set the url of widget tUniqueRef to tURL
+   unlock screen
    
    local tOldInterface
    put the defaultNetworkInterface into tOldInterface
@@ -199,13 +242,14 @@ command OAuth2 pAuthURL, pTokenURL, pClientID, pClientSecret, pScopes, pPort, pP
    
    local tResult
    put the dialogData into tResult
+   -- all keys/values in tResult are already URL encoded
    
    if tResult["code"] is not empty then
       local tParams
       put "grant_type=authorization_code" into tParams
       put "&client_id=" & urlEncode(pClientID) after tParams
       put "&client_secret=" & urlEncode(pClientSecret) after tParams
-      put "&code=" & urlEncode(tResult["code"]) after tParams
+      put "&code=" & tResult["code"] after tParams
       put "&redirect_uri=" & urlEncode(kRedirectURL & ":" & pPort & "/") after tParams
       
       local tResponse
@@ -219,6 +263,30 @@ command OAuth2 pAuthURL, pTokenURL, pClientID, pClientSecret, pScopes, pPort, pP
       return tResult["error"] for error
    end if
 end OAuth2
+
+on __OAuth2Cancel pUniqueRef
+   __RemoveDialog pUniqueRef
+   
+   local tResult
+   put "cancel" into tResult["error"]
+   set the dialogData to tResult
+end __OAuth2Cancel
+
+private command __RemoveDialog pUniqueRef
+   if the environment is "mobile" then
+      set the defaultStack to the topStack
+      if there is a widget pUniqueRef then
+         delete widget pUniqueRef
+      end if
+      if there is a graphic pUniqueRef then
+         delete graphic pUniqueRef
+      end if
+   else
+      if there is a stack pUniqueRef then
+         close stack pUniqueRef
+      end if
+   end if
+end __RemoveDialog
 
 
 /**
@@ -308,7 +376,7 @@ end OAuth2Refresh
 on __NewConnection pSocketID
    read from socket pSocketID until crlf & crlf with message "__HandleRequest"
 end __NewConnection
- 
+
 on __HandleRequest pSocketID, pData
    close socket pSocketID
    
@@ -344,11 +412,7 @@ on __HandleRequest pSocketID, pData
          close socket tPort
       end if
       
-      if the environment is "mobile" then
-         delete widget tUniqueRef
-      else
-         close stack tUniqueRef
-      end if
+      __RemoveDialog tUniqueRef
    else
       
       -- The OAuth2 spec requires the state parameter
@@ -358,11 +422,7 @@ on __HandleRequest pSocketID, pData
       
       repeat for each key tUniqueRef in sUniqueRefs
          close socket sUniqueRefs[tUniqueRef]
-         if the environment is "mobile" then
-            delete widget tUniqueRef
-         else
-            close stack tUniqueRef
-         end if
+         __RemoveDialog tUniqueRef
       end repeat
    end if
 end __HandleRequest

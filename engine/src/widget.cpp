@@ -44,6 +44,7 @@
 #include "system.h"
 #include "globals.h"
 #include "context.h"
+#include "undolst.h"
 
 #include "widget-ref.h"
 #include "widget-events.h"
@@ -327,6 +328,10 @@ Boolean MCWidget::doubleup(uint2 p_which)
 
 MCObject* MCWidget::hittest(int32_t x, int32_t y)
 {
+    if (!(flags & F_VISIBLE || showinvisible()) ||
+        (flags & F_DISABLED && getstack()->gettool(this) == T_BROWSE))
+        return nil;
+    
     if (m_widget != nil)
         return MCwidgeteventmanager->event_hittest(this, x, y);
     return nil;
@@ -456,7 +461,8 @@ bool MCWidget::getprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_whi
 		case P_RECTANGLE:
 		case P_TOOL_TIP:
 		case P_UNICODE_TOOL_TIP:
-		case P_LAYER_MODE:
+        case P_LAYER_MODE:
+        case P_LAYER_CLIP_RECT:
             
         // Development mode only
         case P_REV_AVAILABLE_HANDLERS:
@@ -565,6 +571,7 @@ bool MCWidget::setprop(MCExecContext& ctxt, uint32_t p_part_id, Properties p_whi
 		case P_LAYER_MODE:
         case P_ENABLED:
         case P_DISABLED:
+        case P_LAYER_CLIP_RECT:
             
         case P_KIND:
         case P_THEME_CONTROL_TYPE:
@@ -643,14 +650,9 @@ bool MCWidget::setcustomprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRe
         return MCObject::setcustomprop(ctxt, p_set_name, p_prop_name, p_path, p_value);
     
     MCAutoValueRef t_value;
-    if (MCExecTypeIsValueRef(p_value . type))
-        t_value = p_value . valueref_value;
-    else
-    {
-        MCExecTypeConvertToValueRefAndReleaseAlways(ctxt, p_value.type, &p_value.valueref_value, Out(t_value));
-        if (ctxt . HasError())
-            return false;
-    }
+    MCExecTypeConvertToValueRefAndReleaseAlways(ctxt, p_value.type, &p_value.valueref_value, Out(t_value));
+    if (ctxt . HasError())
+        return false;
     
     MCTypeInfoRef t_get_type, t_set_type;
     if (p_path != nil)
@@ -668,6 +670,42 @@ bool MCWidget::setcustomprop(MCExecContext& ctxt, MCNameRef p_set_name, MCNameRe
         !MCExtensionConvertFromScriptType(ctxt, t_set_type, InOut(t_value)))
     {
         CatchError(ctxt);
+        
+        Exec_errors t_error;
+        bool t_throw = false;
+        
+        MCResolvedTypeInfo t_resolved_type;
+        if (!MCTypeInfoResolve(t_set_type, t_resolved_type))
+            return false;
+        
+        if ( t_resolved_type . named_type == kMCBooleanTypeInfo)
+        {
+            t_error = EE_PROPERTY_NAB;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCNumberTypeInfo)
+        {
+            t_error = EE_PROPERTY_NAN;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCStringTypeInfo)
+        {
+            t_error = EE_PROPERTY_NAS;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCArrayTypeInfo || t_resolved_type . named_type == kMCProperListTypeInfo)
+        {
+            t_error = EE_PROPERTY_NOTANARRAY;
+            t_throw = true;
+        }
+        else if (t_resolved_type . named_type == kMCDataTypeInfo)
+        {
+            t_error = EE_PROPERTY_NOTADATA;
+            t_throw = true;
+        }
+        
+        if (t_throw)
+            ctxt . LegacyThrow(t_error);
         return false;
     }
     
@@ -741,6 +779,54 @@ Boolean MCWidget::del(bool p_check_flag)
     return True;
 }
 
+void MCWidget::undo(Ustruct *us)
+{
+    MCControl::undo(us);
+
+    if (us->type == UT_REPLACE)
+    {
+        MCAutoValueRef t_rep;
+        t_rep.Give(m_rep);
+        m_rep = nullptr;
+        
+        MCNewAutoNameRef t_kind;
+        t_kind.Give(m_kind);
+        m_kind = nullptr;
+        
+        bind(*t_kind, *t_rep);
+    }
+}
+
+Boolean MCWidget::delforundo(bool p_check_flag)
+{
+    MCAutoValueRef t_rep;
+    // Make the widget generate a rep.
+    if (m_rep == nullptr)
+    {
+        if (m_widget != nullptr)
+        {
+            MCWidgetOnSave(m_widget, &t_rep);
+        }
+        
+        if (!t_rep.IsSet())
+        {
+            t_rep = kMCNull;
+        }
+    }
+    
+    if (!del(p_check_flag))
+    {
+        return false;
+    }
+    
+    if (t_rep.IsSet())
+    {
+        m_rep = t_rep.Take();
+    }
+    return true;
+}
+
+
 void MCWidget::OnOpen()
 {
 	if (m_widget != nil)
@@ -808,17 +894,23 @@ IO_stat MCWidget::save(IO_handle p_stream, uint4 p_part, bool p_force_ext, uint3
 	}
 
     // Make the widget generate a rep.
-    MCAutoValueRef t_rep;
-    if (m_widget != nil)
-        MCWidgetOnSave(m_widget, &t_rep);
-    else
-        t_rep = m_rep;
-    
-    // If the rep is nil, then an error must have been thrown, so we still
-    // save, but without any state for this widget.
-    if (*t_rep == nil)
-        t_rep = MCValueRetain(kMCNull);
-    
+	MCAutoValueRef t_rep;
+	if (m_widget != nil)
+    {
+		MCWidgetOnSave(m_widget, &t_rep);
+        // A widget might not have an OnSave handler (e.g. colorswatch widget)
+        if (*t_rep == nil)
+            t_rep = kMCNull;
+    }
+	else if (m_rep != nil)
+		t_rep = m_rep;
+	else
+	{
+		// If the rep is nil, then an error must have been thrown, so we still
+		// save, but without any state for this widget.
+		t_rep = kMCNull;
+	}
+	
     // The state of the IO.
     IO_stat t_stat;
     

@@ -61,6 +61,7 @@ import java.nio.charset.*;
 import java.lang.reflect.*;
 import java.util.*;
 import java.text.Collator;
+import java.lang.Math;
 
 import java.security.KeyStore;
 import java.security.cert.CertificateFactory;
@@ -78,6 +79,12 @@ import java.security.cert.CertificateException;
 
 public class Engine extends View implements EngineApi
 {
+	public interface LifecycleListener
+	{
+		public abstract void OnResume();
+		public abstract void OnPause();
+	}
+
 	public static final String TAG = "revandroid.Engine";
 
 	// This is true if the engine is not suspended.
@@ -98,7 +105,9 @@ public class Engine extends View implements EngineApi
     private CalendarEvents m_calendar_module;
     
     private OpenGLView m_opengl_view;
-	private OpenGLView m_old_opengl_view;
+	private boolean m_disabling_opengl;
+    private boolean m_enabling_opengl;
+    
 	private BitmapView m_bitmap_view;
 
 	private File m_temp_image_file;
@@ -110,7 +119,11 @@ public class Engine extends View implements EngineApi
 
 	private boolean m_text_editor_visible;
 	private int m_text_editor_mode;
+    private int m_default_text_editor_mode;
 
+    private int m_default_ime_action;
+    private int m_ime_action;
+    
     private SensorModule m_sensor_module;
     private DialogModule m_dialog_module;
     private NetworkModule m_network_module;
@@ -118,7 +131,7 @@ public class Engine extends View implements EngineApi
     private SoundModule m_sound_module;
     private NotificationModule m_notification_module;
 	private NFCModule m_nfc_module;
-    private RelativeLayout m_view_layout;
+    private AbsoluteLayout m_view_layout;
 
     private PowerManager.WakeLock m_wake_lock;
     
@@ -132,6 +145,11 @@ public class Engine extends View implements EngineApi
 	private boolean m_new_intent;
 
 	private int m_photo_width, m_photo_height;
+	private int m_jpeg_quality;
+	
+	private int m_night_mode;
+
+	private List<LifecycleListener> m_lifecycle_listeners;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -160,9 +178,13 @@ public class Engine extends View implements EngineApi
 		// create our text editor
         // IM-2012-03-23: switch to monitoring the InputConnection to the EditText field to fix
         // bugs introduced by the previous method of checking for changes to the field
-		m_text_editor_mode = 1;
-		m_text_editor_visible = false;
+		m_default_text_editor_mode = 1;
+        m_text_editor_mode = 0;
+        m_text_editor_visible = false;
 
+        m_default_ime_action = EditorInfo.IME_FLAG_NO_ENTER_ACTION | EditorInfo.IME_ACTION_DONE;
+        m_ime_action = 0;
+        
         // initialise modules
         m_sensor_module = new SensorModule(this);
         m_dialog_module = new DialogModule(this);
@@ -207,8 +229,9 @@ public class Engine extends View implements EngineApi
 
 		// We have no opengl view to begin with.
 		m_opengl_view = null;
-		m_old_opengl_view = null;
-
+        m_disabling_opengl = false;
+        m_enabling_opengl = false;
+        
 		// But we do have a bitmap view.
 		m_bitmap_view = new BitmapView(getContext());
         
@@ -228,6 +251,13 @@ public class Engine extends View implements EngineApi
 
 		m_photo_width = 0;
 		m_photo_height = 0;
+		m_jpeg_quality = 100;
+		
+		m_night_mode =
+			p_context.getResources().getConfiguration().uiMode &
+			Configuration.UI_MODE_NIGHT_MASK;
+
+		m_lifecycle_listeners = new ArrayList<LifecycleListener>();
 	}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -243,10 +273,10 @@ public class Engine extends View implements EngineApi
         });
     }
 	
-	public void nativeNotify(int p_callback, int p_context)
-	{
-		final int t_callback = p_callback;
-		final int t_context = p_context;
+	public void nativeNotify(long p_callback, long p_context)
+    {
+        final long t_callback = p_callback;
+		final long t_context = p_context;
 		post(new Runnable() {
 			public void run()
 			{
@@ -331,10 +361,12 @@ public class Engine extends View implements EngineApi
 		}
 		catch ( UnsatisfiedLinkError e )
 		{
+            Log.i("revandroid", e.toString());
 			return null;
 		}
 		catch ( SecurityException e )
 		{
+            Log.i("revandroid", e.toString());
 			return null;
 		}
 	}
@@ -343,6 +375,15 @@ public class Engine extends View implements EngineApi
 
     public void onConfigurationChanged(Configuration p_new_config)
 	{
+		int t_night_mode =
+			getContext().getResources().getConfiguration().uiMode &
+			Configuration.UI_MODE_NIGHT_MASK;
+		
+		if (t_night_mode != m_night_mode)
+		{
+			m_night_mode = t_night_mode;
+			doSystemAppearanceChanged();
+		}
 	}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -436,8 +477,6 @@ public class Engine extends View implements EngineApi
 
 ////////////////////////////////////////////////////////////////////////////////
 
-	protected CharSequence m_composing_text;
-	
     @Override
     public InputConnection onCreateInputConnection(EditorInfo outAttrs)
     {
@@ -445,8 +484,9 @@ public class Engine extends View implements EngineApi
 		if (!m_text_editor_visible)
 			return null;
 		
-		m_composing_text = null;
-        InputConnection t_connection = new BaseInputConnection(this, false) {
+        InputConnection t_connection = new BaseInputConnection(this, true) {
+        	String m_current_text = "";
+        	
 			void handleKey(int keyCode, int charCode)
 			{
 				if (charCode == 0)
@@ -499,12 +539,12 @@ public class Engine extends View implements EngineApi
 					// IM-2013-02-21: [[ BZ 10684 ]]
 					// allow BaseInputConnection to do the handling of commitText(), etc
 					// and instead catch the raw key events that are generated.
-					if (key.getKeyCode() == KeyEvent.KEYCODE_UNKNOWN)
+					if (t_key_code == KeyEvent.KEYCODE_UNKNOWN)
 					{
 						// handle string of chars
 						CharSequence t_chars = key.getCharacters();
 						for (int i = 0; i < t_chars.length(); i++)
-							doKeyPress(0, t_chars.charAt(i), 0);
+							handleKey(t_key_code, t_chars.charAt(i));
 					}
 					else
 					{
@@ -520,37 +560,38 @@ public class Engine extends View implements EngineApi
 				return true;
             }
 			
-			// IM-2013-02-25: [[ BZ 10684 ]] - updated to show text changes in the field
-			// as software keyboards modify the composing text.
-			void updateComposingText(CharSequence p_new)
+			// Show text changes in the field as the composing text is modified.
+			// We do this by removing edited text with fake backspace key events
+			// and sending key events for each new character.
+			void updateComposingText()
 			{
+				String t_new = getEditable().toString();
+				
 				// send changes to the engine as a sequence of key events.
 				int t_match_length = 0;
 				int t_current_length = 0;
 				int t_new_length = 0;
 				int t_max_length = 0;
 				
-				if (m_composing_text != null)
-					t_current_length = m_composing_text.length();
-				if (p_new != null)
-					t_new_length = p_new.length();
+				t_current_length = m_current_text.length();
+				t_new_length = t_new.length();
 				
 				t_max_length = Math.min(t_current_length, t_new_length);
 				for (int i = 0; i < t_max_length; i++)
 				{
-					if (p_new.charAt(i) != m_composing_text.charAt(i))
+					if (t_new.charAt(i) != m_current_text.charAt(i))
 						break;
 					t_match_length += 1;
 				}
 				
 				// send backspaces
 				for (int i = 0; i < t_current_length - t_match_length; i++)
-					doKeyPress(0, 0, 0xff08);
+					handleKey(KeyEvent.KEYCODE_DEL, 0);
 				// send new text
 				for (int i = t_match_length; i < t_new_length; i++)
-					doKeyPress(0, p_new.charAt(i), 0);
+					handleKey(KeyEvent.KEYCODE_UNKNOWN, t_new.charAt(i));
 				
-				m_composing_text = p_new;
+				m_current_text = t_new;
 				
 				if (m_wake_on_event)
 					doProcess(false);
@@ -560,31 +601,53 @@ public class Engine extends View implements EngineApi
 			@Override
 			public boolean commitText(CharSequence text, int newCursorPosition)
 			{
-				updateComposingText(text);
-				m_composing_text = null;
-				getEditable().clear();
-				return true;
+				boolean t_return_value = super.commitText(text, newCursorPosition);
+				updateComposingText();
+				return t_return_value;
 			}
 			@Override
 			public boolean finishComposingText()
 			{
-				m_composing_text = null;
-				getEditable().clear();
-				return true;
+				boolean t_return_value = super.finishComposingText();
+				updateComposingText();
+				return t_return_value;
 			}
 			@Override
 			public boolean setComposingText(CharSequence text, int newCursorPosition)
 			{
-				updateComposingText(text);
-				return super.setComposingText(text, newCursorPosition);
+				boolean t_return_value =  super.setComposingText(text, newCursorPosition);
+				updateComposingText();
+				return t_return_value;
 			}
+            @Override
+            public boolean performEditorAction (int editorAction)
+            {
+                handleKey(0, 10);
+                return true;
+            }
+            
+            @Override
+            public boolean deleteSurroundingText(int beforeLength, int afterLength)
+            {
+            	boolean t_return_value = super.deleteSurroundingText(beforeLength, afterLength);
+            	updateComposingText();
+            	return t_return_value;
+            }
         };
         
 		int t_type = getInputType(false);
 		
         outAttrs.actionLabel = null;
 		outAttrs.inputType = t_type;
-        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_ENTER_ACTION | EditorInfo.IME_ACTION_DONE;
+        
+        if (m_ime_action != 0)
+        {
+            outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | m_ime_action;
+        }
+        else
+        {
+            outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | m_default_ime_action;
+        }
         
         return t_connection;
     }
@@ -604,7 +667,40 @@ public class Engine extends View implements EngineApi
 		
 		// HH-2017-01-18: [[ Bug 18058 ]] Fix keyboard not show in landscape orientation
         imm.showSoftInput(this, InputMethodManager.SHOW_FORCED);
-		updateKeyboardVisible(true);
+    }
+    
+    @Override
+    public void getFocusedRect(Rect r_rect)
+    {
+        Rect t_rect = doGetFocusedRect();
+        
+        if (t_rect == null)
+        {
+            super.getFocusedRect(r_rect);
+        }
+        else
+        {
+            r_rect.set(t_rect);
+        }
+    }
+    
+    private static final int KEYBOARD_DISPLAY_OVER = 0;
+    private static final int KEYBOARD_DISPLAY_PAN = 1;
+    
+    public void setKeyboardDisplay(int p_mode)
+    {
+        if (p_mode == KEYBOARD_DISPLAY_PAN)
+        {
+            getActivity()
+                .getWindow()
+                .setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
+        }
+        else if (p_mode == KEYBOARD_DISPLAY_OVER)
+        {
+            getActivity()
+                .getWindow()
+                .setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
     }
 
     public void hideKeyboard()
@@ -617,8 +713,7 @@ public class Engine extends View implements EngineApi
 			imm.restartInput(this);
 		
         imm.hideSoftInputFromWindow(getWindowToken(), 0);
-		updateKeyboardVisible(false);
-    }
+	}
 
 	public void resetKeyboard()
 	{
@@ -628,7 +723,7 @@ public class Engine extends View implements EngineApi
 			imm.restartInput(this);
 	}
 
-	public void setTextInputVisible(boolean p_visible)
+	public void setTextInputVisible(boolean p_visible, int p_input_mode, int p_ime_action)
 	{
 		m_text_editor_visible = p_visible;
 		
@@ -636,10 +731,23 @@ public class Engine extends View implements EngineApi
 			return;
 		
 		if (p_visible)
+        {
+            m_text_editor_mode = p_input_mode;
+            m_ime_action = p_ime_action;
 			showKeyboard();
+        }
 		else
+        {
 			hideKeyboard();
+            m_text_editor_mode = 0;
+            m_ime_action = 0;
+        }
 	}
+    
+    public void setKeyboardReturnKey(int p_ime_action)
+    {
+        m_default_ime_action = p_ime_action;
+    }
 	
 	public void setTextInputMode(int p_mode)
 	{
@@ -650,9 +758,9 @@ public class Engine extends View implements EngineApi
 		// 4 is phone
 		// 5 is email
 		
-		boolean t_reset = s_running && m_text_editor_visible && p_mode != m_text_editor_mode;
+		boolean t_reset = s_running && m_text_editor_visible && p_mode != m_default_text_editor_mode;
 		
-		m_text_editor_mode = p_mode;
+		m_default_text_editor_mode = p_mode;
 		
 		if (t_reset)
 			resetKeyboard();
@@ -664,6 +772,11 @@ public class Engine extends View implements EngineApi
 		int t_type;
 		
 		int t_mode = m_text_editor_mode;
+        if (t_mode == 0)
+        {
+            t_mode = m_default_text_editor_mode;
+        }
+        
 		// the phone class does not support a password variant, so we switch this for one of the number types
 		if (p_password && t_mode == 4)
 			t_mode = 2;
@@ -982,7 +1095,7 @@ public class Engine extends View implements EngineApi
 			FrameLayout t_main_view;
 			t_main_view = ((LiveCodeActivity)getContext()).s_main_layout;
 			
-			m_view_layout = new RelativeLayout(getContext());
+			m_view_layout = new AbsoluteLayout(getContext());
 			t_main_view.addView(m_view_layout, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 			t_main_view.bringChildToFront(m_view_layout);
 		}
@@ -992,7 +1105,7 @@ public class Engine extends View implements EngineApi
 	
 	Object createNativeLayerContainer()
 	{
-		return new RelativeLayout(getContext());
+		return new AbsoluteLayout(getContext());
 	}
 	
 	// insert the view into the container, layered below p_view_above if not null.
@@ -1007,7 +1120,7 @@ public class Engine extends View implements EngineApi
 		else
 			t_index = t_container.getChildCount();
 		
-		t_container.addView((View)p_view, t_index, new RelativeLayout.LayoutParams(0, 0));
+		t_container.addView((View)p_view, t_index, new AbsoluteLayout.LayoutParams(0, 0, 0, 0));
 	}
 	
 	void removeNativeViewFromContainer(Object p_view)
@@ -1024,11 +1137,7 @@ public class Engine extends View implements EngineApi
 	
 	void setNativeViewRect(Object p_view, int left, int top, int width, int height)
 	{
-		RelativeLayout.LayoutParams t_layout = new RelativeLayout.LayoutParams(width, height);
-		t_layout.leftMargin = left;
-		t_layout.topMargin = top;
-		t_layout.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
-		t_layout.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+		AbsoluteLayout.LayoutParams t_layout = new AbsoluteLayout.LayoutParams(width, height, left, top);
 		
 		View t_view = (View)p_view;
 		
@@ -1148,6 +1257,11 @@ public class Engine extends View implements EngineApi
         if (m_wake_on_event)
             doProcess(false);
     }
+    
+    public void onAskPermissionDone(boolean p_granted)
+    {
+        doAskPermissionDone(p_granted);
+    }
 
 ////////////////////////////////////////////////////////////////////////////////
 	
@@ -1210,8 +1324,8 @@ public class Engine extends View implements EngineApi
 	private Rect getEffectiveWorkarea()
 	{
 		Rect t_workrect = new Rect();
-		getGlobalVisibleRect(t_workrect);
-		return t_workrect;
+        getWindowVisibleDisplayFrame(t_workrect);
+        return t_workrect;
 	}
 
 	public String getEffectiveWorkareaAsString()
@@ -1246,7 +1360,7 @@ public class Engine extends View implements EngineApi
 		getLocationOnScreen(t_origin);
 		
 		// We have new values and the keyboard isn't showing so update any sizes we don't already know
-		if (p_update && !m_keyboard_visible)
+		if (p_update && !keyboardIsVisible())
 		{
 			t_working_rect = new Rect(t_origin[0], t_origin[1], t_origin[0] + p_new_width, t_origin[1] + p_new_height);
 			
@@ -1384,23 +1498,65 @@ public class Engine extends View implements EngineApi
 	private boolean m_orientation_sizechange = false;
 	
 	private boolean m_keyboard_visible = false;
+    
+    boolean keyboardIsVisible()
+    {
+        // status bar height
+        int t_status_bar_height = 0;
+        int t_resource_id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (t_resource_id > 0)
+        {
+            t_status_bar_height = getResources().getDimensionPixelSize(t_resource_id);
+        }
+        
+        // display window size for the app layout
+        Rect t_app_rect = new Rect();
+        getActivity().getWindow().getDecorView().getWindowVisibleDisplayFrame(t_app_rect);
+        
+        int t_screen_height = ((LiveCodeActivity)getContext()).s_main_layout.getRootView().getHeight();
+        
+        // keyboard height equals (screen height - (user app height + status))
+        int t_keyboard_height = t_screen_height - (t_app_rect.height() + t_status_bar_height) - getSoftbuttonsbarHeight();
+        
+        return t_keyboard_height > 0;
+    }
+    
+    private int getSoftbuttonsbarHeight() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            return 0;
+        }
+        
+        DisplayMetrics t_metrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(t_metrics);
+        int t_usable_height = t_metrics.heightPixels;
+        getWindowManager().getDefaultDisplay().getRealMetrics(t_metrics);
+        int t_real_height = t_metrics.heightPixels;
+        
+        return t_real_height > t_usable_height ? t_real_height - t_usable_height : 0;
+    }
 	
-	void updateKeyboardVisible(boolean p_visible)
+	void updateKeyboardVisible()
 	{
-		if (p_visible == m_keyboard_visible)
+        boolean t_visible = keyboardIsVisible();
+        
+		if (t_visible == m_keyboard_visible)
 			return;
 		
 		// Log.i(TAG, "updateKeyboardVisible(" + p_visible + ")");
 		
-		m_keyboard_visible = p_visible;
+		m_keyboard_visible = t_visible;
 		
 		// IM-2013-11-15: [[ Bug 10485 ]] Notify engine when keyboard visiblity changes
-		if (p_visible)
+		if (t_visible)
 			doKeyboardShown(0);
 		else
 			doKeyboardHidden();
 		
 		m_keyboard_sizechange = true;
+
+		// Make sure we trigger handling
+		if (m_wake_on_event)
+			doProcess(false);
 	}
 	
 	void updateOrientation(int p_orientation)
@@ -1414,23 +1570,6 @@ public class Engine extends View implements EngineApi
 	protected void onSizeChanged(int w, int h, int oldw, int oldh)
 	{
 		// Log.i(TAG, "onSizeChanged({" + w + "x" + h + "}, {" + oldw + ", " + oldh + "})");
-		
-		// status bar height
-		int t_status_bar_height = 0;
-		int t_resource_id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-		if (t_resource_id > 0)
-		{
-			t_status_bar_height = getResources().getDimensionPixelSize(t_resource_id);
-		}
-		
-		// display window size for the app layout
-		Rect t_app_rect = new Rect();
-		getActivity().getWindow().getDecorView().getWindowVisibleDisplayFrame(t_app_rect);
-		
-		// keyboard height equals (screen height - (user app height + status))
-		int t_keyboard_height = getContainer().getRootView().getHeight() - (t_app_rect.height() + t_status_bar_height);
-		
-		updateKeyboardVisible(t_keyboard_height > 0);
 		
 		Rect t_rect;
 		t_rect = null;
@@ -1629,7 +1768,8 @@ public class Engine extends View implements EngineApi
 	public void launchUrl(String p_url)
 	{
 		String t_type = null;
-		if (p_url.startsWith("file:"))
+        Uri t_uri;
+		if (p_url.startsWith("file:") || p_url.startsWith("binfile:"))
 		{
 			try
 			{
@@ -1642,13 +1782,29 @@ public class Engine extends View implements EngineApi
 
 			if (t_type == null)
 				t_type = URLConnection.guessContentTypeFromName(p_url);
+            
+            // Store the actual path
+            String t_path;
+            t_path = p_url.substring(p_url.indexOf(":") + 1);
+            
+            // In the new Android permissions model, "file://" and "binfile://" URIs are not allowed
+            // for sharing files with other apps. They need to be replaced with "content://" URI and
+            // use a FileProvider instead
+            t_uri = FileProvider.getProvider(getContext()).addPath(t_path, t_path, t_type, false, ParcelFileDescriptor.MODE_READ_ONLY);
 		}
-
+        else
+        {
+            t_uri = Uri.parse(p_url);
+        }
+        
 		Intent t_view_intent = new Intent(Intent.ACTION_VIEW);
+        
 		if (t_type != null)
-			t_view_intent.setDataAndType(Uri.parse(p_url), t_type);
+			t_view_intent.setDataAndType(t_uri, t_type);
 		else
-			t_view_intent.setData(Uri.parse(p_url));
+			t_view_intent.setData(t_uri);
+        
+        t_view_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 		((LiveCodeActivity)getContext()).startActivityForResult(t_view_intent, LAUNCHURL_RESULT);
 	}
 
@@ -1856,24 +2012,123 @@ public class Engine extends View implements EngineApi
 		return new String(t_directions);
 	}
 
-	public void showPhotoPicker(String p_source, int p_width, int p_height)
-	{
-		m_photo_width = p_width;
-		m_photo_height = p_height;
-
-		if (p_source.equals("camera"))
-			showCamera();
-		else if (p_source.equals("album"))
-			showLibrary();
-		else if (p_source.equals("library"))
-			showLibrary();
-		else
-		{
-			doPhotoPickerError("source not available");
-		}
-	}
-
-	public void showCamera()
+    public static final int PERMISSION_REQUEST_CODE = 1;
+    public boolean askPermission(String p_permission)
+    {
+        if (Build.VERSION.SDK_INT >= 23 && getContext().checkSelfPermission(p_permission)
+            != PackageManager.PERMISSION_GRANTED)
+        {
+            Activity t_activity = (LiveCodeActivity)getContext();
+            t_activity.requestPermissions(new String[]{p_permission}, PERMISSION_REQUEST_CODE);
+        }
+        else
+            onAskPermissionDone(true);
+        return true;
+    }
+    
+    public boolean checkHasPermissionGranted(String p_permission)
+    {
+        if (Build.VERSION.SDK_INT >= 23)
+        {
+            return getContext().checkSelfPermission(p_permission) == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+    
+    
+    public boolean checkPermissionExists(String p_permission)
+    {
+        if (Build.VERSION.SDK_INT >= 23)
+        {
+            List<PermissionGroupInfo> t_group_info_list = getAllPermissionGroups();
+            if (t_group_info_list == null)
+                return false;
+            
+            ArrayList<String> t_group_name_list = new ArrayList<String>();
+            for (PermissionGroupInfo t_group_info : t_group_info_list)
+            {
+                String t_group_name = t_group_info.name;
+                if (t_group_name != null)
+                    t_group_name_list.add(t_group_name);
+            }
+            
+            for (String t_group_name : t_group_name_list)
+            {
+                ArrayList<String> t_permission_name_list = getPermissionsForGroup(t_group_name);
+                
+                if (t_permission_name_list.contains(p_permission))
+                    return true;
+            }
+            return false;
+        }
+        return true;
+    }
+    
+    private List<PermissionGroupInfo> getAllPermissionGroups()
+    {
+        final PackageManager t_package_manager = getContext().getPackageManager();
+        if (t_package_manager == null)
+            return null;
+        
+        return t_package_manager.getAllPermissionGroups(0);
+    }
+    
+    private ArrayList<String> getPermissionsForGroup(String p_group_name)
+    {
+        final PackageManager t_package_manager = getContext().getPackageManager();
+        final ArrayList<String> t_permission_name_list = new ArrayList<String>();
+        
+        try
+        {
+            List<PermissionInfo> t_permission_info_list =
+            t_package_manager.queryPermissionsByGroup(p_group_name, PackageManager.GET_META_DATA);
+            if (t_permission_info_list != null)
+            {
+                for (PermissionInfo t_permission_info : t_permission_info_list)
+                {
+                    String t_permission_name = t_permission_info.name;
+                    t_permission_name_list.add(t_permission_name);
+                }
+            }
+        }
+        catch (PackageManager.NameNotFoundException e)
+        {
+            // e.printStackTrace();
+            Log.d(TAG, "permissions not found for group = " + p_group_name);
+        }
+        
+        Collections.sort(t_permission_name_list);
+        
+        return t_permission_name_list;
+    }
+    
+    
+    public void showPhotoPicker(String p_source, int p_width, int p_height, int p_jpeg_quality)
+    {
+        m_photo_width = p_width;
+        m_photo_height = p_height;
+		m_jpeg_quality = p_jpeg_quality;
+        
+        if (p_source.contains("camera"))
+            showCamera(p_source);
+        else if (p_source.equals("album"))
+            showLibrary();
+        else if (p_source.equals("library"))
+            showLibrary();
+        else
+        {
+            doPhotoPickerError("source not available");
+        }
+        
+    }
+    
+    // sent by the callback
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
+    {
+        onAskPermissionDone(grantResults[0] == PackageManager.PERMISSION_GRANTED);
+    }
+    
+	public void showCamera(String p_source)
 	{
 		// 2012-01-18-IM temp file may be created in app cache folder, in which case
 		// the file needs to be made world-writable
@@ -1916,12 +2171,29 @@ public class Engine extends View implements EngineApi
 			doPhotoPickerError("error: could not create temporary image file");
 			return;
 		}
-		
 
-		Uri t_tmp_uri = Uri.fromFile(m_temp_image_file);
+		String t_path = m_temp_image_file.getPath();
+
+		Uri t_uri;
+		t_uri = FileProvider.getProvider(getContext()).addPath(t_path, t_path, "image/jpeg", true, ParcelFileDescriptor.MODE_READ_WRITE);
 
 		Intent t_image_capture = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-		t_image_capture.putExtra(MediaStore.EXTRA_OUTPUT, t_tmp_uri);
+		
+		if (p_source.equals("front camera"))
+		{
+			t_image_capture.putExtra("android.intent.extras.CAMERA_FACING", 1);
+			t_image_capture.putExtra("android.intent.extras.LENS_FACING_FRONT", 1);
+			t_image_capture.putExtra("android.intent.extra.USE_FRONT_CAMERA", true);
+			
+		}
+		else if (p_source.equals("rear camera"))
+		{
+			t_image_capture.putExtra("android.intent.extras.CAMERA_FACING", 0);
+			t_image_capture.putExtra("android.intent.extras.LENS_FACING_FRONT", 0);
+			t_image_capture.putExtra("android.intent.extra.USE_FRONT_CAMERA", false);
+		}
+		t_image_capture.putExtra(MediaStore.EXTRA_OUTPUT, t_uri);
+		t_image_capture.setFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 		t_activity.startActivityForResult(t_image_capture, IMAGE_RESULT);
 	}
 
@@ -1947,27 +2219,102 @@ public class Engine extends View implements EngineApi
 					t_photo_uri = Uri.fromFile(m_temp_image_file);
 				else
 					t_photo_uri = data.getData();
+				
 				InputStream t_in = ((LiveCodeActivity)getContext()).getContentResolver().openInputStream(t_photo_uri);
 				ByteArrayOutputStream t_out = new ByteArrayOutputStream();
-				byte[] t_buffer = new byte[4096];
-				int t_readcount;
-				while (-1 != (t_readcount = t_in.read(t_buffer)))
-				{
-					t_out.write(t_buffer, 0, t_readcount);
-				}
-
+				
 				// HH-2017-01-19: [[ Bug 11313 ]]Support maximum width and height of the image
 				if(m_photo_height > 0 && m_photo_width > 0)
 				{
-					Bitmap bm = BitmapFactory.decodeByteArray(t_out.toByteArray(), 0, t_out.size());
-					Bitmap rBm = Bitmap.createScaledBitmap(bm, m_photo_width, m_photo_height, true);
-					ByteArrayOutputStream stream = new ByteArrayOutputStream();
-					rBm.compress(Bitmap.CompressFormat.PNG, 100, stream);
-					byte[] byteArray = stream.toByteArray();
-					doPhotoPickerDone(byteArray, byteArray.length);
+					Bitmap t_bitmap = BitmapFactory.decodeStream(t_in);
+					
+					// scale to required max width/height
+					float t_width = t_bitmap.getWidth();
+					float t_height = t_bitmap.getHeight();
+					
+					/* In API Level >= 24, you have to use an input stream to make sure that access
+					 * to a photo in the library is granted. Before that you can just open the photo's
+					 * file directly. */
+					ExifInterface t_exif;
+					if (Build.VERSION.SDK_INT >= 24)
+					{
+						t_in.close();
+						t_in = ((LiveCodeActivity)getContext()).getContentResolver().openInputStream(t_photo_uri);
+						t_exif = new ExifInterface(t_in);
+					}
+					else
+					{
+						t_exif = new ExifInterface(t_photo_uri.getPath());
+					}
+					
+					int t_orientation = t_exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,
+															   ExifInterface.ORIENTATION_NORMAL);
+					
+					/* Max width and height need to be flipped if the image orientation is
+					 * requires a 90 or 270 degree rotation */
+					int t_max_width;
+					int t_max_height;
+					switch (t_orientation)
+					{
+						case ExifInterface.ORIENTATION_TRANSPOSE:
+						case ExifInterface.ORIENTATION_ROTATE_90:
+						case ExifInterface.ORIENTATION_TRANSVERSE:
+						case ExifInterface.ORIENTATION_ROTATE_270:
+							t_max_height = m_photo_width;
+							t_max_width = m_photo_height;
+							break;
+						default:
+							t_max_width = m_photo_width;
+							t_max_height = m_photo_height;
+							break;
+					}
+					
+					float t_scale = Math.min(t_max_width / t_width, t_max_height / t_height);
+					
+					Matrix t_matrix = new Matrix();
+					t_matrix.setScale(t_scale, t_scale, 0, 0);
+					
+					switch (t_orientation)
+					{
+						case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+							t_matrix.postScale(-1, 1);
+							break;
+						case ExifInterface.ORIENTATION_ROTATE_180:
+							t_matrix.postRotate(180);
+							break;
+						case ExifInterface.ORIENTATION_FLIP_VERTICAL:
+							t_matrix.postRotate(180);
+							t_matrix.postScale(-1, 1);
+							break;
+						case ExifInterface.ORIENTATION_TRANSPOSE:
+							t_matrix.postRotate(90);
+							t_matrix.postScale(-1, 1);
+							break;
+						case ExifInterface.ORIENTATION_ROTATE_90:
+							t_matrix.postRotate(90);
+							break;
+						case ExifInterface.ORIENTATION_TRANSVERSE:
+							t_matrix.postRotate(-90);
+							t_matrix.postScale(-1, 1);
+							break;
+						case ExifInterface.ORIENTATION_ROTATE_270:
+							t_matrix.postRotate(-90);
+							break;
+					}
+		
+					Bitmap t_scaled_bitmap = Bitmap.createBitmap(t_bitmap, 0, 0, (int)t_width, (int)t_height, t_matrix, true);
+					t_scaled_bitmap.compress(Bitmap.CompressFormat.JPEG, m_jpeg_quality, t_out);
 				}
 				else
-					doPhotoPickerDone(t_out.toByteArray(), t_out.size());
+				{
+					byte[] t_buffer = new byte[4096];
+					int t_readcount;
+					while (-1 != (t_readcount = t_in.read(t_buffer)))
+					{
+						t_out.write(t_buffer, 0, t_readcount);
+					}
+				}
+				doPhotoPickerDone(t_out.toByteArray(), t_out.size());
 				
 				t_in.close();
 				t_out.close();
@@ -1978,7 +2325,7 @@ public class Engine extends View implements EngineApi
 			}
 			if (m_temp_image_file != null)
 			{
-				m_temp_image_file.delete();
+				FileProvider.getProvider(getContext()).removePath(m_temp_image_file.getPath());
 				m_temp_image_file = null;
 			}
 		}
@@ -2009,9 +2356,7 @@ public class Engine extends View implements EngineApi
 
 	public void prepareEmail(String address, String cc, String bcc, String subject, String message_body, boolean is_html)
 	{
-        String t_provider_authority = getContext().getPackageName();
-        t_provider_authority += ".attachmentprovider";
-		m_email = new Email(address, cc, bcc, subject, message_body, t_provider_authority, is_html);
+		m_email = new Email(address, cc, bcc, subject, message_body, is_html);
 	}
 
 	public void addAttachment(String path, String mime_type, String name)
@@ -2033,7 +2378,7 @@ public class Engine extends View implements EngineApi
 
 	private void onEmailResult(int resultCode, Intent data)
 	{
-		m_email.cleanupAttachments(getActivity().getContentResolver());
+		m_email.cleanupAttachments(getContext());
 
 		if (resultCode == Activity.RESULT_CANCELED)
 		{
@@ -2131,63 +2476,108 @@ public class Engine extends View implements EngineApi
 	}
 
 ////////////////////////////////////////////////////////////////////////////////
+    
+    private boolean openGLViewEnabled()
+    {
+        return m_opengl_view != null && m_opengl_view.getParent() != null;
+    }
+    
+    private void ensureBitmapViewVisibility()
+    {
+        if (openGLViewEnabled())
+        {
+            m_bitmap_view.setVisibility(View.INVISIBLE);
+        }
+        else
+        {
+            m_bitmap_view.setVisibility(View.VISIBLE);
+        }
+    }
 
 	public void enableOpenGLView()
 	{
-		// If OpenGL is already enabled, do nothing.
-		if (m_opengl_view != null)
-			return;
-
-		Log.i("revandroid", "enableOpenGLView");
-
-
-		// If we have an old OpenGL view, use it.
-		if (m_old_opengl_view != null)
-		{
-			m_opengl_view = m_old_opengl_view;
-			m_old_opengl_view = null;
-		}
-
-		// Create the OpenGL view, if needed.
-		if (m_opengl_view == null)
-		{
-			m_opengl_view = new OpenGLView(getContext());
+        Log.i("revandroid", "enableOpenGLView");
+        
+        if (m_disabling_opengl)
+        {
+            m_disabling_opengl = false;
+        }
+        
+        if (!m_enabling_opengl)
+        {
+            m_enabling_opengl = true;
             
-			// Add the view to the hierarchy - we add at the bottom and bring to
-			// the front as soon as we've shown the first frame.
-			((ViewGroup)getParent()).addView(m_opengl_view, 0,
-											 new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-																		  FrameLayout.LayoutParams.MATCH_PARENT));
-		}
+            post(new Runnable() {
+                public void run() {
+                    Log.i("revandroid", "enableOpenGLView callback");
+                    
+                    if (!m_disabling_opengl && m_enabling_opengl)
+                    {
+                        if (!openGLViewEnabled())
+                        {
+                            Log.i("revandroid", "enableOpenGLView adding");
+                            if (m_opengl_view == null)
+                            {
+                                m_opengl_view = new OpenGLView(getContext());
+                            }
+                            
+                            // Add the view to the hierarchy - we add at the bottom and bring to
+                            // the front as soon as we've shown the first frame.
+                            ((ViewGroup)getParent()).addView(m_opengl_view, 0,
+                                                             new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                                                                                          FrameLayout.LayoutParams.MATCH_PARENT));
+                        }
+                        else
+                        {
+                            // We need to call this explicitly here as we must re-enable drawing
+                            m_opengl_view.doSurfaceChanged(m_opengl_view);
+                        }
+                    }
+                    
+                    m_enabling_opengl = false;
+                    ensureBitmapViewVisibility();
+                }
+            });
+        }
 	}
 
 	public void disableOpenGLView()
 	{
-		// If OpenGL is not enabled, do nothing.
-		if (m_opengl_view == null)
-			return;
+        Log.i("revandroid", "disableOpenGLView");
+        
+        if (m_enabling_opengl)
+        {
+            m_enabling_opengl = false;
+        }
+        
+        if (!m_disabling_opengl)
+        {
+            m_disabling_opengl = true;
+            
+            // Before removing the OpenGL mode, make sure we show the bitmap view.
+            m_bitmap_view.setVisibility(View.VISIBLE);
 
-		Log.i("revandroid", "disableOpenGLView");
-
-		// Before removing the OpenGL mode, make sure we show the bitmap view.
-		m_bitmap_view.setVisibility(View.VISIBLE);
-
-		// Move the current opengl view to old.
-		m_old_opengl_view = m_opengl_view;
-		m_opengl_view = null;
-
-		// Post an runnable that removes the OpenGL view. Doing that here will
-		// cause a black screen.
-		post(new Runnable() {
-			public void run() {
-				if (m_old_opengl_view == null)
-					return;
-
-				Log.i("revandroid", "disableOpenGLView callback");
-				((ViewGroup)m_old_opengl_view.getParent()).removeView(m_old_opengl_view);
-				m_old_opengl_view = null;
-		}
-		});
+            // Move the current opengl view to old.
+            // Post an runnable that removes the OpenGL view. Doing that here will
+            // cause a black screen.
+            post(new Runnable() {
+                public void run() {
+                    Log.i("revandroid", "disableOpenGLView callback");
+                    
+                    if (!m_enabling_opengl && m_disabling_opengl)
+                    {
+                       if (openGLViewEnabled())
+                        {
+                            Log.i("revandroid", "disableOpenGLView removing");
+                            ((ViewGroup)m_opengl_view.getParent()).removeView(m_opengl_view);
+                        }
+                    }
+                    
+                    m_disabling_opengl = false;
+                    ensureBitmapViewVisibility();
+                }
+            });
+        }
 	}
     
     // MW-2015-05-06: [[ Bug 15232 ]] Post a runnable to prevent black flash when enabling openGLView
@@ -2195,15 +2585,14 @@ public class Engine extends View implements EngineApi
     {
         post(new Runnable() {
             public void run() {
-                if (m_opengl_view == null)
-                    return;
-                m_bitmap_view.setVisibility(View.INVISIBLE);
+                ensureBitmapViewVisibility();
             }
         });
     }
     
 	public void showBitmapView()
 	{
+        // force visible for visual effects
 		m_bitmap_view.setVisibility(View.VISIBLE);
 	}
 
@@ -3000,6 +3389,14 @@ public class Engine extends View implements EngineApi
 
 	public void onPause()
 	{
+		/* Pause registered listeners in reverse order of registration as
+		 * then components will be paused before any components they
+		 * depend on. */
+		for (int i = m_lifecycle_listeners.size() - 1; i >= 0; i--)
+		{
+			m_lifecycle_listeners.get(i).OnPause();
+		}
+
 		if (m_text_editor_visible)
 			hideKeyboard();
 		
@@ -3072,7 +3469,15 @@ public class Engine extends View implements EngineApi
 		
 		// IM-2013-08-16: [[ Bugfix 11103 ]] dispatch any remote notifications received while paused
 		dispatchNotifications();
-		
+
+		/* Resume registered listeners in order of registration as then
+		 * components will be resumed before any components which depend
+		 * on them. */
+		for (int i = 0; i < m_lifecycle_listeners.size(); i++)
+		{
+			m_lifecycle_listeners.get(i).OnResume();
+		}
+
 		if (m_wake_on_event)
 			doProcess(false);
 	}
@@ -3240,6 +3645,14 @@ public class Engine extends View implements EngineApi
     {
         Log.i("revandroid", "compareInternational"); 
         return m_collator.compare(left, right);
+    }
+    
+    ////////////////////////////////////////////////////////////////////////////////
+    
+    public Object createTypefaceFromAsset(String path)
+    {
+        Log.i("revandroid", "createTypefaceFromAsset");
+        return Typeface.createFromAsset(getContext().getAssets(),path);
     }
     
     ////////////////////////////////////////////////////////////////////////////////
@@ -3603,7 +4016,46 @@ public class Engine extends View implements EngineApi
     {
         return ((LiveCodeActivity)getContext()).getServiceClass();
     }
-    
+	
+	////////////////////////////////////////////////////////////////////////////////
+	
+	public int getSystemAppearance()
+	{
+		switch (m_night_mode)
+		{
+			case Configuration.UI_MODE_NIGHT_YES:
+				return 1;
+			case Configuration.UI_MODE_NIGHT_NO:
+			case Configuration.UI_MODE_NIGHT_UNDEFINED:
+			default:
+				return 0;
+		}
+	}
+
+	////////////////////////////////////////////////////////////////////////////////
+
+	public boolean registerLifecycleListener(LifecycleListener p_listener)
+	{
+		return m_lifecycle_listeners.add(p_listener);
+	}
+
+	public boolean unregisterLifecycleListener(LifecycleListener p_listener)
+	{
+		/* We can't remove the listener directly since LifecycleListener does
+		 * not implement equals. Instead, search backwards through the array
+		 * until we find the passed listener. */
+		for (int i = m_lifecycle_listeners.size() - 1; i >= 0; i--)
+		{
+			if (m_lifecycle_listeners.get(i) == p_listener)
+			{
+				m_lifecycle_listeners.remove(i);
+				return true;
+			}
+		}
+
+		return false;
+	}
+
     ////////////////////////////////////////////////////////////////////////////////
     
     // url launch callback
@@ -3639,7 +4091,7 @@ public class Engine extends View implements EngineApi
 	public static native void doResume();
 	public static native void doLowMemory();
 
-	public static native void doNativeNotify(int callback, int context);
+	public static native void doNativeNotify(long callback, long context);
 			 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3650,6 +4102,8 @@ public class Engine extends View implements EngineApi
 	public static native void doReconfigure(int x, int y, int w, int h, Bitmap bitmap);
 
     public static native String doGetCustomPropertyValue(String set, String property);
+    
+    public static native Rect doGetFocusedRect();
 
 	// MW-2013-08-07: [[ ExternalsApiV5 ]] Native wrapper around MCScreenDC::wait
 	//   used by runActivity() API.
@@ -3671,6 +4125,7 @@ public class Engine extends View implements EngineApi
 	public static native void doShake(int action, long timestamp);
 
 	public static native void doOrientationChanged(int orientation);
+	public static native void doSystemAppearanceChanged();
 
 	public static native void doKeyboardShown(int height);
 	public static native void doKeyboardHidden();
@@ -3681,6 +4136,7 @@ public class Engine extends View implements EngineApi
     public static native void doDatePickerDone(int year, int month, int day, boolean done);
     public static native void doTimePickerDone(int hour, int minute, boolean done);
     public static native void doListPickerDone(int index, boolean done);
+    public static native void doAskPermissionDone(boolean granted);
 
 	public static native void doMovieStopped();
 	public static native void doMovieTouched();

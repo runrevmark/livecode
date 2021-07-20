@@ -131,7 +131,7 @@ MCLayerModeHint MCControl::layer_computeattrs(bool p_commit)
 	// are part of the object.
 	//
 	bool t_is_unadorned;
-	if (getbitmapeffects() == nil && !getstate(CS_SELECTED))
+	if (getbitmapeffects() == nil)
 	{
 		switch(gettype())
 		{
@@ -389,6 +389,14 @@ void MCControl::layer_rectchanged(const MCRectangle& p_old_rect, bool p_redraw_a
 	bool t_is_visible;
 	t_is_visible = isvisible() || showinvisible();
 	
+    /* If the control is visible and selected, make sure we dirty the selection
+     * layer. */
+    if (t_is_visible && getselected())
+    {
+		getcard()->dirtyselection(p_old_rect);
+        getcard()->dirtyselection(rect);
+    }
+    
 	// If we are not a sprite, and are invisible there is nothing to do; otherwise
 	// we must at least try to dump cached updated parts of the sprite.
 	if (!layer_issprite() && !t_is_visible)
@@ -504,7 +512,7 @@ void MCControl::layer_scrolled(void)
 		// If we are a scrolling layer and not visible, there is nothing to
 		// do.
 		if (t_is_visible)
-			parent.GetAs<MCCard>()->layer_dirtyrect(geteffectiverect());
+			getcard()->layer_dirtyrect(geteffectiverect());
 	}
 }
 
@@ -537,7 +545,7 @@ void MCControl::layer_dirtycontentrect(const MCRectangle& p_updated_rect, bool p
 	// Add the rect to the update region - but only if instructed (update_card will be
 	// false if the object was invisible).
 	if (p_update_card)
-		parent.GetAs<MCCard>()->layer_dirtyrect(MCU_intersect_rect(p_updated_rect, geteffectiverect()));
+		getcard()->layer_dirtyrect(MCU_intersect_rect(p_updated_rect, geteffectiverect()));
 }
 
 void MCControl::layer_dirtyeffectiverect(const MCRectangle& p_effective_rect, bool p_update_card)
@@ -546,19 +554,25 @@ void MCControl::layer_dirtyeffectiverect(const MCRectangle& p_effective_rect, bo
 	// applied by the parent groups (if any).
 	MCRectangle t_dirty_rect;
 	t_dirty_rect = p_effective_rect;
+    
+    // Fetch the tilecache we are using (if any).
+    MCTileCacheRef t_tilecache;
+    t_tilecache = getstack() -> view_gettilecache();
 
-	// Expand the effective rect by that of all parent groups or controls
+	// Expand the effective rect by that of all parent groups or controls up
+    // until we hit a layer (if tilecache is present).
 	MCControl *t_control;
 	t_control = this;
-	while (t_control -> parent -> gettype() != CT_CARD)
+	while(t_control -> parent -> gettype() != CT_CARD &&
+          (t_tilecache == nullptr || t_control->m_layer_id == 0))
 	{
-                // If we have reached a stack before finding a card, this control is
-                // not on an open card (it might be an image being used as a button icon
-                // for example). In this case, there is nothing that needs to be done
-                if (t_control->parent->gettype() == CT_STACK)
-                        return;
-        
-                MCControl *t_parent_control;
+        // If we have reached a stack before finding a card, this control is
+        // not on an open card (it might be an image being used as a button icon
+        // for example). In this case, there is nothing that needs to be done
+        if (t_control->parent->gettype() == CT_STACK)
+            return;
+
+        MCControl *t_parent_control;
 		t_parent_control = t_control->parent.GetAs<MCControl>();
 		
 		// If the parent control is scrolling, we are done - defer to content
@@ -579,10 +593,6 @@ void MCControl::layer_dirtyeffectiverect(const MCRectangle& p_effective_rect, bo
 		t_control = t_parent_control;
 	}
 
-	// Fetch the tilecache we are using (if any).
-	MCTileCacheRef t_tilecache;
-	t_tilecache = t_control -> getstack() -> view_gettilecache();
-
 	// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
 	// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
 	MCGAffineTransform t_transform;
@@ -591,14 +601,10 @@ void MCControl::layer_dirtyeffectiverect(const MCRectangle& p_effective_rect, bo
 	MCRectangle32 t_device_rect;
 	t_device_rect = MCRectangle32GetTransformedBounds(t_dirty_rect, t_transform);
 	
-	// Notify any tilecache of the changes.
-	if (t_tilecache != nil)
+    // Notify any tilecache of the changes
+    // If the layer id is zero, there is nothing to do.
+	if (t_tilecache != nil && t_control -> m_layer_id != 0)
 	{
-		// We must be in tile-cache mode with a top-level control, but if the layer
-		// id is zero, there is nothing to do.
-		if (t_control -> m_layer_id == 0)
-			return;
-
 		// How we handle the layer depends on whether it is a sprite or not.
 		if (!t_control -> layer_issprite())
 		{
@@ -626,9 +632,10 @@ void MCControl::layer_dirtyeffectiverect(const MCRectangle& p_effective_rect, bo
 	}
 
 	// Add the rect to the update region - but only if instructed (update_card will be
-	// false if the object was invisible).
+	// false if the object was invisible) - parent must be a card here due to the
+    // above loop.
 	if (p_update_card)
-		t_control->parent.GetAs<MCCard>()->layer_dirtyrect(t_dirty_rect);
+		t_control->getcard()->layer_dirtyrect(t_dirty_rect);
 }
 
 void MCControl::layer_changeeffectiverect(const MCRectangle& p_old_effective_rect, bool p_force_update, bool p_update_card)
@@ -658,10 +665,11 @@ void MCControl::layer_changeeffectiverect(const MCRectangle& p_old_effective_rec
 		return;
 	}
 
-	// Fetch the tilecache, making it nil if the parent is a group (in the
-	// latter case, this is just a dirty op).
+	// Fetch the tilecache, making it nil if the parent is a non-container group
+    // (in the latter case, this is just a dirty op).
 	MCTileCacheRef t_tilecache;
-	if (parent -> gettype() != CT_GROUP)
+	if (parent->gettype() == CT_CARD ||
+        (parent->gettype() == CT_GROUP && parent.GetAs<MCGroup>()->layer_iscontainer()))
 		t_tilecache = getstack() -> view_gettilecache();
 	else
 		t_tilecache = nil;
@@ -680,12 +688,12 @@ void MCControl::layer_changeeffectiverect(const MCRectangle& p_old_effective_rec
 	// false if the object was invisible).
 	if (p_update_card)
 	{
-		parent.GetAs<MCCard>()->layer_dirtyrect(p_old_effective_rect);
-		parent.GetAs<MCCard>()->layer_dirtyrect(t_new_effective_rect);
+        MCCard *t_card = getcard();
+		t_card->layer_dirtyrect(p_old_effective_rect);
+		t_card->layer_dirtyrect(t_new_effective_rect);
 	}
 	
-	// We must be in tile-cache mode with a top-level control, but if the layer
-	// id is zero, there is nothing to do.
+	// If the layer id is 0, then there is nothing to do.
 	if (m_layer_id == 0)
 		return;
 
@@ -745,7 +753,7 @@ void MCControl::layer_changeeffectiverect(const MCRectangle& p_old_effective_rec
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void MCCard::layer_added(MCControl *p_control, MCObjptr *p_previous, MCObjptr *p_next)
+void MCCard::layer_added(MCControl *p_control, MCControl *p_previous, MCControl *p_next)
 {
 	MCTileCacheRef t_tilecache;
 	t_tilecache = getstack() -> view_gettilecache();
@@ -773,18 +781,22 @@ void MCCard::layer_added(MCControl *p_control, MCObjptr *p_previous, MCObjptr *p
 		if (p_previous == nil || p_next == nil)
 			return;
 
+		// skip previous container layers
+		while (p_previous != nil && p_previous->layer_iscontainer())
+			p_previous = MCControlPreviousByLayer(p_previous);
+
 		// If the previous (layer below) objptr has no id, then there is nothing to do
 		// also. This will only occur if only new layers have been added above,
 		// or if no rendering has been done yet.
 		uint32_t t_before_layer_id;
-		t_before_layer_id = p_previous -> getref() -> layer_getid();
+		t_before_layer_id = p_previous -> layer_getid();
 		if (t_before_layer_id == 0)
 			return;
 
 		// MW-2013-06-21: [[ Bug 10974 ]] If the previous layer is a sprite then this layer
 		//   will change the lower limit of the scenery layers above, thus there is
 		//   nothing to do.
-		if (p_previous -> getref() -> layer_issprite())
+		if (p_previous -> layer_issprite())
 			return;
 		
 		// Now insert the scenery.
@@ -798,11 +810,12 @@ void MCCard::layer_added(MCControl *p_control, MCObjptr *p_previous, MCObjptr *p
 		// the layer to be treated 'as one' with that layer until a redraw is done.
 		// This means that any subsequent updates to the rect of the new layer will
 		// appropriately flush the tiles in the cache.
-		p_control -> layer_setid(t_before_layer_id);
+		if (!p_control->layer_iscontainer())
+			p_control -> layer_setid(t_before_layer_id);
 	}
 }
 
-void MCCard::layer_removed(MCControl *p_control, MCObjptr *p_previous, MCObjptr *p_next)
+void MCCard::layer_removed(MCControl *p_control, MCControl *p_previous, MCControl *p_next)
 {
 	MCTileCacheRef t_tilecache;
 	t_tilecache = getstack() -> view_gettilecache();
@@ -844,6 +857,13 @@ void MCCard::layer_removed(MCControl *p_control, MCObjptr *p_previous, MCObjptr 
 		//   don't try and reuse a dead scenery layer.
 		p_control -> layer_resetattrs();
 		
+		// skip previous container layers
+		while (p_previous != nil && p_previous->layer_iscontainer())
+			p_previous = MCControlPreviousByLayer(p_previous);
+		
+		// skip next container layers
+		while (p_next != nil && p_next->layer_iscontainer())
+			p_next = MCControlNextByLayer(p_next);
 		// If there is no previous or next control we have no tweaks to ids
 		// to perform.
 		if (p_previous == nil || p_next == nil)
@@ -854,7 +874,7 @@ void MCCard::layer_removed(MCControl *p_control, MCObjptr *p_previous, MCObjptr 
 		// layer has a different id than us, make sure all previous layers
 		// with the same id match it.
 		uint32_t t_before_layer_id;
-		t_before_layer_id = p_previous -> getref() -> layer_getid();
+		t_before_layer_id = p_previous -> layer_getid();
 
 		// The layer below us has the same id so there's nothing to do, we are
 		// removing a 'new' layer before its been redrawn.
@@ -864,18 +884,19 @@ void MCCard::layer_removed(MCControl *p_control, MCObjptr *p_previous, MCObjptr 
 		// MW-2013-06-21: [[ Bug 10974 ]] If the layer below is a sprite, then removing
 		//   this layer will increase the lower limit of the scenery stack above
 		//   thus there is nothing to do.
-		if (p_previous -> getref() -> layer_issprite())
+		if (p_previous -> layer_issprite())
 			return;
 
 		// The layer below us has a different id, so this is an existing layer
 		// and thus we must ensure all layers above us now use the id of the
 		// layer below.
-		MCObjptr *t_objptr;
-		t_objptr = p_next;
-		while(t_objptr != p_previous && t_objptr -> getref() -> layer_getid() == p_control -> layer_getid())
+		while(p_next != nil &&
+				!p_next->layer_issprite() &&
+				p_next->layer_getid() == p_control->layer_getid())
 		{
-			t_objptr -> getref() -> layer_setid(t_before_layer_id);
-			t_objptr = t_objptr -> next();
+			if (!p_next->layer_iscontainer())
+				p_next->layer_setid(t_before_layer_id);
+			p_next = MCControlNextByLayer(p_next);
 		}
 	}
 }
@@ -902,28 +923,6 @@ void MCCard::layer_setviewport(int32_t p_x, int32_t p_y, int32_t p_width, int32_
 }
 	else
 		layer_dirtyrect(rect);
-}
-
-void MCCard::layer_selectedrectchanged(const MCRectangle& p_old_rect, const MCRectangle& p_new_rect)
-{
-	MCTileCacheRef t_tilecache;
-	t_tilecache = getstack() -> view_gettilecache();
-
-	if (t_tilecache != nil)
-	{
-		// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
-		// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
-		MCGAffineTransform t_transform;
-		t_transform = getstack()->getdevicetransform();
-		
-		MCRectangle32 t_new_device_rect, t_old_device_rect;
-		t_new_device_rect = MCRectangle32GetTransformedBounds(p_new_rect, t_transform);
-		t_old_device_rect = MCRectangle32GetTransformedBounds(p_old_rect, t_transform);
-		MCTileCacheReshapeScenery(t_tilecache, m_fg_layer_id, t_old_device_rect, t_new_device_rect);
-	}
-
-	layer_dirtyrect(p_old_rect);
-	layer_dirtyrect(p_new_rect);
 }
 
 void MCCard::layer_dirtyrect(const MCRectangle& p_dirty_rect)
@@ -961,7 +960,7 @@ static bool tilecache_device_renderer(MCTileCacheDeviceRenderCallback p_callback
 	
 	MCRectangle t_user_rect;
 	t_user_rect = MCRectangleGetTransformedBounds(p_rectangle, MCGAffineTransformInvert(t_transform));
-	
+    
 	bool t_success;
 	t_success = p_callback(p_context, t_gfx_context, t_user_rect);
 	
@@ -1016,6 +1015,8 @@ static bool testtilecache_scenery_renderer(void *p_context, MCContext *p_target,
 {
 	MCControl *t_control;
 	t_control = (MCControl *)p_context;
+    
+    p_target->setclip(t_control->getstack()->getvisiblerect());
 
 	// IM-2014-07-02: [[ GraphicsPerformance ]] Use the redraw() method instead of 
 	// reproducing the visibility tests and context clipping here.
@@ -1033,16 +1034,13 @@ bool MCCard::tilecache_render_foreground(void *p_context, MCContext *p_target, c
 {
 	MCCard *t_card;
 	t_card = (MCCard *)p_context;
-
-	// IM-2014-07-02: [[ GraphicsPerformance ]] Remove unnecessary setclip call - p_dirty is already the bounds of the clip.
 	
 	p_target -> setfunction(GXcopy);
 	p_target -> setopacity(255);
-
-	// IM-2013-09-13: [[ RefactorGraphics ]] Use shared code to render card foreground
-	t_card -> drawselectionrect(p_target);
-
-    t_card -> drawselectedchildren(p_target);
+    
+    t_card -> drawcardborder(p_target, p_dirty);
+    t_card -> drawselection(p_target, p_dirty);
+    
 	return true;
 }
 
@@ -1077,13 +1075,191 @@ bool device_render_background(void *p_context, MCGContextRef p_target, const MCR
 	return tilecache_device_renderer(MCCard::tilecache_render_background, p_context, p_target, p_rectangle, false);
 }
 
+void MCCard::render_control(MCTileCacheRef p_tiler, MCControl *p_control, const MCRectangle& p_visible_rect, const MCGAffineTransform& p_transform, bool p_parent_is_container)
+{
+    // Take note of whether the spriteness of a layer has changed.
+    bool t_old_is_sprite;
+    t_old_is_sprite = p_control -> layer_issprite();
+    
+    // Take not of whether the containerness of a layer has changed.
+    bool t_old_is_container;
+    t_old_is_container = p_control -> layer_iscontainer();
+    
+    // Sync the attributes, make sure we commit the new values.
+    p_control -> layer_computeattrs(true);
+    
+    // Initialize the common layer props.
+    MCTileCacheLayer t_layer;
+    t_layer . id = p_control -> layer_getid();
+    t_layer . opacity = p_control -> getopacity();
+    t_layer . ink = p_control -> getink();
+    t_layer . context = p_control;
+    
+    // The opaqueness of a layer has already been computed.
+    t_layer . is_opaque = p_control -> layer_isopaque();
+    
+    // Now compute the layer's region/clip.
+    MCRectangle t_layer_region, t_layer_clip;
+    if (!p_control -> getflag(F_VISIBLE) && !showinvisible())
+    {
+        // Invisible layers just have empty region/clip.
+        t_layer_region = MCU_make_rect(0, 0, 0, 0);
+        t_layer_clip = MCU_make_rect(0, 0, 0, 0);
+    }
+    else if (!p_control -> layer_isscrolling())
+    {
+        // Non-scrolling layer's are the size of their effective rects.
+        t_layer_region = p_control -> geteffectiverect();
+        t_layer_clip = t_layer_region;
+    }
+    else
+    {
+        // For a scrolling layer, the clip is the bounds of the control, while
+        // the region we draw is the group's minrect.
+        t_layer_region = p_control -> layer_getcontentrect();
+        t_layer_clip = p_control -> geteffectiverect();
+    }
+    
+    // IM-2013-10-14: [[ FullscreenMode ]] Constrain each layer to the visible area
+    t_layer_clip = MCU_intersect_rect(t_layer_clip, p_visible_rect);
+    
+    /* If the layer has a layerClipRect, then apply it here. */
+    if (p_control->layer_has_clip_rect())
+    {
+        t_layer_clip = MCU_intersect_rect(t_layer_clip, p_control->layer_get_clip_rect());
+    }
+    
+    // IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
+    // IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
+    t_layer . region = MCRectangle32GetTransformedBounds(t_layer_region, p_transform);
+    t_layer . clip = MCRectangle32GetTransformedBounds(t_layer_clip, p_transform);
+    
+    if (t_old_is_container || (p_control->layer_iscontainer() && p_parent_is_container))
+    {
+        MCGroup *t_group = static_cast<MCGroup*>(p_control);
+        
+        MCControl *t_controls = t_group->getcontrols();
+        if (t_controls != nullptr)
+        {
+            MCControl *t_child = t_controls->prev();
+            do
+            {
+                render_control(p_tiler, t_child, t_layer_clip, p_transform, p_control->layer_iscontainer() && p_parent_is_container);
+                
+                t_child = t_child->prev();
+            }
+            while(t_child != t_controls->prev());
+        }
+    }
+    
+    // Only render layers if the parent is a container.
+    if (p_parent_is_container)
+    {
+        if (!p_control->layer_iscontainer())
+        {
+            // Now render the layer - what method we use depends on whether the
+            // layer is a sprite or not.
+            if (p_control -> layer_issprite())
+            {
+                // If the layer was not a sprite before, remove the scenery
+                // layer that it was.
+                if (!t_old_is_sprite && t_layer . id != 0)
+                {
+                    // IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
+                    // IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
+                    MCTileCacheRemoveScenery(p_tiler, t_layer . id, t_layer . region);
+                    t_layer . id = 0;
+                }
+                
+                t_layer . callback = testtilecache_device_sprite_renderer;
+                MCTileCacheRenderSprite(p_tiler, t_layer);
+            }
+            else
+            {
+                // If the layer was a sprite before, remove the sprite
+                // layer that it was.
+                if (t_old_is_sprite && t_layer . id != 0)
+                {
+                    MCTileCacheRemoveSprite(p_tiler, t_layer . id);
+                    t_layer . id = 0;
+                }
+                
+                // MW-2013-10-29: [[ Bug 11349 ]] Scenery layers regions are clipped
+                //   by the clip directly.
+                t_layer . region = MCRectangle32Intersect(t_layer . region, t_layer . clip);
+                
+                t_layer . callback = testtilecache_device_scenery_renderer;
+                MCTileCacheRenderScenery(p_tiler, t_layer);
+            }
+        }
+    }
+    else
+    {
+        if (t_layer.id != 0)
+        {
+            if (p_control->layer_issprite())
+            {
+                MCTileCacheRemoveSprite(p_tiler, t_layer . id);
+            }
+            else
+            {
+                MCTileCacheRemoveScenery(p_tiler, t_layer . id, t_layer . region);
+            }
+        }
+        t_layer.id = 0;
+    }
+    
+    MCLog("Layer %d - sprite %d, container %d, region %d,%d,%d,%d", t_layer.id, p_control->layer_issprite(), p_control->layer_iscontainer(), t_layer.region.x, t_layer.region.y, t_layer.region.width, t_layer.region.height);
+    
+    // Upate the id.
+    p_control -> layer_setid(t_layer . id);
+}
+
+void MCCard::render_control_reset_ids(MCControl *p_control)
+{
+    p_control->layer_resetattrs();
+    
+    if (p_control->gettype() == CT_GROUP)
+    {
+        MCGroup *t_group = static_cast<MCGroup*>(p_control);
+        
+        MCControl *t_controls = t_group->getcontrols();
+        if (t_controls != nullptr)
+        {
+            MCControl *t_child = t_controls;
+            do
+            {
+                render_control_reset_ids(t_child);
+                t_child = t_child->next();
+            }
+            while(t_child != t_controls->prev());
+        }
+    }
+}
+
 void MCCard::render(void)
 {
 	MCTileCacheRef t_tiler;
 	t_tiler = getstack() -> view_gettilecache();
-
-	bool t_reset_ids;
-	t_reset_ids = MCTileCacheIsClean(t_tiler);
+    
+    MCObjptr *t_objptrs;
+    t_objptrs = getobjptrs();
+    
+	if (t_objptrs != nullptr && MCTileCacheIsClean(t_tiler))
+    {
+        MCObjptr *t_objptr;
+        t_objptr = t_objptrs -> prev();
+        do
+        {
+            MCControl *t_control;
+            t_control = t_objptr -> getref();
+            
+            render_control_reset_ids(t_control);
+            
+            t_objptr = t_objptr -> prev();
+        }
+        while(t_objptr != t_objptrs -> prev());
+    }
 
 	// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
 	MCGAffineTransform t_transform;
@@ -1094,32 +1270,17 @@ void MCCard::render(void)
 	MCRectangle t_visible_rect;
 	t_visible_rect = getstack()->getvisiblerect();
     
-    MCRectangle t_foreground_region;
-    t_foreground_region = selrect;
-    
-    // Recursively update the redraw region for selected children
-    bool t_child_selected;
-    t_child_selected = updatechildselectedrect(t_foreground_region);
-    
-	if (getstate(CS_SIZE) || t_child_selected)
-	{
-		MCTileCacheLayer t_fg_layer;
-		t_fg_layer . id = m_fg_layer_id;
-		t_fg_layer . region = MCRectangle32GetTransformedBounds(t_foreground_region, t_transform);
-		t_fg_layer . clip = MCRectangle32GetTransformedBounds(t_visible_rect, t_transform);
-		t_fg_layer . is_opaque = false;
-		t_fg_layer . opacity = 255;
-		t_fg_layer . ink = GXblendSrcOver;
-		t_fg_layer . callback = device_render_foreground;
-		t_fg_layer . context = this;
-		MCTileCacheRenderScenery(t_tiler, t_fg_layer);
-		m_fg_layer_id = t_fg_layer . id;
-	}
-	else
-		m_fg_layer_id = 0;
-	
-    MCObjptr *t_objptrs;
-    t_objptrs = getobjptrs();
+    MCTileCacheLayer t_fg_layer;
+    t_fg_layer . id = m_fg_layer_id;
+    t_fg_layer . region = MCRectangle32GetTransformedBounds(rect, t_transform);
+    t_fg_layer . clip = MCRectangle32GetTransformedBounds(t_visible_rect, t_transform);
+    t_fg_layer . is_opaque = false;
+    t_fg_layer . opacity = 255;
+    t_fg_layer . ink = GXblendSrcOver;
+    t_fg_layer . callback = device_render_foreground;
+    t_fg_layer . context = this;
+    MCTileCacheRenderScenery(t_tiler, t_fg_layer);
+    m_fg_layer_id = t_fg_layer . id;
     
 	if (t_objptrs != nil)
 	{
@@ -1129,96 +1290,8 @@ void MCCard::render(void)
 		{
 			MCControl *t_control;
 			t_control = t_objptr -> getref();
-
-			// If the tilecache is 'clean' then we must reset the attrs to
-			// force a sync.
-			if (t_reset_ids)
-				t_control -> layer_resetattrs();
-
-			// Take note of whether the spriteness of a layer has changed.
-			bool t_old_is_sprite;
-			t_old_is_sprite = t_control -> layer_issprite();
-
-			// Sync the attributes, make sure we commit the new values.
-			t_control -> layer_computeattrs(true);
-
-			// Initialize the common layer props.
-			MCTileCacheLayer t_layer;
-			t_layer . id = t_control -> layer_getid();
-			t_layer . opacity = t_control -> getopacity();
-			t_layer . ink = t_control -> getink();
-			t_layer . context = t_control;
-
-			// The opaqueness of a layer has already been computed.
-			t_layer . is_opaque = t_control -> layer_isopaque();
-
-			// Now compute the layer's region/clip.
-			MCRectangle t_layer_region, t_layer_clip;
-			if (!t_control -> getflag(F_VISIBLE) && !showinvisible())
-			{
-				// Invisible layers just have empty region/clip.
-				t_layer_region = MCU_make_rect(0, 0, 0, 0);
-				t_layer_clip = MCU_make_rect(0, 0, 0, 0);
-			}
-			else if (!t_control -> layer_isscrolling())
-			{
-				// Non-scrolling layer's are the size of their effective rects.
-				t_layer_region = t_control -> geteffectiverect();
-				t_layer_clip = t_layer_region;
-			}
-			else
-			{
-				// For a scrolling layer, the clip is the bounds of the control, while
-				// the region we draw is the group's minrect.
-				t_layer_region = t_control -> layer_getcontentrect();
-				t_layer_clip = t_control -> geteffectiverect();
-			}
-
-			// IM-2013-10-14: [[ FullscreenMode ]] Constrain each layer to the visible area
-			t_layer_clip = MCU_intersect_rect(t_layer_clip, t_visible_rect);
-			
-			// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
-			// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
-			t_layer . region = MCRectangle32GetTransformedBounds(t_layer_region, t_transform);
-			t_layer . clip = MCRectangle32GetTransformedBounds(t_layer_clip, t_transform);
-			
-			// Now render the layer - what method we use depends on whether the
-			// layer is a sprite or not.
-			if (t_control -> layer_issprite())
-			{
-				// If the layer was not a sprite before, remove the scenery
-				// layer that it was.
-				if (!t_old_is_sprite && t_layer . id != 0)
-				{
-					// IM-2013-08-21: [[ ResIndependence ]] Use device coords for tilecache operation
-					// IM-2013-09-30: [[ FullscreenMode ]] Use stack transform to get device coords
-					MCTileCacheRemoveScenery(t_tiler, t_layer . id, t_layer . region);
-					t_layer . id = 0;
-				}
-				
-				t_layer . callback = testtilecache_device_sprite_renderer;
-				MCTileCacheRenderSprite(t_tiler, t_layer);
-			}
-			else
-			{
-				// If the layer was a sprite before, remove the sprite
-				// layer that it was.
-				if (t_old_is_sprite && t_layer . id != 0)
-				{
-					MCTileCacheRemoveSprite(t_tiler, t_layer . id);
-					t_layer . id = 0;
-				}
-
-				// MW-2013-10-29: [[ Bug 11349 ]] Scenery layers regions are clipped
-				//   by the clip directly.
-				t_layer . region = MCRectangle32Intersect(t_layer . region, t_layer . clip);
-				
-				t_layer . callback = testtilecache_device_scenery_renderer;
-				MCTileCacheRenderScenery(t_tiler, t_layer);
-			}
-			
-			// Upate the id.
-			t_control -> layer_setid(t_layer . id);
+            
+            render_control(t_tiler, t_control, t_visible_rect, t_transform, true);
 
 			// Advance to the object below.
 			t_objptr = t_objptr -> prev();
@@ -1329,7 +1402,7 @@ void MCRedrawDirtyScreen(void)
 	do
 	{
 		MCStack *sptr = tptr->getstack();
-		sptr -> view_dirty_all();
+		sptr -> dirtyall();
 		tptr = tptr->prev();
 	}
 	while (tptr != t_stacks -> prev());
@@ -1414,4 +1487,95 @@ void MCRedrawDoUpdateScreen(void)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+MCControl *MCControlTopChildByLayer(MCControl *p_control)
+{
+	if (p_control->gettype() == CT_GROUP)
+	{
+		MCControl *t_controls = static_cast<MCGroup*>(p_control)->getcontrols();
+
+		if (t_controls != nil)
+			return MCControlTopChildByLayer(t_controls->prev());
+	}
+
+	return p_control;
+}
+
+MCControl *MCControlPreviousByLayer(MCControl *p_control)
+{
+	MCObject *t_parent = nil;
+	t_parent = p_control->getparent();
+	
+	if (t_parent == nil || t_parent->gettype() == CT_STACK)
+		return nil;
+	
+	if (t_parent->gettype() == CT_GROUP)
+	{
+		MCControl *t_controls = static_cast<MCGroup*>(t_parent)->getcontrols();
+
+		if (t_controls == p_control)
+			return static_cast<MCControl*>(t_parent);
+		else
+			return MCControlTopChildByLayer(p_control->prev());
+	}
+	else if (t_parent->gettype() == CT_CARD)
+	{
+		MCObjptr *t_object = static_cast<MCCard*>(t_parent)->getobjptrforcontrol(p_control);
+		if (t_object == nil)
+			return nil; // object not on card
+		
+		// check if first object on card
+		if (t_object == static_cast<MCCard*>(t_parent)->getobjptrs())
+			return nil;
+		
+		return MCControlTopChildByLayer(static_cast<MCControl*>(t_object->prev()->getref()));
+	}
+	else
+	{
+		// control not in group or on card
+		return nil;
+	}
+}
+
+MCControl *MCControlNextByLayer(MCControl *p_control)
+{
+	if (p_control->gettype() == CT_GROUP)
+	{
+		MCControl *t_controls = static_cast<MCGroup*>(p_control)->getcontrols();
+		if (t_controls != nil)
+			return t_controls;
+	}
+	
+	MCControl *t_child = p_control;
+	MCObject *t_parent = t_child->getparent();
+	
+	while (true)
+	{
+		if (t_parent == nil || t_parent->gettype() == CT_STACK)
+			return nil;
+		
+		if (t_parent->gettype() == CT_GROUP)
+		{
+			MCControl *t_controls = static_cast<MCGroup*>(t_parent)->getcontrols();
+			if (t_controls->prev() != t_child)
+				return t_child->next();
+		}
+		else if (t_parent->gettype() == CT_CARD)
+		{
+			MCObjptr *t_obj = static_cast<MCCard*>(t_parent)->getobjptrforcontrol(t_child);
+			if (t_obj == nil)
+				return nil; // object no longer on card
+			
+			MCObjptr *t_next = t_obj->next();
+			// check for wrap-around
+			if (t_next == static_cast<MCCard*>(t_parent)->getobjptrs())
+				return nil;
+			else
+				return static_cast<MCControl*>(t_next->getref());
+		}
+		
+		t_child = static_cast<MCControl*>(t_parent);
+		t_parent = t_child->getparent();
+	}
+}
 

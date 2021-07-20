@@ -41,7 +41,7 @@ private:
 	MCControl *kfocused;
 	MCControl *oldkfocused;
 	MCControl *newkfocused;
-	MCControl *mfocused;
+	MCControlHandle mfocused;
 	MCScrollbar *vscrollbar;
 	MCScrollbar *hscrollbar;
 	int4 scrollx;
@@ -90,6 +90,7 @@ public:
 	virtual Boolean mup(uint2 which, bool p_release);
 	virtual Boolean doubledown(uint2 which);
 	virtual Boolean doubleup(uint2 which);
+	virtual uint2 gettransient(void) const;
 	virtual void applyrect(const MCRectangle &nrect);
 
     virtual void removereferences(void);
@@ -153,8 +154,9 @@ public:
     
     virtual bool isdeletable(bool p_check_flag);
     
-    void drawselectedchildren(MCDC *dc);
-    bool updatechildselectedrect(MCRectangle& x_rect);
+    /* The drawselection method of the group recurses to draw all child control
+     * selection decorations. */
+    virtual void drawselection(MCDC *dc, const MCRectangle& p_dirty);
     
 	MCControl *findchildwithid(Chunk_term type, uint4 p_id);
 
@@ -317,8 +319,9 @@ public:
     void SetClipsToRect(MCExecContext& ctxt, bool p_clips_to_rect);
     void GetClipsToRect(MCExecContext& ctxt, bool &r_clips_to_rect);
 
-    void SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting);
-    
+	virtual void SetVisible(MCExecContext& ctxt, uinteger_t part, bool setting);
+	virtual void SetOpaque(MCExecContext& ctxt, bool setting);
+	
 	virtual void SetEnabled(MCExecContext& ctxt, uint32_t part, bool setting);
 	virtual void SetDisabled(MCExecContext& ctxt, uint32_t part, bool setting);
     virtual void SetShowBorder(MCExecContext& ctxt, bool setting);

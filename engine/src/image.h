@@ -412,7 +412,9 @@ public:
 	virtual Chunk_term gettype() const;
 	virtual const char *gettypestring();
 	virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
-
+    
+    virtual bool visit_self(MCObjectVisitor *p_visitor);
+    
 	virtual void open();
 	virtual void close();
 	virtual Boolean mfocus(int2 x, int2 y);
@@ -481,6 +483,8 @@ public:
 		return resizequalitytoimagefilter(resizequality);
 	}
 
+    void getcurrentcolor(MCGPaintRef& r_current_color);
+    
 	void setframe(int32_t p_newframe);
 	void advanceframe();
 
@@ -516,7 +520,7 @@ public:
 	// in idraw.cc
 	void drawme(MCDC *dc, int2 sx, int2 sy, uint2 sw, uint2 sh, int2 dx, int2 dy, uint2 dw, uint2 dh);
 	void drawcentered(MCDC *dc, int2 x, int2 y, Boolean reverse);
-    void drawnodata(MCDC *dc, MCRectangle drect, uint2 sw, uint2 sh, int2 dx, int2 dy, uint2 dw, uint2 dh);
+    void drawnodata(MCDC *dc, uint2 sw, uint2 sh, int2 dx, int2 dy, uint2 dw, uint2 dh);
 
     void drawwithgravity(MCDC *dc, MCRectangle rect, MCGravity gravity);
 

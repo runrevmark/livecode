@@ -79,11 +79,11 @@ enum Ask_type {
 };
 
 enum Assert_type {
-    TYPE_NONE,
-    TYPE_TRUE,
-    TYPE_FALSE,
-    TYPE_SUCCESS,
-    TYPE_FAILURE,
+    ASSERT_TYPE_NONE,
+    ASSERT_TYPE_TRUE,
+    ASSERT_TYPE_FALSE,
+    ASSERT_TYPE_SUCCESS,
+    ASSERT_TYPE_FAILURE,
 };
 
 inline Chunk_term ct_class(Chunk_term src)
@@ -730,7 +730,8 @@ enum Mark_constants {
 enum Match_mode {
     MA_UNDEFINED,
     MA_WILDCARD,
-    MA_REGEX
+    MA_REGEX,
+    MA_EXPRESSION
 };
 
 enum Move_mode {
@@ -1105,6 +1106,7 @@ enum Properties {
     P_EXECUTION_CONTEXTS,
     P_MESSAGE_MESSAGES,
     P_WATCHED_VARIABLES,
+    P_LOG_MESSAGE,
     P_ALLOW_INLINE_INPUT,
     P_SSL_CERTIFICATES,
 	P_HIDE_BACKDROP,
@@ -1375,6 +1377,9 @@ enum Properties {
     P_PAN,
     P_CONSTRAINTS,
     P_HOT_SPOTS,
+    P_LEFT_BALANCE,
+    P_RIGHT_BALANCE,
+    P_AUDIO_PAN,
     // EPS properties
     P_POSTSCRIPT,
     P_ANGLE,
@@ -1750,6 +1755,12 @@ enum Properties {
     P_REV_SCRIPT_DESCRIPTION,
     P_REV_BEHAVIOR_USES,
     
+    P_REV_LIBRARY_MAPPING,
+    
+    P_LAYER_CLIP_RECT,
+	
+	P_SYSTEM_APPEARANCE,
+    
     __P_LAST,
 };
 
@@ -2056,6 +2067,7 @@ enum Statements {
     S_LOCAL,
     S_LOAD,
     S_LOCK,
+    S_LOG,
     S_MARK,
     S_MODAL,
     S_MODELESS,

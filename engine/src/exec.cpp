@@ -32,6 +32,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "variable.h"
 #include "handler.h"
 #include "hndlrlst.h"
+#include "keywords.h"
 
 #include "osspec.h"
 
@@ -365,10 +366,36 @@ bool MCExecContext::ConvertToData(MCValueRef p_value, MCDataRef& r_data)
 
 bool MCExecContext::ConvertToName(MCValueRef p_value, MCNameRef& r_name)
 {
-    if (MCValueGetTypeCode(p_value) == kMCValueTypeCodeName)
+    
+    switch(MCValueGetTypeCode(p_value))
     {
-        r_name = MCValueRetain((MCNameRef)p_value);
-        return true;
+        case kMCValueTypeCodeName:
+        {
+            r_name = MCValueRetain((MCNameRef)p_value);
+            return true;
+        }
+            
+        case kMCValueTypeCodeString:
+        {
+            return MCNameCreate((MCStringRef)p_value,
+                                r_name);
+        }
+            
+        case kMCValueTypeCodeNumber:
+        {
+            index_t t_index;
+            if (MCNumberStrictFetchAsIndex((MCNumberRef)p_value,
+                                           t_index))
+            {
+                return MCNameCreateWithIndex(t_index,
+                                             r_name);
+            }
+            else
+                break;
+        }
+            
+        default:
+            break;
     }
     
     MCAutoStringRef t_string;
@@ -456,7 +483,7 @@ bool MCExecContext::FormatUnsignedInteger(uinteger_t p_integer, MCStringRef& r_v
 
 bool MCExecContext::FormatLegacyColor(MCColor p_color, MCStringRef& r_value)
 {
-	return MCStringFormat(r_value, "%d,%d,%d", p_color . red >> 8, p_color . green >> 8, p_color . blue >> 8);
+    return MCU_format_color(p_color, r_value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3132,7 +3159,7 @@ void MCExecStoreProperty(MCExecContext& ctxt, const MCPropertyInfo *prop, void *
         {
             MCAutoStringRef t_input;
             MCPoint *t_value;
-            uindex_t t_count;
+            uindex_t t_count = 0;
         
             MCExecTypeConvertAndReleaseAlways(ctxt, p_value . type, &p_value, kMCExecValueTypeStringRef, &(&t_input));
             
@@ -3215,7 +3242,7 @@ void MCExecTypeConvertToValueRefAndReleaseAlways(MCExecContext& ctxt, MCExecValu
 			break;
             
         case kMCExecValueTypeColor:
-            if(!MCStringFormat((MCStringRef&)r_value, "%u,%u,%u", (((MCColor *)p_from_value) -> red >> 8) & 0xff, (((MCColor *)p_from_value) -> green >> 8) & 0xff, (((MCColor *)p_from_value) -> blue >> 8) & 0xff))
+            if (!MCU_format_color(*(MCColor *)p_from_value, (MCStringRef &)r_value))
                 ctxt . Throw();
 			break;
 			
@@ -3522,11 +3549,13 @@ void MCExecTypeConvertAndReleaseAlways(MCExecContext& ctxt, MCExecValueType p_fr
         else if (p_from_type == kMCExecValueTypeStringRef)
         {
             MCExecTypeConvertStringToNumber(ctxt, *(MCStringRef*)p_from_value, p_to_type, p_to_value);
+            MCValueRelease(*(MCStringRef*)p_from_value);
             return;
         }
         else if (p_from_type == kMCExecValueTypeNameRef)
         {
             MCExecTypeConvertStringToNumber(ctxt, MCNameGetString(*(MCNameRef*)p_from_value), p_to_type, p_to_value);
+            MCValueRelease(*(MCNameRef*)p_from_value);
             return;
         }
     }

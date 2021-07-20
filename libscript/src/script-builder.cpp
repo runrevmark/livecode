@@ -1942,24 +1942,38 @@ MCScriptMapTypeToForeignPrimitiveTypeInModule(MCScriptModuleBuilderRef self, uin
             { "CSChar", kMCScriptForeignPrimitiveTypeCSChar },
             { "CUChar", kMCScriptForeignPrimitiveTypeCUChar },
             { "CSShort", kMCScriptForeignPrimitiveTypeCSShort },
+            { "CShort", kMCScriptForeignPrimitiveTypeCSShort },
             { "CUShort", kMCScriptForeignPrimitiveTypeCUShort },
             { "CSInt", kMCScriptForeignPrimitiveTypeCSInt },
+            { "CInt", kMCScriptForeignPrimitiveTypeCSInt },
             { "CUInt", kMCScriptForeignPrimitiveTypeCUInt },
             { "CSLong", kMCScriptForeignPrimitiveTypeCSLong },
+            { "CLong", kMCScriptForeignPrimitiveTypeCSLong },
             { "CULong", kMCScriptForeignPrimitiveTypeCULong },
-            { "CULongLong", kMCScriptForeignPrimitiveTypeCSLongLong },
+            { "CSLongLong", kMCScriptForeignPrimitiveTypeCSLongLong },
+            { "CLongLong", kMCScriptForeignPrimitiveTypeCSLongLong },
             { "CULongLong", kMCScriptForeignPrimitiveTypeCULongLong },
             { "CDouble", kMCScriptForeignPrimitiveTypeCDouble },
             { "CFloat", kMCScriptForeignPrimitiveTypeCFloat },
             { "LCSInt", kMCScriptForeignPrimitiveTypeSInt },
+            { "LCInt", kMCScriptForeignPrimitiveTypeSInt },
+            { "LCIndex", kMCScriptForeignPrimitiveTypeSInt },
             { "LCUInt", kMCScriptForeignPrimitiveTypeUInt },
+            { "LCUIndex", kMCScriptForeignPrimitiveTypeUInt },
             
             { "Float32", kMCScriptForeignPrimitiveTypeFloat32 },
             { "Float64", kMCScriptForeignPrimitiveTypeFloat64 },
             
             { "Pointer", kMCScriptForeignPrimitiveTypePointer },
             
+            { "ZStringNative", kMCScriptForeignPrimitiveTypePointer },
             { "ZStringUTF8", kMCScriptForeignPrimitiveTypePointer },
+            { "ZStringUTF16", kMCScriptForeignPrimitiveTypePointer },
+            
+            /* Natural Types */
+            { "NaturalUInt", kMCScriptForeignPrimitiveTypeNaturalUInt },
+            { "NaturalSInt", kMCScriptForeignPrimitiveTypeNaturalSInt },
+            { "NaturalFloat", kMCScriptForeignPrimitiveTypeNaturalFloat },
             
             /* Java FFI Types */
             { "JObject", kMCScriptForeignPrimitiveTypePointer },
@@ -1969,6 +1983,9 @@ MCScriptMapTypeToForeignPrimitiveTypeInModule(MCScriptModuleBuilderRef self, uin
             { "ObjcId", kMCScriptForeignPrimitiveTypePointer },
             { "ObjcRetainedId", kMCScriptForeignPrimitiveTypePointer },
             { "ObjcAutoreleasedId", kMCScriptForeignPrimitiveTypePointer },
+            
+            /* JavaScript FFI Types */
+            { "JSObject", kMCScriptForeignPrimitiveTypePointer },
             
             /* Extra Foundation Types */
             { "Stream", kMCScriptForeignPrimitiveTypePointer },

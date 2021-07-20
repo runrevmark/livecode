@@ -239,7 +239,7 @@ void MCStack::uniconify()
 		MCstacks->top(this);
 		curcard->message(MCM_uniconify_stack);
 		// MW-2011-08-17: [[ Redraw ]] Tell the stack to dirty all of itself.
-		view_dirty_all();
+		dirtyall();
 		resetcursor(True);
 		dirtywindowname();
 	}
@@ -548,7 +548,13 @@ Boolean MCStack::takewindow(MCStack *sptr)
 	flags &= ~(F_TAKE_FLAGS | F_VISIBLE);
 	flags |= sptr->flags & (F_TAKE_FLAGS | F_VISIBLE);
 	decorations = sptr->decorations;
-	rect = sptr->rect;
+    rect = sptr->rect;
+    
+    // sptr has not been closed so may still have a scroll while this stack has been closed
+    // so has had clearscroll called on it so scroll will be 0. applyscroll is called later.
+    rect.height += getnextscroll(true);
+    m_scroll = 0;
+    
 	minwidth = sptr->minwidth;
 	minheight = sptr->minheight;
 	maxwidth = sptr->maxwidth;
@@ -719,7 +725,7 @@ Boolean MCStack::checkid(uint4 cardid, uint4 controlid)
 		}
 		while (cptr != cards);
 	}
-	if (curcard != NULL)
+	if (curcard != NULL && curcard->getid() == cardid)
 		return curcard->checkid(controlid);
 	return False;
 }
@@ -949,13 +955,13 @@ void MCStack::updatemenubar()
 
 // MW-2011-09-12: [[ MacScroll ]] Compute the scroll as it should be now taking
 //   into account the menubar and such.
-int32_t MCStack::getnextscroll()
+int32_t MCStack::getnextscroll(bool p_ignore_opened)
 {
 #ifdef _MACOSX
 	MCControl *mbptr;
 	if (!(state & CS_EDIT_MENUS) && hasmenubar()
 	        && (mbptr = curcard->getchild(CT_EXPRESSION, MCNameGetString(getmenubar()), CT_GROUP, CT_UNDEFINED)) != NULL
-	        && mbptr->getopened() && mbptr->isvisible())
+	        && (p_ignore_opened || mbptr->getopened()) && mbptr->isvisible())
 	{
 		MCRectangle r = mbptr->getrect();
 		return (r.y + r.height);
@@ -1548,11 +1554,15 @@ MCCard *MCStack::getchildbyname(MCNameRef p_name)
 		cards->setparent(this);
 	}
     
-    MCCard *cptr;
-	if (editing != NULL && savecards != NULL)
-		cptr = savecards;
-	else
-		cptr = cards;
+    MCCard *cptr, *cptr_sentinal;
+    if (editing != NULL && savecards != NULL)
+    {
+        cptr_sentinal = cptr = savecards;
+    }
+    else
+    {
+        cptr_sentinal = cptr = cards;
+    }
     
     uint2 t_num = 0;
     if (MCU_stoui2(MCNameGetString(p_name), t_num))
@@ -1567,7 +1577,7 @@ MCCard *MCStack::getchildbyname(MCNameRef p_name)
                 return cptr;
             cptr = cptr->next();
         }
-        while (cptr != cards);
+        while (cptr != cptr_sentinal);
         return nil;
     }
     MCCard *found = nil;
@@ -1576,9 +1586,10 @@ MCCard *MCStack::getchildbyname(MCNameRef p_name)
         found = cptr->findname(CT_CARD, p_name);
         if (found != nil && found->countme(backgroundid, (state & CS_MARKED) != 0))
             break;
+        
         cptr = cptr->next();
     }
-    while (cptr != cards);
+    while (cptr != cptr_sentinal);
     
     return found;
 }
@@ -2114,10 +2125,13 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 		setparentstack(parentptr);
 	
 	// IM-2014-01-16: [[ StackScale ]] Ensure view has the current stack rect
-	view_setstackviewport(rect);
-	
-	if (window == NULL)
+	// If we have a window then set the viewport after opening to cover lockscreen
+    bool t_had_window = window != NULL;
+	if (!t_had_window)
+    {
+        view_setstackviewport(rect);
 		createwindow();
+    }
 
 	if (substacks != NULL)
 		opened++;
@@ -2125,7 +2139,12 @@ Exec_stat MCStack::openrect(const MCRectangle &rel, Window_mode wm, MCStack *par
 	{
 		MCObject::open();
 	}
-
+    
+    if (t_had_window)
+    {
+        view_setstackviewport(rect);
+    }
+    
 	MCRectangle trect;
 	switch (mode)
 	{
@@ -2826,8 +2845,7 @@ void MCStack::dirtyall(void)
 		while(t_objptr != curcard -> getobjptrs());
 	}
 
-	// Defer to the rect dirtying routine to update the update region.
-	dirtyrect(curcard -> getrect());
+    dirtyrect(view_getstackvisiblerect());
 }
 
 void MCStack::dirtywindowname(void)

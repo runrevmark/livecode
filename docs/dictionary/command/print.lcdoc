@@ -8,7 +8,7 @@ Syntax: print {<stack> | <card> |{marked| <number> |all} cards} [into <pageRect>
 
 Syntax: print {<stack> | <card> |{marked| <number> |all} cards} [from <topLeft> to <bottomRight>]
 
-Syntax: print break&gt;
+Syntax: print break
 
 Summary:
 Prints one or more <card|cards>.
@@ -40,6 +40,15 @@ repeat with x = 1 to the number of cards
 end repeat
 close printing
 
+Example:
+# Print multiple cards into the same rect on each page
+put "100,100,450,410" into tOutputRect
+
+repeat with i = 1 to the number of cards of this stack
+  print card i of this stack into tOutputRect
+  print break
+end repeat
+
 Parameters:
 card:
 Any card reference. If you specify a card, that single card is printed.
@@ -67,7 +76,9 @@ The rectangle into which the card is printed, and consists of four
 integers separated by commas: the left, top, right, and bottom edges of
 the printed card, in points. (There are 72 points to an inch.) The card
 is scaled to fit the specified pageRect. If you don't specify a
-pageRect, the card's size depends on the printScale property.
+pageRect, the card's size depends on the printScale property. Note that 
+specifying a `pageRect` will not cause any page breaks. You must manually
+call `print break` to print to the same rect on different pages.
 
 stack: 
 Any open stack. If you specify a stack, all the cards of that stack are
@@ -99,12 +110,12 @@ the size of the cards and on whether you specify a <pageRect>.
 The print <marked> cards form prints all the cards in the current stack
 whose <mark> <property> is set to true.
 
-The print all cards form is equivalent to print this stack.
+The print all cards form is equivalent to `print this stack`.
 
 The print break form forces a page break.
 
->*Note:* If a <card(keyword)> is larger than a full page, the <print
-> command> prints only the first page of the <card(keyword)>, starting
+>*Note:* If a <card(keyword)> is larger than a full page, the <print>
+> command prints only the first page of the <card(keyword)>, starting
 > at the top left corner. To print the entire <card(keyword)>, use the
 > <print>...into pageRect form to scale the card to the page.
 
@@ -122,8 +133,7 @@ set the <lockScreen> <property> to true before you print.
 
 References: revPrintReport (command), answer page setup (command),
 mark (command), cancel printing (command), revBrowserPrint (command),
-open printing (command), print command (command),
-close printing (command), answer printer (command),
+open printing (command), close printing (command), answer printer (command),
 reset printing (command), object (glossary), property (glossary),
 Windows (glossary), Unix (glossary), command (glossary),
 PostScript (glossary), Mac OS (glossary), file (keyword),

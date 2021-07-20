@@ -854,7 +854,7 @@ static void __MCUnicodeSimpleCaseFold(icu::UnicodeString& p_string)
     
     while(i < p_string.length())
     {
-        t_temp.append(u_toupper(p_string.char32At(i)/*, U_FOLD_CASE_DEFAULT*/));
+        t_temp.append(u_tolower(p_string.char32At(i)/*, U_FOLD_CASE_DEFAULT*/));
         i = p_string.moveIndex32(i, 1);
     }
     
@@ -2201,7 +2201,7 @@ bool MCUnicodeWildcardMatch(const void *source_chars, uindex_t source_length, bo
                 // Records whether we have yet seen anything to match within these brackets.
                 bool t_character_found = false;
                 // Store the 'lower limit' if we have a range.
-                codepoint_t t_lower_limit;
+                codepoint_t t_lower_limit = 0;
                 
 				int notflag = 0;
                 t_pattern_filter -> AdvanceCursor();

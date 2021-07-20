@@ -402,75 +402,6 @@ MCExecCustomTypeInfo *kMCPrintingPrinterPageRangeTypeInfo = &_kMCPrintingPrinter
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, AnswerPageSetup, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, AnswerPrinter, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, CancelPrinting, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, ResetPrinting, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintAnchor, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintLink, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintNativeBookmark, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintUnicodeBookmark, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintBreak, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintAllCards, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintRectOfAllCards, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintCard, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintRectOfCard, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintSomeCards, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintRectOfSomeCards, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintCardIntoRect, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, PrintRectOfCardIntoRect, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, ClosePrinting, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, OpenPrintingToDestination, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, OpenPrinting, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Printing, OpenPrintingWithDialog, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrinterNames, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintDeviceFeatures, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintDeviceOutput, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintDeviceOutput, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintDeviceRectangle, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintDeviceSettings, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintDeviceSettings, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintDeviceName, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintDeviceName, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintPageOrientation, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintPageOrientation, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintJobRanges, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobRanges, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintPageSize, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintPageSize, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintPageScale, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintPageScale, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintPageRectangle, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobName, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintJobName, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobCopies, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintJobCopies, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobDuplex, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintJobDuplex, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobCollate, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintJobCollate, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobColor, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintJobColor, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintJobPage, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintCardBorders, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintCardBorders, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintGutters, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintGutters, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintMargins, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintMargins, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintRowsFirst, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintRowsFirst, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintScale, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintScale, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintRotated, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintRotated, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintCommand, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintCommand, 1)
-MC_EXEC_DEFINE_GET_METHOD(Printing, PrintFontTable, 1)
-MC_EXEC_DEFINE_SET_METHOD(Printing, PrintFontTable, 1)
-
-////////////////////////////////////////////////////////////////////////////////
-
 void MCPrintingExecCancelPrinting(MCExecContext& ctxt) 
 {
 	MCprinter -> Cancel();
@@ -594,8 +525,8 @@ void MCPrintingExecPrintRectOfAllCards(MCExecContext& ctxt, MCStack *p_stack, bo
 	MCRectangle t_src_rect;
 	t_src_rect . x = p_from . x;
 	t_src_rect . y = p_from . y;
-	t_src_rect . width = p_to . x - p_to . x;
-	t_src_rect . height = p_to . y - p_to . y;
+	t_src_rect . width = p_to . x - p_from . x;
+	t_src_rect . height = p_to . y - p_from . y;
 	
 	MCprinter -> LayoutStack(p_stack, p_only_marked, &t_src_rect);
 
@@ -702,8 +633,13 @@ void MCPrintingExecPrintCardIntoRect(MCExecContext& ctxt, MCCard *p_card, MCRect
 
 void MCPrintingExecOpenPrintingToDestination(MCExecContext& ctxt, MCStringRef p_destination, MCStringRef p_filename, MCArrayRef p_options)
 {
-	if (MCCustomPrinterCreate(p_destination, p_filename, p_options, (MCCustomPrinter*&)MCprinter) == ES_NORMAL)
+	if (MCCustomPrinterCreate(p_destination, p_filename, p_options, (MCCustomPrinter*&)MCprinter))
+    {
 		MCPrintingExecOpenPrinting(ctxt);
+        return;
+    }
+    
+    ctxt . LegacyThrow(EE_PRINT_UNKNOWNDST);
 }
 
 void MCPrintingExecOpenPrinting(MCExecContext& ctxt)
@@ -910,7 +846,7 @@ void MCPrintingGetPrintPageScale(MCExecContext& ctxt, double &r_value)
 
 void MCPrintingGetPrintPageRectangle(MCExecContext& ctxt, MCRectangle &r_value)
 {
-	r_value = MCprinter -> GetDeviceRectangle();
+	r_value = MCprinter -> GetPageRectangle();
 }
 
 void MCPrintingGetPrintJobName(MCExecContext& ctxt, MCStringRef &r_value)

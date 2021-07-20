@@ -2,7 +2,7 @@
 	'variables':
 	{
 		'c++_std': '<!(echo ${CXX_STD:-c++11})',
-		'android_lib_path%': '<!(echo ${ANDROID_LIB_PATH})',
+		'android_lib_path%': '<!(echo ${ANDROID_LIB_PATH:+-L${ANDROID_LIB_PATH}})',
 	},
 
 	'cflags':
@@ -36,8 +36,9 @@
 			{
 				'ldflags':
 				[
-					'-L<(android_lib_path)',
+					'<(android_lib_path)',
 					'-lstdc++',
+					'-landroid',
 				],
 
 			},

@@ -187,7 +187,7 @@ static bool MCPickleReadTypeInfoRefContents(MCStreamRef stream, uint8_t p_kind, 
         bool t_success;
         t_success = true;
         
-        uindex_t t_param_count;
+        uindex_t t_param_count = 0;
         if (t_success)
             t_success = MCPickleReadCompactUInt(stream, t_param_count);
         
@@ -978,6 +978,8 @@ static void MCPickleReleaseField(MCPickleFieldType p_kind, void *p_base_ptr, voi
                                 MCPickleRelease(t_info -> cases[t_case] . record, t_variant);
                                 break;
                             }
+                        
+                        free(t_variant);
                     }
                 }
                 free(*(void **)p_field_ptr);

@@ -36,7 +36,7 @@ command serverBuilderRun pPlatform, pEdition
    -- Clean up any existing output file
    delete file tOutputFile
    
-   if pPlatform is "windows" then
+   if pPlatform begins with "win-" then
       repeat for each word tExternal in "revdb revzip revxml dbsqlite dbmysql dbpostgresql dbodbc"
          get "server-" & tExternal & ".dll"
          if there is not a file (tEngineFolder & slash & it) then
@@ -61,7 +61,7 @@ command serverBuilderRun pPlatform, pEdition
       end if
       
       local tExeExtension, tOutExeExtension
-      if pPlatform is "windows" then
+      if pPlatform begins with "win-" then
          put ".exe" into tExeExtension
          put ".exe" into tOutExeExtension
          --else if pPlatform is "linux" then
@@ -73,7 +73,7 @@ command serverBuilderRun pPlatform, pEdition
       end if
       
       local tLibExtension
-      if pPlatform is "windows" then
+      if pPlatform begins with "win-" then
          put ".dll" into tLibExtension
       else if pPlatform is "macosx" then
          put ".dylib" into tLibExtension
@@ -109,18 +109,17 @@ command serverBuilderRun pPlatform, pEdition
          end if
       end repeat
       
+      local tServerPath, tServerZipPath
+      put tEngineFolder & slash & "server-" & toLower(pEdition) & tExeExtension into tServerPath
       if pEdition is "Community" then
-         get tEngineFolder & slash & "server-community" & tExeExtension
+         put "livecode-community-server" & tOutExeExtension into tServerZipPath
       else
-         get tEngineFolder & slash & "server-commercial" & tExeExtension
+         put "livecode-server" & tOutExeExtension into tServerZipPath
       end if
-      if there is a file it then
+      
+      if there is a file tServerPath then
          builderLog "message", "Adding livecode-server engine"
-         if pEdition is "Community" then
-            revZipAddItemWithFile tOutputFile, "livecode-community-server" & tOutExeExtension, it
-         else
-            revZipAddItemWithFile tOutputFile, "livecode-server" & tOutExeExtension, it
-         end if
+         revZipAddItemWithFile tOutputFile, tServerZipPath, tServerPath
          if the result is not empty then
             throw the result
          end if
@@ -174,8 +173,10 @@ function getZipFilenameStub pVersion, pPlatform, pEdition
    replace "." with "_" in pVersion
    if pPlatform is "macosx" then
       put "Mac" into pPlatform
-   else if pPlatform is "windows" then
-      put "Windows" into pPlatform
+   else if pPlatform is "win-x86" then
+      put "Windows-x86" into pPlatform
+   else if pPlatform is "win-x86_64" then
+      put "Windows-x86_64" into pPlatform
    else if pPlatform is "linux-x86" then
       put "Linux" into pPlatform
    else if pPlatform is "linux-x86_64" then
@@ -183,9 +184,5 @@ function getZipFilenameStub pVersion, pPlatform, pEdition
    else if pPlatform is "linux-armv6hf" then
       put "Linux-armv6hf" into pPlatform
    end if
-   if pEdition is "Community" then
-      return "LiveCodeCommunityServer-" & pVersion & "-" & pPlatform & ".zip"
-   else
-      return "LiveCodeServer-" & pVersion & "-" & pPlatform & ".zip"
-   end if
+   return "LiveCode" & editionTitleCase(pEdition) & "Server-" & pVersion & "-" & pPlatform & ".zip"
 end getZipFilenameStub

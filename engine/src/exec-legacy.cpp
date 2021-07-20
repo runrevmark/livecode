@@ -38,109 +38,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, HasMemory, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, HeapSpace, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, StackSpace, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, IsNumber, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, Licensed, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, Menus, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, ScreenType, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, ScreenVendor, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, SelectedButtonOf, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, SelectedButton, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, TextHeightSum, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Legacy, MenuObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, DoInBrowser, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, CompactStack, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, DoMenu, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, LockColormap, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, UnlockColormap, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, ImportEps, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Legacy, ImportHypercardStack, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, RevRuntimeBehaviour, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, RevRuntimeBehaviour, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, HcImportStat, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, HcImportStat, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, ScriptTextFont, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, ScriptTextFont, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, ScriptTextSize, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, ScriptTextSize, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, StackFiles, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, StackFiles, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, MenuBar, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, EditMenus, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, EditMenus, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, TextAlign, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, TextAlign, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, TextFont, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, TextFont, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, TextHeight, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, TextHeight, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, TextSize, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, TextSize, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, TextStyle, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, TextStyle, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, BufferMode, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, BufferMode, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, MultiEffect, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, MultiEffect, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PrintTextAlign, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PrintTextAlign, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PrintTextFont, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PrintTextFont, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PrintTextHeight, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PrintTextHeight, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PrintTextSize, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PrintTextSize, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PrintTextStyle, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PrintTextStyle, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, EditScripts, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, EditScripts, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, ColorWorld, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, ColorWorld, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, AllowKeyInField, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, AllowKeyInField, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, AllowFieldRedraw, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, AllowFieldRedraw, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, RemapColor, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, RemapColor, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, UserLevel, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, UserLevel, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, UserModify, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, UserModify, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, LockColormap, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, LockColormap, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PrivateColors, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PrivateColors, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, LongWindowTitles, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, LongWindowTitles, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, BlindTyping, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, BlindTyping, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, PowerKeys, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, PowerKeys, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, TextArrows, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, TextArrows, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, Colormap, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, Colormap, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, NoPixmaps, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, NoPixmaps, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, LowResolutionTimers, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, LowResolutionTimers, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, VcSharedMemory, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, VcSharedMemory, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, VcPlayer, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, VcPlayer, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, SoundChannel, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, SoundChannel, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, LzwKey, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, LzwKey, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, Multiple, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, Multiple, 1)
-MC_EXEC_DEFINE_GET_METHOD(Legacy, MultiSpace, 1)
-MC_EXEC_DEFINE_SET_METHOD(Legacy, MultiSpace, 1)
-
-////////////////////////////////////////////////////////////////////////////////
-
 #define HEAP_SPACE  1000000
 #define STACK_SPACE  1000000
 
@@ -423,40 +320,43 @@ void MCLegacyExecImport(MCExecContext& ctxt, MCStringRef p_filename, bool p_is_s
 	}
 
 	MCU_watchcursor(ctxt.GetObject()->getstack(), True);
+    
 	IO_handle t_stream;
-	
-	if ((t_stream = MCS_open(p_filename, kMCOpenFileModeRead, True, False, 0)) == NULL)
-	{
-		ctxt . LegacyThrow(EE_IMPORT_CANTOPEN);		
-		// MW-2007-12-17: [[ Bug 266 ]] The watch cursor must be reset before we
-		//   return back to the caller.
-		MCU_unwatchcursor(ctxt .GetObject()->getstack(), True);
-		return;
+	if ((t_stream = MCS_open(p_filename, kMCOpenFileModeRead, True, False, 0)) != NULL)
+    {
+        if (p_is_stack)
+        {
+            MCStack *t_stack;
+            if (hc_import(p_filename, t_stream, t_stack) == IO_NORMAL)
+            {
+                t_stack->open();
+            }
+            else
+            {
+                ctxt . LegacyThrow(EE_IMPORT_CANTREAD);
+            }
+        }
+        else
+        {
+            MCEPS *eptr = new (nothrow) MCEPS;
+            if (eptr->import(p_filename, t_stream))
+            {
+                eptr->setparent(MCdefaultstackptr);
+                eptr->attach(OP_CENTER, false);
+            }
+            else
+            {
+                delete eptr;
+                ctxt . LegacyThrow(EE_IMPORT_CANTREAD);
+            }
+        }
+        
+        MCS_close(t_stream);
+    }
+    else
+    {
+		ctxt . LegacyThrow(EE_IMPORT_CANTOPEN);
 	}
-
-	if (p_is_stack)
-	{
-		MCStack *t_stack;
-		if (hc_import(p_filename, t_stream, t_stack) != IO_NORMAL)
-		{
-			MCS_close(t_stream);
-			ctxt . LegacyThrow(EE_IMPORT_CANTREAD);
-		}
-		t_stack->open();
-	}
-	else
-	{
-		MCEPS *eptr = new (nothrow) MCEPS;
-		if (!eptr->import(p_filename, t_stream))
-		{
-            delete eptr;
-			ctxt . LegacyThrow(EE_IMPORT_CANTREAD);
-			return;
-		}
-        eptr->setparent(MCdefaultstackptr);
-		eptr->attach(OP_CENTER, false);
-	}
-
 	// MW-2007-12-17: [[ Bug 266 ]] The watch cursor must be reset before we
 	//   return back to the caller.
 	MCU_unwatchcursor(ctxt . GetObject()->getstack(), True);

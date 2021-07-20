@@ -1993,7 +1993,7 @@ static MCExternalError MCExternalVariableAppend(MCExternalVariableRef var, MCExt
     {
         MCAutoStringRef t_string;
         
-        if (!MCStringCreateWithCFString(*(CFStringRef*)p_value, &t_string))
+        if (!MCStringCreateWithCFStringRef(*(CFStringRef*)p_value, &t_string))
             return kMCExternalErrorNotAString;
         
         return var -> AppendString(p_options, *t_string);
@@ -2802,9 +2802,9 @@ MCExternalError MCExternalLicenseCheckEdition(unsigned int p_options, unsigned i
         return kMCExternalErrorFailed;
     }
     
-    MCAutoValueRef t_value;
+    MCValueRef t_value;
     if (MClicenseparameters . addons != nil &&
-        MCArrayFetchValue(MClicenseparameters . addons, false, *t_key_as_nameref, &t_value))
+        MCArrayFetchValue(MClicenseparameters . addons, false, *t_key_as_nameref, t_value))
     {
         return kMCExternalErrorNone;
     }

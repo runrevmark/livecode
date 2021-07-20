@@ -17,6 +17,47 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 /**
 Palette header bar widget.
+
+Name: menuPick
+
+Summary: Sent when a menu item is chosen
+
+Syntax: menuPick <pPick>
+
+Parameters:
+pPick: The item picked
+
+Type: message
+
+Name: actionSelected
+
+Summary: Sent when an action item is clicked
+
+Syntax: actionSelected <pItemName>
+
+Parameters:
+pItemName: The name of the clicked action item
+
+Type: message
+
+Name: navSelected
+
+Summary: Sent when a nav item is selected
+
+Syntax: navSelected <pItemName>
+
+Parameters:
+pItemName: The name of the selected nav item
+
+Type: message
+
+Name: navChanged
+
+Summary: Sent when the nav items property is changed
+
+Syntax: navChanged
+
+Type: message
 */
 
 widget com.livecode.widget.paletteactions
@@ -31,25 +72,179 @@ metadata title is "Palette Actions"
 metadata author is "LiveCode"
 metadata version is "1.0.1"
 metadata userVisible is "false"
+metadata _ide is "true"
 
+/**
+The names of the nav items
+
+Syntax: 
+set the navNames of <widget> to <pNameList>
+get the navNames of <widget>
+
+Value:
+A list of names of the nav items
+*/
 property navNames		get getNavNames			set setNavNames
+
+/**
+The icons of the nav items
+
+Syntax: 
+set the navIcons of <widget> to <pIconList>
+get the navIcons of <widget>
+
+Value:
+A list of icons of the nav items
+*/
 property navIcons		get getNavIcons			set setNavIcons
+
+/**
+The labels of the nav items
+
+Syntax: 
+set the navLabels of <widget> to <pLabelList>
+get the navLabels of <widget>
+
+Value:
+A list of labels of the nav items
+*/
 property navLabels		get getNavLabels		set setNavLabels
+
+/**
+Whether to show the nav icons or not
+
+Syntax: 
+set the showNavIcons of <widget> to { true | false }
+get the showNavIcons of <widget>
+
+*/
 property showNavIcons	get mShowNavIcons		set setShowNavIcons
+
+/**
+The name of the currently selected nav item
+
+Syntax: 
+set the selectedNavItem of <widget> to <pItemName>
+get the selectedNavItem of <widget>
+
+Value:
+The item in the <navNames> corresponding to the selected nav item
+
+References:
+navNames
+*/
 property selectedNavItem	get getSelectedNavItem	set setSelectedNavItem
+
+/**
+The color to use for the selected nav item
+
+Syntax: 
+set the selectedNavColor of <widget> to <pColor>
+get the selectedNavColor of <widget>
+
+Value:
+The color of the selected nav item, in RGB form
+*/
 property selectedNavColor	get mSelectedNavColor	set setSelectedNavColor
 
+/**
+The array of navigation data
+
+Syntax: 
+set the navData of <widget> to <pNavArray>
+get the navData of <widget>
+
+Value:
+An array describing the <navNames>, <navIcons> and <navLabels> of the widget.
+
+References:
+navNames, navIcons, navLabels
+*/
 property navData		get getNavData			set setNavData
 
+/**
+The names of the action items
+
+Syntax: 
+set the actionNames of <widget> to <pNameList>
+get the actionNames of <widget>
+
+Value:
+A list of names of the action items
+*/
 property actionNames		get getActionNames		set setActionNames
+
+/**
+The icons of the action items
+
+Syntax: 
+set the actionIcons of <widget> to <pIconList>
+get the actionIcons of <widget>
+
+Value:
+A list of icons of the action items
+*/
 property actionIcons		get getActionIcons		set setActionIcons
+
+/**
+The labels of the action items
+
+Syntax: 
+set the actionLabels of <widget> to <pLabelList>
+get the actionLabels of <widget>
+
+Value:
+A list of labels of the action items
+*/
 property actionLabels		get getActionLabels		set setActionLabels
+
+/**
+Whether to show the action icons or not
+
+Syntax: 
+set the showActionIcons of <widget> to { true | false }
+get the showActionIcons of <widget>
+*/
 property showActionIcons	get mShowActionIcons	set setShowActionIcons
 
+/**
+The array of action data
+
+Syntax: 
+set the actionData of <widget> to <pActionArray>
+get the actionData of <widget>
+
+Value:
+An array describing the <actionNames>, <actionIcons> and <actionLabels> of the widget.
+
+References:
+actionNames, actionIcons, actionLabels
+*/
 property actionData		get getActionData		set setActionData
 
+/**
+Whether the widget is a header or footer
+
+Syntax: 
+set the isHeader of <widget> to { true | false }
+get the isHeader of <widget>
+*/
 property isHeader		get mIsHeader			set mIsHeader
+
+/**
+The horizontal extent of the rendered navigation items 
+
+Syntax: 
+get the navBarRight of <widget>
+*/
 property navBarRight	get getNavBarRight
+
+/**
+The minimum width needed to display nav items and action items
+
+Syntax: 
+get the minWidth of <widget>
+*/
 property minWidth get mMinWidth
 
 private variable mNavData 			as List
@@ -101,7 +296,7 @@ constant kPaints is { \
 	"selected tab": ["background"], \
 	"nav": ["foreground"], \
 	"hover nav": ["highlight"], \
-	"disabled": ["foreground", ["background", 0.25]] \
+	"disabled": ["foreground", ["background", 0.7]] \
 }
 
 public handler OnCreate()
@@ -505,8 +700,15 @@ private handler drawActions()
         put element tActionIndex of mActionRects into tRect
 
         variable tMode as String
+        variable tEnabled as optional Boolean
+        // tAction["enabled"] could be a string or boolean
+        if tAction["enabled"] is a boolean then
+            put tAction["enabled"] into tEnabled
+        else
+            put tAction["enabled"] parsed as boolean into tEnabled
+        end if
 
-        if tAction["enabled"] parsed as boolean is false then
+        if tEnabled is not nothing and not tEnabled then
             put "disabled" into tMode
         else if mHoverIndex is tActionIndex and mHoverTab is "action" then
             put "hover nav" into tMode
@@ -791,7 +993,15 @@ private handler menuItemToString(in pMenuItem as Array, in pLevel as Integer) re
 	end repeat
 
 	if "checked" is among the keys of pMenuItem then
-		if pMenuItem["checked"] parsed as boolean then
+        variable tChecked as optional Boolean
+        // pMenuItem["checked"] could be a string or boolean
+        if pMenuItem["checked"] is a boolean then
+            put pMenuItem["checked"] into tChecked
+        else
+            put pMenuItem["checked"] parsed as boolean into tChecked
+        end if
+
+		if tChecked is not nothing and tChecked then
 			put "!c" before tMenuString
 		else
 			put "!n" before tMenuString

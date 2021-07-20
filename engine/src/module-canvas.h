@@ -56,13 +56,18 @@ bool MCImageRepCreateWithPath(MCStringRef p_path, MCImageRep *&r_image_rep);
 bool MCImageRepCreateWithData(MCDataRef p_data, MCImageRep *&r_image_rep);
 bool MCImageRepCreateWithPixels(MCDataRef p_pixels, uint32_t p_width, uint32_t p_height, MCGPixelFormat p_format, bool p_premultiplied, MCImageRep *&r_image_rep);
 bool MCImageRepGetGeometry(MCImageRep *p_image_rep, uint32_t &r_width, uint32_t &r_height);
+bool MCImageRepGetMetadata(MCImageRep *p_image_rep, MCArrayRef &r_metadata);
+bool MCImageRepGetDensity(MCImageRep *p_image_rep, double &r_density);
 bool MCImageRepGetFrameDuration(MCImageRep *p_image_rep, uint32_t p_frame, uint32_t &r_duration);
+bool MCImageRepGetMetadata(MCImageRep *p_image_rep, MCArrayRef &r_metadata);
 
 bool MCImageRepLock(MCImageRep *p_image_rep, uint32_t p_index, MCGFloat p_density, MCGImageFrame &r_frame);
 void MCImageRepUnlock(MCImageRep *p_image_rep, uint32_t p_index, MCGImageFrame &p_frame);
 
 bool MCImageRepLockRaster(MCImageRep *p_image_rep, uint32_t p_index, MCGFloat p_density, MCImageBitmap *&r_raster);
 void MCImageRepUnlockRaster(MCImageRep *p_image_rep, uint32_t p_index, MCImageBitmap *p_raster);
+
+void MCImageRepRender(MCImageRep *p_image_rep, MCGContextRef p_gcontext, uint32_t p_index, MCGRectangle p_src_rect, MCGRectangle p_dst_rect, MCGImageFilter p_filter, MCGPaintRef p_current_color);
 
 //////////
 
@@ -150,6 +155,8 @@ extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepReferencedErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepDataErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepPixelsErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepGetGeometryErrorTypeInfo;
+extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepGetMetadataErrorTypeInfo;
+extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepGetDensityErrorTypeInfo;
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasImageRepLockErrorTypeInfo;
 	
 extern MC_DLLEXPORT MCTypeInfoRef kMCCanvasGradientStopRangeErrorTypeInfo;
@@ -299,15 +306,16 @@ extern "C" MC_DLLEXPORT void MCCanvasTransformMultiply(MCCanvasTransformRef p_le
 extern "C" MC_DLLEXPORT void MCCanvasImageMakeWithPath(MCStringRef p_path, MCCanvasImageRef &x_image);
 extern "C" MC_DLLEXPORT void MCCanvasImageMakeWithData(MCDataRef p_data, MCCanvasImageRef &x_image);
 extern "C" MC_DLLEXPORT void MCCanvasImageMakeWithPixels(integer_t p_width, integer_t p_height, MCDataRef p_pixels, MCCanvasImageRef &x_image);
+extern "C" MC_DLLEXPORT void MCCanvasImageMakeWithPixelsInFormat(integer_t p_width, integer_t p_height, MCDataRef p_pixels, MCGPixelFormat p_format, MCCanvasImageRef &x_image);
 extern "C" MC_DLLEXPORT void MCCanvasImageMakeWithPixelsWithSizeAsList(MCProperListRef p_size, MCDataRef p_pixels, MCCanvasImageRef &x_image);
 extern "C" MC_DLLEXPORT void MCCanvasImageMakeWithResourceFile(MCStringRef p_resource, MCCanvasImageRef &r_image);
 
 // Properties
 extern "C" MC_DLLEXPORT void MCCanvasImageGetWidth(MCCanvasImageRef p_image, uint32_t &r_width);
 extern "C" MC_DLLEXPORT void MCCanvasImageGetHeight(MCCanvasImageRef p_image, uint32_t &r_height);
+extern "C" MC_DLLEXPORT void MCCanvasImageGetMetadata(MCCanvasImageRef p_image, MCArrayRef &r_metadata);
+extern "C" MC_DLLEXPORT void MCCanvasImageGetDensity(MCCanvasImageRef p_image, double &r_density);
 extern "C" MC_DLLEXPORT void MCCanvasImageGetPixels(MCCanvasImageRef p_image, MCDataRef &r_pixels);
-// TODO - Add support for image metadata
-//void MCCanvasImageGetMetadata(const MCCanvasImage &p_image, MCArrayRef &r_metadata);
 
 // TODO - Implement image operations
 //void MCCanvasImageTransform(MCCanvasImage &x_image, const MCCanvasTransform &p_transform);
@@ -560,12 +568,14 @@ extern "C" MC_DLLEXPORT void MCCanvasSaveState(MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasRestoreState(MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasBeginLayer(MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasBeginLayerWithEffect(MCCanvasEffectRef p_effect, MCCanvasRef p_canvas);
+extern "C" MC_DLLEXPORT void MCCanvasBeginEffectOnlyLayerWithEffect(MCCanvasEffectRef p_effect, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasEndLayer(MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasFill(MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasFillPath(MCCanvasPathRef p_path, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasStroke(MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasStrokePath(MCCanvasPathRef p_path, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasClipToRect(MCCanvasRectangleRef p_rect, MCCanvasRef p_canvas);
+extern "C" MC_DLLEXPORT void MCCanvasClipToPath(MCCanvasPathRef p_path, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasAddPath(MCCanvasPathRef p_path, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasDrawImage(MCCanvasImageRef p_image, MCCanvasRectangleRef p_dst_rect, MCCanvasRef p_canvas);
 extern "C" MC_DLLEXPORT void MCCanvasDrawRectOfImage(MCCanvasRectangleRef p_src_rect, MCCanvasImageRef p_image, MCCanvasRectangleRef p_dst_rect, MCCanvasRef p_canvas);

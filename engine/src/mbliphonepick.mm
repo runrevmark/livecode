@@ -120,6 +120,20 @@ UIViewController *MCIPhoneGetViewController(void);
 	m_use_checkmark = p_use;
 }
 
+- (UIView *)pickerView:(UIPickerView *)pickerView viewForRow:(NSInteger)row forComponent:(NSInteger)component reusingView:(UIView *)view
+{
+    UILabel* t_label = (UILabel*)view;
+    if (!t_label)
+    {
+        t_label = [[UILabel alloc] init];
+        t_label.adjustsFontSizeToFitWidth = YES;
+        t_label.textAlignment = NSTextAlignmentCenter;
+        [t_label setText:[[viewArray objectAtIndex:component] objectAtIndex:row]];
+    }
+    
+    return t_label;
+}
+
 - (void)pickerView:(UIPickerView *)pickerView didSelectRow:(NSInteger)row inComponent:(NSInteger)component
 {
 	// HC-2011-10-03 [[ Picker Buttons ]] Showing the bar dynamicly, to indicate if any initial selections have been made.
@@ -476,6 +490,7 @@ return 1;
         t_toolbar_landscape_height = 32;
 		
 		// create the pick wheel
+        // If you create an instance with a width and height of 0, they will be overridden with the appropriate default width and height, which you can get by frame.size.width/height.
 		pickerView = [[UIPickerView alloc] initWithFrame: CGRectMake(0, (t_is_landscape ? t_toolbar_landscape_height : t_toolbar_portrait_height), 0, 0)];
 
 		pickerView.delegate = self;
@@ -490,11 +505,6 @@ return 1;
 			m_bar_visible = true;
 		}
 
-        // PM-2014-10-22: [[ Bug 13750 ]] Make sure the view under the pickerView is not visible (iphone 4 only)
-        NSString *t_device_model_name = MCIPhoneGetDeviceModelName();
-        if ([t_device_model_name isEqualToString:@"iPhone 4"] || [t_device_model_name isEqualToString:@"iPhone 4(Rev A)"] || [t_device_model_name isEqualToString:@"iPhone 4(CDMA)"])
-            pickerView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.90];
-        
 		// set the label item
 		for (t_i = 0; t_i < [m_selected_index count]; t_i++)
 			[pickerView selectRow:[[m_selected_index objectAtIndex:t_i] integerValue] inComponent:t_i animated:NO];
@@ -502,10 +512,14 @@ return 1;
 		// make a toolbar
         // MM-2012-10-15: [[ Bug 10463 ]] Make the picker scale to the width of the device rather than a hard coded value (fixes issue with landscape iPhone 5 being 568 not 480).
 		UIToolbar *t_toolbar;
-		t_toolbar = [[UIToolbar alloc] initWithFrame: (t_is_landscape ? CGRectMake(0, 0, [[UIScreen mainScreen] bounds] . size . height, t_toolbar_landscape_height) : CGRectMake(0, 0, [[UIScreen mainScreen] bounds] . size . width, t_toolbar_portrait_height))];
+        
+        if (t_is_landscape)
+            t_toolbar = [[UIToolbar alloc] initWithFrame: CGRectMake(0, 0, [[UIScreen mainScreen] bounds] . size . width, t_toolbar_landscape_height)];
+        else
+            t_toolbar = [[UIToolbar alloc] initWithFrame: CGRectMake(0, 0, [[UIScreen mainScreen] bounds] . size . width, t_toolbar_portrait_height)];
+        
 		t_toolbar.barStyle = UIBarStyleBlack;
 		t_toolbar.translucent = YES;
-
 		[t_toolbar sizeToFit];
 
 		NSMutableArray *t_toolbar_items;
@@ -518,7 +532,7 @@ return 1;
 		
 		[t_toolbar setItems: t_toolbar_items animated: NO];
         
-        if (MCmajorosversion < 800)
+        if (MCmajorosversion < MCOSVersionMake(8,0,0))
         {
             // create the action sheet that contains the "Done" button and pick wheel
             actionSheet = [[UIActionSheet alloc] initWithTitle:nil
@@ -555,15 +569,28 @@ return 1;
             
             // PM-2015-03-25: [[ Bug 15070 ]] Make the rect of the m_action_sheet_view to be of fixed height
             if (!t_is_landscape)
+            {
+                [pickerView setFrame:CGRectMake(0, t_toolbar_portrait_height, [[UIScreen mainScreen] bounds] . size . width, t_pick_wheel_height)];
                 t_rect = CGRectMake(0, [[UIScreen mainScreen] bounds] . size . height - t_toolbar_portrait_height - t_pick_wheel_height, [[UIScreen mainScreen] bounds] . size . width, t_toolbar_portrait_height + t_pick_wheel_height);
+            }
             else
+            {
+                [pickerView setFrame:CGRectMake(0, t_toolbar_landscape_height, [[UIScreen mainScreen] bounds] . size . width, t_pick_wheel_height)];
                 t_rect = CGRectMake(0, [[UIScreen mainScreen] bounds] . size . height - t_toolbar_landscape_height - t_pick_wheel_height, [[UIScreen mainScreen] bounds] . size . width, t_toolbar_landscape_height + t_pick_wheel_height);
+            }
             
             m_action_sheet_view = [[UIView alloc] initWithFrame:t_rect];
 
             [m_action_sheet_view addSubview: t_toolbar];
             [m_action_sheet_view addSubview: pickerView];
-            m_action_sheet_view.backgroundColor = [UIColor whiteColor];
+			if ([UIColor respondsToSelector:@selector(secondarySystemBackgroundColor)])
+			{
+				m_action_sheet_view.backgroundColor = [UIColor secondarySystemBackgroundColor];
+			}
+			else
+			{
+				m_action_sheet_view.backgroundColor = [UIColor whiteColor];
+			}
             [t_toolbar release];
 
             [MCIPhoneGetView() addSubview:m_action_sheet_view];
@@ -679,7 +706,7 @@ return 1;
     else
     {
         // PM-2014-09-25: [[ Bug 13484 ]] In iOS 8 and above, UIActionSheet is not working properly
-        if (MCmajorosversion >= 800)
+        if (MCmajorosversion >= MCOSVersionMake(8,0,0))
         {
             [pickerView removeFromSuperview];
         
@@ -728,7 +755,7 @@ return 1;
     else
     {
         // PM-2014-09-25: [[ Bug 13484 ]] In iOS 8 and above, UIActionSheet is not working properly
-        if (MCmajorosversion >= 800)
+        if (MCmajorosversion >= MCOSVersionMake(8,0,0))
         {
             [pickerView removeFromSuperview];
             
@@ -904,7 +931,7 @@ bool MCSystemPick(MCStringRef p_options, bool p_use_checkmark, uint32_t p_initia
 		t_success = MCSystemPickN(t_option_list_array, p_use_checkmark, false, false, false, t_initial_index_array, t_return_index, p_button_rect);
 	
 	MCAutoStringRef t_result;
-	/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_return_index, &t_result);
+	/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)t_return_index, &t_result);
 	if (t_success)
 		MCresult -> setvalueref (*t_result);
 	r_chosen_index = atoi ([t_return_index cStringUsingEncoding:NSMacOSRomanStringEncoding]);

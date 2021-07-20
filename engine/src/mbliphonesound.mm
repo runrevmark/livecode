@@ -233,7 +233,7 @@ bool MCSystemSoundFinalize()
                                                  selector:@selector(audioPlayerDidReachEnd:)
                                                      name:AVPlayerItemDidPlayToEndTimeNotification
                                                    object:[m_player currentItem]];
-        if (MCmajorosversion >= 500)
+        if (MCmajorosversion >= MCOSVersionMake(5,0,0))
         {
 #ifdef __IPHONE_5_0
             // MM-2012-03-23: [[ Bug ]] AVPlayerItemFailedToPlayToEndTimeNotification only added in 4.3 - use string represnetation instead
@@ -311,10 +311,13 @@ bool MCSystemPlaySound(MCStringRef p_sound, bool p_looping)
     if (t_success)
     {
         // Check if we are playing an ipod file or a resource file.
-		if (MCStringBeginsWithCString(p_sound, (const char_t *)"ipod-library://", kMCStringOptionCompareExact))
+		if (MCStringBeginsWith(p_sound, MCSTR("ipod-library://"), kMCCompareExact) || \
+			MCStringBeginsWith(p_sound, MCSTR("http://"), kMCCompareExact) || \
+			MCStringBeginsWith(p_sound, MCSTR("https://"), kMCCompareExact))
         {
             t_url = [NSURL URLWithString: MCStringConvertToAutoreleasedNSString(p_sound)];
         }
+		
         else
         {
             MCAutoStringRef t_sound_file;
@@ -680,22 +683,22 @@ bool MCSystemSoundChannelStatus(MCStringRef p_channel, intenum_t& r_status)
 
 bool MCSystemSoundOnChannel(MCStringRef p_channel, MCStringRef& r_sound)
 {
-/*	MCSystemSoundChannel *t_channel;
+	MCSystemSoundChannel *t_channel;
 	if (!find_sound_channel(p_channel, false, t_channel))
 		return false;
 	
-	return MCCStringClone(t_channel -> current_player . sound, r_sound);*/
-    return false;
+	MCValueAssign(r_sound, t_channel -> current_player . sound);
+	return true;
 }
 
 bool MCSystemNextSoundOnChannel(MCStringRef p_channel, MCStringRef& r_sound)
 {
-/*	MCSystemSoundChannel *t_channel;
+	MCSystemSoundChannel *t_channel;
 	if (!find_sound_channel(p_channel, false, t_channel))
 		return false;
 	
-    return MCCStringClone(t_channel -> next_player . sound, r_sound);*/
-    return false;
+	MCValueAssign(r_sound, t_channel -> next_player . sound);
+	return true;
 }
 
 // MM-2012-02-11: Refactored to return a formatted sting of channels

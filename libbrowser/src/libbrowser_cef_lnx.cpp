@@ -32,7 +32,6 @@ public:
 	bool GetXWindow(Window &r_window);
 
 	virtual void PlatformConfigureWindow(CefWindowInfo &r_info);
-	virtual void PlatformCloseBrowserWindow(CefRefPtr<CefBrowser> p_browser);
 	virtual bool PlatformGetNativeLayer(void *&r_layer);
 
 	virtual bool PlatformSetVisible(bool p_visible);
@@ -43,6 +42,9 @@ public:
 	virtual bool PlatformGetWindowID(int32_t &r_id);
 
 	virtual bool PlatformGetAuthCredentials(bool p_is_proxy, const CefString &p_url, const CefString &p_realm, MCCefAuthScheme p_auth_scheme, CefString &r_user, CefString &r_password);
+
+	virtual bool PlatformGetAllowUserInteraction(bool &r_allow_interaction);
+	virtual bool PlatformSetAllowUserInteraction(bool p_allow_interaction);
 
 private:
 	Display *m_display;
@@ -97,7 +99,10 @@ bool MCCefLinuxBrowser::PlatformGetNativeLayer(void *&r_layer)
 
 void MCCefLinuxBrowser::PlatformConfigureWindow(CefWindowInfo &r_info)
 {
-	r_info.SetAsChild(m_parent_window, CefRect(0,0,1,1));
+	// Let CEF use DefaultRootWindow as the parent window so
+	// it is created with a visual it supports otherwise the content
+	// views will not be create causing a crash
+	//r_info.SetAsChild(m_parent_window, CefRect(0,0,1,1));
 }
 
 bool MCCefLinuxBrowser::PlatformGetRect(MCBrowserRect &r_rect)
@@ -188,18 +193,18 @@ bool MCCefLinuxBrowser::PlatformGetAuthCredentials(bool p_is_proxy, const CefStr
 	return false;
 }
 
-//////////
 
-void MCCefLinuxBrowser::PlatformCloseBrowserWindow(CefRefPtr<CefBrowser> p_browser)
+bool MCCefLinuxBrowser::PlatformGetAllowUserInteraction(bool &r_value)
 {
-	Window t_window;
-	t_window = p_browser->GetHost()->GetWindowHandle();
-	
-	Display *t_display;
-	if (!GetXDisplay(t_display))
-		return;
-	
-	XDestroyWindow(t_display, t_window);
+	/* TODO - implement */
+	r_value = true;
+	return false;
+}
+
+bool MCCefLinuxBrowser::PlatformSetAllowUserInteraction(bool p_value)
+{
+	/* TODO - implement */
+	return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

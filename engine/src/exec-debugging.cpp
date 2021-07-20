@@ -40,34 +40,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EXEC_METHOD(Debugging, Breakpoint, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Debugging, DebugDo, 3)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, TraceAbort, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, TraceAbort, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, TraceDelay, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, TraceDelay, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, TraceReturn, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, TraceReturn, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, TraceStack, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, TraceStack, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, TraceUntil, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, TraceUntil, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, MessageMessages, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, MessageMessages, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, Breakpoints, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, Breakpoints, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, DebugContext, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, DebugContext, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, ExecutionContexts, 1)
-MC_EXEC_DEFINE_GET_METHOD(Debugging, WatchedVariables, 1)
-MC_EXEC_DEFINE_SET_METHOD(Debugging, WatchedVariables, 1)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Debugging, Assert, 3)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Debugging, PutIntoMessage, 2)
-
-////////////////////////////////////////////////////////////////////////////////
-
 void MCDebuggingExecDebugDo(MCExecContext& ctxt, MCStringRef p_script, uinteger_t p_line, uinteger_t p_pos)
 {
 	Boolean added = False;
@@ -358,9 +330,9 @@ void MCDebuggingGetExecutionContexts(MCExecContext& ctxt, MCStringRef& r_value)
             {
                 if (t_success)
                 {
-                    MCAutoValueRef t_stack_id;
-                    t_success = MCexecutioncontexts[i]->GetObject()->getstack()->names(P_LONG_ID, &t_stack_id)
-                                && MCListAppend(*t_context, *t_stack_id)
+                    MCAutoValueRef t_context_id;
+                    t_success = MCexecutioncontexts[i]->GetObject()->names(P_LONG_ID, &t_context_id)
+                                && MCListAppend(*t_context, *t_context_id)
                                 && MCListAppend(*t_context, MCNAME("<protected>"))
                                 && MCListAppendInteger(*t_context, 0);
                 }
@@ -397,12 +369,31 @@ void MCDebuggingSetWatchedVariables(MCExecContext& ctxt, MCStringRef p_value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void MCDebuggingGetLogMessage(MCExecContext& ctxt, MCStringRef& r_value)
+{
+    r_value = MCValueRetain(MCNameGetString(MClogmessage));
+}
+
+void MCDebuggingSetLogMessage(MCExecContext& ctxt, MCStringRef p_value)
+{
+    MCNewAutoNameRef t_logmessage;
+    if (!MCNameCreate(p_value, &t_logmessage))
+    {
+        ctxt.Throw();
+        return;
+    }
+    
+    MCValueAssign(MClogmessage, *t_logmessage);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void MCDebuggingExecAssert(MCExecContext& ctxt, int type, bool p_eval_success, bool p_result)
 {
     switch(type)
 	{
-		case TYPE_NONE:
-		case TYPE_TRUE:
+		case ASSERT_TYPE_NONE:
+		case ASSERT_TYPE_TRUE:
 			// If the expression threw an error, then just throw.
 			if (!p_eval_success)
             {
@@ -415,7 +406,7 @@ void MCDebuggingExecAssert(MCExecContext& ctxt, int type, bool p_eval_success, b
 				return;
             break;
             
-		case TYPE_FALSE:
+		case ASSERT_TYPE_FALSE:
 			// If the expression threw an error, then just throw.
 			if (!p_eval_success)
             {
@@ -428,12 +419,12 @@ void MCDebuggingExecAssert(MCExecContext& ctxt, int type, bool p_eval_success, b
 				return;
             break;
             
-		case TYPE_SUCCESS:
+		case ASSERT_TYPE_SUCCESS:
 			if (p_eval_success)
 				return;
 			break;
             
-		case TYPE_FAILURE:
+		case ASSERT_TYPE_FAILURE:
 			if (!p_eval_success)
 				return;
 			break;

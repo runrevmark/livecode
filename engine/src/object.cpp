@@ -54,6 +54,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "styledtext.h"
 #include "flst.h"
 #include "widget.h"
+#include "eps.h"
+#include "graphic.h"
 
 #include "globals.h"
 #include "mctheme.h"
@@ -291,9 +293,6 @@ MCObject::~MCObject()
 	// MW-2008-10-25: Release the parent script use
 	if (parent_script != NULL)
 		parent_script -> Release();
-
-	// MW-2009-11-03: Clear all current breakpoints for this object
-	MCB_clearbreaks(this);
 
 	if (!MCerrorptr.IsValid() || MCerrorptr == this)
 		MCerrorptr = nil;
@@ -806,7 +805,7 @@ void MCObject::timer(MCNameRef mptr, MCParameter *params)
             {
                 MCExecContext ctxt(this, nil, nil);
                 MCAutoValueRef t_value_valueref;
-				/* UNCHECKED */ params->eval(ctxt, &t_value_valueref);
+				/* UNCHECKED */ params->eval_argument(ctxt, &t_value_valueref);
                 MCAutoStringRef t_value;
                 /* UNCHECKED */ ctxt . ConvertToString(*t_value_valueref, &t_value);
                 MCStringFormat(&t_mptr_string, "%@ %@", mptr, *t_value);
@@ -860,6 +859,9 @@ void MCObject::removereferences()
     MCscreen->cancelmessageobject(this, NULL);
     removefrom(MCfrontscripts);
     removefrom(MCbackscripts);
+    
+    // MW-2009-11-03: Clear all current breakpoints for this object
+    MCB_clearbreaks(this);
     
     // If the object is marked as being used as a parentScript, flush the parentScript
     // table so we don't get any dangling pointers.
@@ -1581,7 +1583,8 @@ Boolean MCObject::getforecolor(uint2 p_di, Boolean rev, Boolean hilite,
         case DI_SHADOW:
             which = P_SHADOW_COLOR;
             break;
-            
+        default:
+            MCUnreachableReturn(False);
     }
     if (o->getthemeselectorsforprop(which, t_control_type, t_control_part, t_control_state, t_theme_prop, t_theme_prop_type))
     {
@@ -2504,14 +2507,22 @@ Boolean MCObject::parsescript(Boolean report, Boolean force)
 			hashandlers = 0;
 			if (hlist == NULL)
 				hlist = new (nothrow) MCHandlerlist;
-			
-			getstack() -> unsecurescript(this);
-			
-			Parse_stat t_stat;
-			t_stat = hlist -> parse(this, _script);
-			
-			getstack() -> securescript(this);
-			
+            
+            Parse_stat t_stat;
+            if (_getscript() != nullptr)
+            {
+                MCDataRef t_utf8_script;
+                getstack()->startparsingscript(this, t_utf8_script);
+                
+                t_stat = hlist->parse(this, t_utf8_script);
+            
+                getstack()->stopparsingscript(this, t_utf8_script);
+            }
+            else
+            {
+                t_stat = hlist->parse(this, kMCEmptyString);
+            }
+            
 			if (t_stat != PS_NORMAL)
 			{
 				hashandlers |= HH_DEAD_SCRIPT;
@@ -2561,6 +2572,9 @@ bool MCObject::handlesmessage(MCNameRef p_message)
 	t_object = this;
 	while(t_object != nil)
 	{
+		// Make sure the handler list has been constructed from the parsed script
+		if (t_object->hlist == nil)
+			t_object->parsescript(False, False);
 		if (t_object -> hlist != nil && should_send_message(t_object -> hlist, p_message))
             return true;
 		
@@ -4052,12 +4066,11 @@ IO_stat MCObject::extendedload(MCObjectInputStream& p_stream, uint32_t version, 
 
 		if (t_stat == IO_NORMAL)
 		{
-			parent_script = MCParentScript::Acquire(this, t_id, t_stack);
-			if (parent_script == NULL)
-				t_stat = IO_ERROR;
-
-			s_loaded_parent_script_reference = true;
-		}
+            if (!setparentscript_onload(t_id, t_stack))
+            {
+                t_stat = IO_ERROR;
+            }
+        }
 
 		MCValueRelease(t_stack);
 	}
@@ -4135,6 +4148,18 @@ IO_stat MCObject::extendedload(MCObjectInputStream& p_stream, uint32_t version, 
 	return t_stat;
 }
 
+bool MCObject::setparentscript_onload(uint32_t p_id, MCNameRef p_stack)
+{
+    parent_script = MCParentScript::Acquire(this, p_id, p_stack);
+    if (parent_script == NULL)
+    {
+        return false;
+    }
+    
+    s_loaded_parent_script_reference = true;
+    
+    return true;
+}
 
 // MW-2008-10-28: [[ ParentScripts ]] This method attempts to resolve the
 //   parentscript reference for this object (if any).
@@ -4635,8 +4660,11 @@ bool MCObject::intersects(MCObject *p_other, uint32_t p_threshold)
 		
 		// We accumulate the normalized mask a scanline at a time.
 		uint8_t *t_this_scanline, *t_other_scanline;
-		MCMemoryNewArray(t_scanline_width, t_this_scanline);
-		MCMemoryNewArray(t_scanline_width, t_other_scanline);
+		if (!MCMemoryNewArray(t_scanline_width, t_this_scanline) ||
+		    !MCMemoryNewArray(t_scanline_width, t_other_scanline))
+    {
+      return False;
+    }
 				
 		// IM-2013-10-17: [[ FullscreenMode ]] Precompute initial pixel coords & row/column increments
 		MCGFloat t_this_x, t_this_y, t_this_x_inc, t_this_y_inc;
@@ -5170,6 +5198,26 @@ struct MCRequiredStackFileVersionVisitor : public MCObjectVisitor
 {
 	uint32_t required_version;
 	
+	bool OnStack(MCStack *p_stack)
+	{
+		MCStack *t_substacks = p_stack->getsubstacks();
+		
+		if (t_substacks != nil)
+		{
+			/* Check minimum version required for substacks */
+			MCStack *t_stack = t_substacks;
+			do
+			{
+				if (!t_stack->visit(kMCObjectVisitorRecursive, 0, this))
+					return false;
+				t_stack = t_stack->next();
+			}
+			while (t_stack != t_substacks);
+		}
+
+		return OnObject(p_stack);
+	}
+	
 	bool OnObject(MCObject *p_object)
 	{
 		required_version = MCMax(required_version, p_object->getminimumstackfileversion());
@@ -5200,7 +5248,7 @@ uint32_t MCObject::geteffectiveminimumstackfileversion(void)
 {
 	MCRequiredStackFileVersionVisitor t_visitor;
 	t_visitor.required_version = kMCStackFileFormatMinimumExportVersion;
-	visit(kMCObjectVisitorHeirarchical | kMCObjectVisitorRecursive, 0, &t_visitor);
+	visit(kMCObjectVisitorRecursive, 0, &t_visitor);
 	return t_visitor.required_version;
 }
 
@@ -5211,7 +5259,7 @@ uint32_t MCObject::getminimumstackfileversion(void)
 }
 
 // AL-2015-06-30: [[ Bug 15556 ]] Refactored function to sync mouse focus
-void MCObject::sync_mfocus(void)
+void MCObject::sync_mfocus(bool p_visiblility_changed, bool p_resize_parent)
 {
     bool needmfocus;
     needmfocus = false;
@@ -5230,17 +5278,21 @@ void MCObject::sync_mfocus(void)
         else if (MCU_point_in_rect(rect, MCmousex, MCmousey))
             needmfocus = true;
     }
-    
-    if (state & CS_KFOCUSED)
-        getcard(0)->kunfocus();
-    
-    // MW-2008-08-04: [[ Bug 7094 ]] If we change the visibility of the control
-    //   while its grabbed, we should ungrab it - otherwise it sticks to the
-    //   cursor.
-    if (gettype() >= CT_GROUP && getstate(CS_GRAB))
-        state &= ~CS_GRAB;
-    
-    resizeparent();
+	
+	if (p_visiblility_changed)
+	{
+		if (state & CS_KFOCUSED)
+			getcard(0)->kunfocus();
+		
+		// MW-2008-08-04: [[ Bug 7094 ]] If we change the visibility of the control
+		//   while its grabbed, we should ungrab it - otherwise it sticks to the
+		//   cursor.
+		if (gettype() >= CT_GROUP && getstate(CS_GRAB))
+			state &= ~CS_GRAB;
+	}
+	
+	if (p_resize_parent)
+		resizeparent();
     
     if (needmfocus)
         MCmousestackptr->getcard()->mfocus(MCmousex, MCmousey);
@@ -5375,6 +5427,16 @@ bool MCObjectVisitor::OnPlayer(MCPlayer *p_player)
 	return OnControl(p_player);
 }
 
+bool MCObjectVisitor::OnEps(MCEPS *p_eps)
+{
+    return OnControl(p_eps);
+}
+
+bool MCObjectVisitor::OnGraphic(MCGraphic *p_graphic)
+{
+    return OnControl(p_graphic);
+}
+
 bool MCObjectVisitor::OnStyledText(MCStyledText *p_styled_text)
 {
 	return OnObject(p_styled_text);
@@ -5473,6 +5535,7 @@ struct MCDeletedObjectPool
 static MCDeletedObjectPool *MCsparedeletedobjectpool = nil;
 static MCDeletedObjectPool *MCdeletedobjectpool = nil;
 static MCDeletedObjectPool *MCrootdeletedobjectpool = nil;
+static uint32_t MCdeletedobjectpoolfreezedepth = 0;
 
 static bool MCDeletedObjectPoolCreate(MCDeletedObjectPool*& r_pool)
 {
@@ -5506,6 +5569,59 @@ static void MCDeletedObjectPoolDestroy(MCDeletedObjectPool *p_pool)
     }
     
     MCMemoryDelete(p_pool);
+}
+
+static MCDeletedObjectPool* MCDeletedObjectPoolCleanup(MCDeletedObjectPool *p_pool)
+{
+	while (p_pool != nil && p_pool->defunct && p_pool->references == 0)
+	{
+		MCDeletedObjectPool *t_this_pool = p_pool;
+		p_pool = p_pool->parent;
+		MCDeletedObjectPoolDestroy(t_this_pool);
+	}
+	
+	return p_pool;
+}
+
+/* Release the given pool. If the pool becomes unreferenced as a result,
+ * it and any defunct unreferenced ancestors are destroyed. */
+static void MCDeletedObjectPoolRelease(MCDeletedObjectPool *p_pool)
+{
+	if (p_pool == nil)
+		return;
+	
+	p_pool->references -= 1;
+	
+	MCDeletedObjectPoolCleanup(p_pool);
+}
+
+/* Mark the given pool as defunct, destroying it (and any defunct, unreferenced
+ * ancestors) if it is unreferenced. */
+static void MCDeletedObjectPoolMakeDefunct(MCDeletedObjectPool* p_pool)
+{
+	if (p_pool == nil)
+		return;
+	
+	p_pool->defunct = true;
+	
+	MCDeletedObjectPoolCleanup(p_pool);
+}
+
+/* Release the given object pool, and return the nearest non-defunct ancestor.
+ * Any intermediate, unreferenced, defunct pools are destroyed. */
+static MCDeletedObjectPool* MCDeletedObjectPoolUnwind(MCDeletedObjectPool *p_pool)
+{
+	if (p_pool == nil)
+		return nil;
+	
+	p_pool->references -= 1;
+	
+	p_pool = MCDeletedObjectPoolCleanup(p_pool);
+	
+	while (p_pool != nil && p_pool->defunct)
+		p_pool = p_pool->parent;
+	
+	return p_pool;
 }
 
 void MCDeletedObjectsSetup(void)
@@ -5558,8 +5674,22 @@ void MCDeletedObjectsTeardown(void)
     }
 }
 
+void MCDeletedObjectsFreezePool(void)
+{
+    MCdeletedobjectpoolfreezedepth += 1;
+}
+
+void MCDeletedObjectsThawPool(void)
+{    
+    MCdeletedobjectpoolfreezedepth -= 1;
+}
+
 void MCDeletedObjectsEnterWait(bool p_dispatching)
 {
+    // If the current pool is frozen, do nothing
+    if (MCdeletedobjectpoolfreezedepth > 0)
+        return;
+    
     // If this isn't a dispatching wait, then no objects can be created.
     if (!p_dispatching)
         return;
@@ -5586,6 +5716,10 @@ void MCDeletedObjectsEnterWait(bool p_dispatching)
 
 void MCDeletedObjectsLeaveWait(bool p_dispatching)
 {
+    // If the current pool is frozen, do nothing
+    if (MCdeletedobjectpoolfreezedepth > 0)
+        return;
+    
     // If this isn't a dispatching wait, then no objects can be created.
     if (!p_dispatching)
         return;
@@ -5599,11 +5733,7 @@ void MCDeletedObjectsLeaveWait(bool p_dispatching)
     MCdeletedobjectpool = MCdeletedobjectpool -> parent;
     
     // The previous pool is now defunct.
-    t_pool -> defunct = true;
-    
-    // If the objectpool has no references then we can delete it.
-    if (t_pool -> references == 0)
-        MCDeletedObjectPoolDestroy(t_pool);
+    MCDeletedObjectPoolMakeDefunct(t_pool);
     
     // Now drain any objects which have accumulated in this pool.
     MCDeletedObjectsDoDrain();
@@ -5638,21 +5768,8 @@ void MCDeletedObjectsOnObjectDeleted(MCObject *p_object)
         return;
     
     // Unreference the pool.
-    t_pool -> references -= 1;
     p_object -> setdeletedobjectpool(nil);
-    
-    // Loop through any defunct pools.
-    while(t_pool -> defunct)
-    {
-        MCDeletedObjectPool *t_this_pool;
-        t_this_pool = t_pool;
-        t_pool = t_pool -> parent;
-        
-        if (t_this_pool -> references == 0)
-        {
-            MCDeletedObjectPoolDestroy(t_this_pool);
-        }
-    }
+    t_pool = MCDeletedObjectPoolUnwind(t_pool);
     
     // We now have a pool in which to place the object.
     p_object -> appendto(t_pool -> to_delete);
@@ -5669,15 +5786,7 @@ void MCDeletedObjectsOnObjectDestroyed(MCObject *p_object)
     if (t_pool == nil)
         return;
     
-    // Cleanup any defunct pools in the chain with no references.
-    t_pool -> references -= 1;
-    while(t_pool -> defunct && t_pool -> references == 0)
-    {
-        MCDeletedObjectPool *t_this_pool;
-        t_this_pool = t_pool;
-        t_pool = t_pool -> parent;
-        MCDeletedObjectPoolDestroy(t_this_pool);
-    }
+    MCDeletedObjectPoolRelease(t_pool);
 }
 
 void MCDeletedObjectsOnObjectSuspendDeletion(MCObject *p_object, void*& r_deletion_cookie)
@@ -5693,6 +5802,9 @@ void MCDeletedObjectsOnObjectSuspendDeletion(MCObject *p_object, void*& r_deleti
 	
 	MCAssert(t_pool != nil && t_pool -> parent != nil);
 	
+	// Reference parent pool to prevent deletion.
+	t_pool->parent->references += 1;
+	
 	r_deletion_cookie = t_pool;
 	p_object -> setdeletedobjectpool(t_pool -> parent);
 	p_object -> setdeletionissuspended(true);
@@ -5703,7 +5815,24 @@ void MCDeletedObjectsOnObjectResumeDeletion(MCObject *p_object, void *p_deletion
 	if (p_deletion_cookie == nil)
 		return;
 	
-	p_object -> setdeletedobjectpool((MCDeletedObjectPool *)p_deletion_cookie);
+	MCDeletedObjectPool *t_pool = (MCDeletedObjectPool*)p_deletion_cookie;
+	MCDeletedObjectPool *t_current_pool = p_object->getdeletedobjectpool();
+	
+	if (t_current_pool != nil)
+	{
+		// Restore the link to the saved deleted object pool, removing any reference
+		//    to the pool currently set on the object.
+		MCDeletedObjectPoolRelease(t_current_pool);
+
+		p_object -> setdeletedobjectpool(t_pool);
+	}
+	else
+	{
+		// If the current pool is nil then the object must have been deleted, so
+		//    remove the reference to the saved deleted object pool.
+		MCDeletedObjectPoolRelease(t_pool);
+	}
+	
 	p_object -> setdeletionissuspended(false);
 }
 

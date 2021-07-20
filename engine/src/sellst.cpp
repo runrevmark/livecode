@@ -29,6 +29,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "field.h"
 #include "paragraf.h"
 #include "image.h"
+#include "widget.h"
 #include "mcerror.h"
 #include "sellst.h"
 #include "undolst.h"
@@ -121,26 +122,26 @@ bool MCSellist::getids(MCListRef& r_list)
 
 void MCSellist::Clean()
 {
-    if (objects == nil)
-        return;
-    
-    // Remove any dead objects from the selected list
-    MCSelnode* t_cursor = objects;
-    do
-    {
-        if (!t_cursor->m_ref)
-        {
-            MCSelnode* t_next = t_cursor->next();
-            t_cursor->remove(objects);
-            delete t_cursor;
-            t_cursor = t_next;
-        }
-        else
-        {
-            t_cursor = t_cursor->next();
-        }
-    }
-    while (t_cursor != objects);
+	if (objects == nil)
+		return;
+
+	// Remove any dead objects from the selected list
+	MCSelnode* t_cursor = objects;
+	bool t_continue = true;
+
+	while (t_continue && objects != nil)
+	{
+		// If the next object wraps around then we've reached the end of the list
+		MCSelnode* t_next = t_cursor->next();
+		t_continue = t_next != objects;
+		if (!t_cursor->m_ref)
+		{
+			t_cursor->remove(objects);
+			delete t_cursor;
+		}
+
+		t_cursor = t_next;
+	}
 }
 
 void MCSellist::clear(Boolean message)
@@ -210,6 +211,9 @@ void MCSellist::add(MCObject *objptr, bool p_sendmessage)
 
 void MCSellist::remove(MCObject *objptr, bool p_sendmessage)
 {
+    // Remove any dead objects before removing objptr
+    Clean();
+
 	if (objects != NULL)
 	{
 		MCSelnode *tptr = objects;
@@ -235,7 +239,7 @@ void MCSellist::sort()
     Clean();
     
     MCSelnode *optr = objects;
-	MCAutoArray<MCSortnode> items;
+	MCAutoArrayZeroedNonPod<MCSortnode> items;
 	uint4 nitems = 0;
 	MCCard *cptr = optr->m_ref->getcard();
 	do
@@ -580,8 +584,18 @@ Boolean MCSellist::del()
             MCControl *cptr = tptr->m_ref.GetAs<MCControl>();
             uint2 num = 0;
             cptr->getcard()->count(CT_LAYER, CT_UNDEFINED, cptr, num, True);
+            
+            bool t_del;
+            if (cptr->gettype() == CT_WIDGET)
+            {
+                t_del = static_cast<MCWidget*>(cptr)->delforundo(true);
+            }
+            else
+            {
+                t_del = cptr->del(true);
+            }
 
-            if (cptr->del(true))
+            if (t_del)
             {
                 Ustruct *us = new (nothrow) Ustruct;
                 us->type = UT_DELETE;

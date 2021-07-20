@@ -241,7 +241,7 @@ UIViewController *MCIPhoneGetViewController(void);
 
 - (void)doDismissController
 {
-	if (MCmajorosversion >= 500)
+	if (MCmajorosversion >= MCOSVersionMake(5,0,0))
 		[MCIPhoneGetViewController() dismissViewControllerAnimated:YES completion:^(){m_finished = true;}];
 	else
         [MCIPhoneGetViewController() dismissModalViewControllerAnimated:YES];
@@ -250,7 +250,7 @@ UIViewController *MCIPhoneGetViewController(void);
 - (void)dismissController
 {
     // HSC-2012-05-14: [[ BZ 10213 ]] Delayed continuation until view disappeared. 
-    if (MCmajorosversion >= 500)
+    if (MCmajorosversion >= MCOSVersionMake(5,0,0))
     {
         m_finished = false;
 		MCIPhoneCallSelectorOnMainFiber(self, @selector(doDismissController));
@@ -414,7 +414,7 @@ UIViewController *MCIPhoneGetViewController(void);
     // Fetch all calendars that are available.
     NSArray *t_calendars;
 #ifdef __IPHONE_6_0
-    if (MCmajorosversion >= 600)
+    if (MCmajorosversion >= MCOSVersionMake(6,0,0))
         t_calendars = [m_event_store calendarsForEntityType: EKEntityTypeEvent];
     else
 #endif
@@ -540,7 +540,7 @@ bool MCSystemShowEvent(MCStringRef p_event_id, MCStringRef& r_result)
     t_show_event = [[com_runrev_livecode_MCIPhonePickEventDelegate alloc] init];
 	[t_show_event showViewEvent:t_ns_event withResult: t_ns_result];
     if (t_ns_result != nil)
-		t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_result);
+		t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_result);
     [t_ns_result release];
     [t_show_event release];
     return t_result;
@@ -554,7 +554,7 @@ bool MCSystemCreateEvent(MCStringRef& r_result)
     t_create_event = [[com_runrev_livecode_MCIPhonePickEventDelegate alloc] init];
 	[t_create_event showCreateEvent: t_ns_result];
     if (t_ns_result.length > 0)
-		t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_result);
+		t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_result);
     [t_ns_result release];
     return t_result;
 }
@@ -572,7 +572,7 @@ bool MCSystemUpdateEvent(MCStringRef p_event_id, MCStringRef& r_result)
         // Allow the user to update the event data
         [t_update_event showUpdateEvent: t_ns_event withResult:t_ns_result];
         if (t_ns_result != nil)
-            t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_result);
+            t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_result);
     }
     
     [t_ns_result release];
@@ -604,7 +604,7 @@ bool MCSystemRemoveEvent(MCStringRef p_event_id, bool p_reocurring, MCStringRef&
     t_delete_event = [[com_runrev_livecode_MCIPhonePickEventDelegate alloc] init];
     [t_delete_event deleteEvent: t_ns_event withInstances:p_reocurring withResult: t_ns_result];
     if (t_ns_result != NULL)
-		t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_event_id_deleted);
+		t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_event_id_deleted);
     [t_ns_result release];
     [t_ns_event release];
     return t_result;
@@ -618,7 +618,7 @@ bool MCSystemAddEvent(MCCalendar p_new_calendar_data, MCStringRef& r_result)
     t_add_event = [[com_runrev_livecode_MCIPhonePickEventDelegate alloc] init];
 	[t_add_event addEvent: p_new_calendar_data withResult: t_ns_result];
 	if (t_ns_result != NULL)
-		t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_result);
+		t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_result);
     [t_ns_result release];
     return t_result;
 }
@@ -631,7 +631,7 @@ bool MCSystemGetCalendarsEvent(MCStringRef& r_result)
     t_get_calendars_event = [[com_runrev_livecode_MCIPhonePickEventDelegate alloc] init];
 	[t_get_calendars_event getCalendarsEvent: t_ns_result];
 	if (t_ns_result != NULL)
-		t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_result);
+		t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_result);
     [t_ns_result release];
     return t_result;
 }
@@ -663,7 +663,7 @@ bool MCSystemFindEvent(MCDateTime p_start_date, MCDateTime p_end_date, MCStringR
         t_find_event = [[com_runrev_livecode_MCIPhonePickEventDelegate alloc] init];
     	[t_find_event findEvent:t_start_date andEnd: t_end_date withResult: t_ns_result];
 	    if (t_ns_result != NULL)
-            t_result = MCStringCreateWithCFString((CFStringRef)t_ns_result, r_result);
+            t_result = MCStringCreateWithCFStringRef((CFStringRef)t_ns_result, r_result);
     }
     
     [t_ns_result release];

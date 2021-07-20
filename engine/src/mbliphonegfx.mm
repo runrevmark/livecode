@@ -34,8 +34,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #import <QuartzCore/QuartzCore.h>
 #import <OpenGLES/EAGL.h>
 #import <OpenGLES/EAGLDrawable.h>
-#import <OpenGLES/ES1/gl.h>
-#import <OpenGLES/ES1/glext.h>
+#import <OpenGLES/ES3/gl.h>
+#import <OpenGLES/ES3/glext.h>
+
+#include "glcontext.h"
 
 #include "mbliphoneview.h"
 
@@ -61,11 +63,6 @@ extern void MCIPhoneCallOnMainFiber(void (*)(void *), void *);
 static inline MCGRectangle MCGRectangleFromCGRect(CGRect p_rect)
 {
 	return MCGRectangleMake(p_rect.origin.x, p_rect.origin.y, p_rect.size.width, p_rect.size.height);
-}
-
-static inline CGRect MCRectangleToCGRect(const MCRectangle &p_rect)
-{
-	return CGRectMake(p_rect.x, p_rect.y, p_rect.width, p_rect.height);
 }
 
 static inline MCRectangle MCRectangleFromCGRect(const CGRect &p_rect)
@@ -102,7 +99,7 @@ protected:
 	MCGRegionRef m_region;
 	bool m_own_region;
 	   
-	virtual void FlushBits(MCGIntegerRectangle p_area, void *p_bits, uint32_t p_stride) = 0;
+	virtual void FlushBits(MCGIntegerRectangle p_area, void *p_bits, uint32_t p_stride, bool &x_taken) = 0;
 
 public:
 	MCIPhoneStackSurface(MCGRegionRef p_region)
@@ -197,10 +194,16 @@ public:
 		if (p_raster . pixels == nil)
 			return;
 
+        bool t_taken = false;
+        
 		if (p_update)
-			FlushBits(p_area, p_raster . pixels, p_raster . stride);
+			FlushBits(p_area, p_raster . pixels, p_raster . stride, t_taken);
+        
+        if (!t_taken)
+        {
+            free(p_raster.pixels);
+        }
 		
-		free(p_raster . pixels);
 	}
 	
 	bool Composite(MCGRectangle p_dst_rect, MCGImageRef p_src, MCGRectangle p_src_rect, MCGFloat p_alpha, MCGBlendMode p_blend)
@@ -337,7 +340,7 @@ public:
 	
 protected:
     // MM-2014-07-31: [[ ThreadedRendering ]] Updated to pass in the area we wish to draw.
-	void FlushBits(MCGIntegerRectangle p_area, void *p_bits, uint32_t p_stride)
+	void FlushBits(MCGIntegerRectangle p_area, void *p_bits, uint32_t p_stride, bool &x_taken)
 	{
 		void *t_target;
 		if (!LockTarget(kMCStackSurfaceTargetCoreGraphics, t_target))
@@ -368,6 +371,8 @@ protected:
 		
 		if (MCGRasterToCGImage(t_raster, MCGIntegerRectangleMake(0, 0, p_area.size.width, p_area.size.height), t_colorspace, false, false, t_image))
 		{
+            x_taken = true;
+            
 			CGContextDrawImage(t_context, CGRectMake((float)p_area.origin.x, (float)(m_height - (p_area.origin.y + p_area.size.height)), (float)p_area.size.width, (float)p_area.size.height), t_image);
 			CGImageRelease(t_image);
 		}
@@ -476,7 +481,6 @@ bool MCMacDoUpdateRegionCallback(void *p_context, const MCRectangle &p_rect)
 	
 	MCGRegionAddRegion(s_redraw_region, (MCGRegionRef)p_region);
 	MCRegionForEachRect(p_region, MCMacDoUpdateRegionCallback, self);
-	[[self layer] displayIfNeeded];
 }
 
 @end
@@ -521,7 +525,7 @@ public:
 
 protected:
     // MM-2014-07-31: [[ ThreadedRendering ]] Updated to pass in the area we wish to draw.
-	void FlushBits(MCGIntegerRectangle p_area, void *p_bits, uint32_t p_stride)
+	void FlushBits(MCGIntegerRectangle p_area, void *p_bits, uint32_t p_stride, bool& x_taken)
 	{
 		GLuint t_texture;
 		glGenTextures(1, &t_texture);
@@ -534,27 +538,20 @@ protected:
 		// IM_2013-08-21: [[ RefactorGraphics ]] set iOS pixel format to RGBA
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
-		glMatrixMode(GL_TEXTURE);
-		glLoadIdentity();
+		MCGLContextRef t_glcontext;
+		t_glcontext = MCPlatformGetOpenGLContext();
 		
-		glEnable(GL_TEXTURE_2D);
+		MCGLContextSelectProgram(t_glcontext, kMCGLProgramTypeTexture);
+		MCGLContextSetWorldTransform(t_glcontext, MCGAffineTransformMakeIdentity());
+		MCGLContextSetTextureTransform(t_glcontext, MCGAffineTransformMakeIdentity());
+		
 		glDisable(GL_BLEND);
-		glColor4ub(255, 255, 255, 255);
 		
-		GLfloat t_vertices[8];
-		
-		GLfloat t_coords[8] =
-		{
-			0, 0,
-			1.0, 0.0,
-			0.0, 1.0,
-			1.0, 1.0
-		};
-		
-		glVertexPointer(2, GL_FLOAT, 0, t_vertices);
-		glTexCoordPointer(2, GL_FLOAT, 0, t_coords);
+		MCGLTextureVertex t_vertices[4];
+		t_vertices[0].texture_position[0] = 0.0; t_vertices[0].texture_position[1] = 0.0;
+		t_vertices[1].texture_position[0] = 1.0; t_vertices[1].texture_position[1] = 0.0;
+		t_vertices[2].texture_position[0] = 0.0; t_vertices[2].texture_position[1] = 1.0;
+		t_vertices[3].texture_position[0] = 1.0; t_vertices[3].texture_position[1] = 1.0;
 		
 		for(int32_t y = 0; y < (m_height + 255) / 256; y++)
 			for(int32_t x = 0; x < (m_width + 255) / 256; x++)
@@ -573,16 +570,17 @@ protected:
 				t_py = m_height - y * 256 - 256;
 				
 				// Setup co-ords.
-				t_vertices[0] = t_px, t_vertices[1] = t_py + 256;
-				t_vertices[2] = t_px + 256, t_vertices[3] = t_py + 256;
-				t_vertices[4] = t_px, t_vertices[5] = t_py;
-				t_vertices[6] = t_px + 256, t_vertices[7] = t_py;
+				t_vertices[0].position[0] = t_px, t_vertices[0].position[1] = t_py + 256;
+				t_vertices[1].position[0] = t_px + 256, t_vertices[1].position[1] = t_py + 256;
+				t_vertices[2].position[0] = t_px, t_vertices[2].position[1] = t_py;
+				t_vertices[3].position[0] = t_px + 256, t_vertices[3].position[1] = t_py;
 				
+				glBufferData(GL_ARRAY_BUFFER, sizeof(MCGLTextureVertex) * 4, t_vertices, GL_STREAM_DRAW);
 				glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 			}
 		
 		glDeleteTextures(1, &t_texture);
-	}
+    }
 };
 
 @implementation MCIPhoneOpenGLDisplayView
@@ -607,25 +605,22 @@ protected:
 	t_layer = (CAEAGLLayer *)[self layer];
 	
 	[t_layer setOpaque: YES];
-	[t_layer setDrawableProperties:
-				[NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithBool:FALSE], kEAGLDrawablePropertyRetainedBacking, kEAGLColorFormatRGBA8, kEAGLDrawablePropertyColorFormat, nil]];
+	[t_layer setDrawableProperties: @{kEAGLDrawablePropertyRetainedBacking: @NO, kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8}];
 	
 	// Initialize the context
 	
-	m_context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES1];
+	m_context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
 	[EAGLContext setCurrentContext: m_context];
 	
-	glGenFramebuffersOES(1, &m_framebuffer);
-	glGenRenderbuffersOES(1, &m_renderbuffer);
-	glBindFramebufferOES(GL_FRAMEBUFFER_OES, m_framebuffer);
-	glBindRenderbufferOES(GL_RENDERBUFFER_OES, m_renderbuffer);
-	glFramebufferRenderbufferOES(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_RENDERBUFFER_OES, m_renderbuffer);
+	/* UNCHECKED */ MCGLContextInit(MCPlatformGetOpenGLContext());
+
+	glGenFramebuffers(1, &m_framebuffer);
+	glGenRenderbuffers(1, &m_renderbuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+	glBindRenderbuffer(GL_RENDERBUFFER, m_renderbuffer);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_renderbuffer);
 
 	glDisable(GL_DEPTH_TEST);
-	glDisableClientState(GL_COLOR_ARRAY);
-	glEnable(GL_TEXTURE_2D);
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     
 	return self;
 }
@@ -651,14 +646,14 @@ protected:
 
 - (BOOL)resizeFromLayer:(CAEAGLLayer *)layer
 {
-    glBindRenderbufferOES(GL_RENDERBUFFER_OES, m_renderbuffer);
-    [m_context renderbufferStorage:GL_RENDERBUFFER_OES fromDrawable:layer];
-	glGetRenderbufferParameterivOES(GL_RENDERBUFFER_OES, GL_RENDERBUFFER_WIDTH_OES, &m_backing_width);
-    glGetRenderbufferParameterivOES(GL_RENDERBUFFER_OES, GL_RENDERBUFFER_HEIGHT_OES, &m_backing_height);
+    glBindRenderbuffer(GL_RENDERBUFFER, m_renderbuffer);
+    [m_context renderbufferStorage:GL_RENDERBUFFER fromDrawable:layer];
+	glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &m_backing_width);
+    glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &m_backing_height);
 	
-    if (glCheckFramebufferStatusOES(GL_FRAMEBUFFER_OES) != GL_FRAMEBUFFER_COMPLETE_OES)
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 	{
-		NSLog(@"Failed to make complete framebuffer object %x", glCheckFramebufferStatusOES(GL_FRAMEBUFFER_OES));
+		NSLog(@"Failed to make complete framebuffer object %x", glCheckFramebufferStatus(GL_FRAMEBUFFER));
         return NO;
     }
     
@@ -676,16 +671,20 @@ protected:
 	
     [EAGLContext setCurrentContext: m_context];
 	
-    glBindFramebufferOES(GL_FRAMEBUFFER_OES, m_framebuffer);
+    MCGLContextRef t_glcontext;
+    t_glcontext = MCPlatformGetOpenGLContext();
+	
+    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
     glClear(GL_COLOR_BUFFER_BIT);
 	
 	glViewport(0, 0, m_backing_width, m_backing_height);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrthof(0, (GLfloat)m_backing_width, 0, (GLfloat)m_backing_height, 0, 1);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
 	
+	// create transform from {0, 0, surface_width, surface_height} to GL normaized coords
+	MCGAffineTransform t_projection;
+	t_projection = MCGAffineTransformFromRectangles(MCGRectangleMake(0, 0, m_backing_width, m_backing_height), MCGRectangleMake(-1,-1,2,2));
+	MCGLContextSetProjectionTransform(t_glcontext, t_projection);
+	MCGLContextSetWorldTransform(t_glcontext, MCGAffineTransformMakeIdentity());
+	MCGLContextSetTextureTransform(t_glcontext, MCGAffineTransformMakeIdentity());
 	MCOpenGLStackSurface t_surface([self layer], m_backing_width, m_backing_height);
 	   
 	MCGRegionRef t_dirty_rgn;
@@ -700,8 +699,8 @@ protected:
 	
 	MCGRegionDestroy(t_dirty_rgn);
 	
-    glBindRenderbufferOES(GL_RENDERBUFFER_OES, m_renderbuffer);
-    [m_context presentRenderbuffer:GL_RENDERBUFFER_OES];
+    glBindRenderbuffer(GL_RENDERBUFFER, m_renderbuffer);
+    [m_context presentRenderbuffer:GL_RENDERBUFFER];
 }
 
 @end

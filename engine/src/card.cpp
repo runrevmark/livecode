@@ -56,6 +56,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "vclip.h"
 #include "redraw.h"
 #include "widget.h"
+#include "graphics_util.h"
 
 #include "globals.h"
 #include "mctheme.h"
@@ -321,6 +322,8 @@ void MCCard::kfocus()
         // MW-2014-08-12: [[ Bug 13167 ]] Sync the view focus before the engine state
         //   (otherwise the engine state can change due to script).
         MCscreen -> controlgainedfocus(getstack(), kfocused -> getid());
+		// Mark card as focused
+		setstate(true, CS_KFOCUSED);
 		kfocused->getref()->kfocus();
 	}
 	if (kfocused == NULL)
@@ -360,6 +363,8 @@ Boolean MCCard::kfocusnext(Boolean top)
                     // MW-2014-08-12: [[ Bug 13167 ]] Sync the view focus before the engine state
                     //   (otherwise the engine state can change due to script).
 					MCscreen -> controllostfocus(getstack(), oldkfocused -> getid());
+					// Mark card as unfocused
+					setstate(false, CS_KFOCUSED);
 					oldkfocused->getref()->kunfocus();
 					if (oldkfocused == NULL)
 						return False;
@@ -370,6 +375,8 @@ Boolean MCCard::kfocusnext(Boolean top)
             // MW-2014-07-29: [[ Bug 13001 ]] Sync the view focus before the engine state
             //   (otherwise the engine state can change due to script).
 			MCscreen -> controlgainedfocus(getstack(), kfocused -> getid());
+			// Mark card as focused
+			setstate(true, CS_KFOCUSED);
 			kfocused->getref()->kfocus();
 			done = True;
 			break;
@@ -419,6 +426,8 @@ Boolean MCCard::kfocusprev(Boolean bottom)
                     // MW-2014-08-12: [[ Bug 13167 ]] Sync the view focus before the engine state
                     //   (otherwise the engine state can change due to script).
 					MCscreen -> controllostfocus(getstack(), oldkfocused -> getid());
+					// Mark card as unfocused
+					setstate(false, CS_KFOCUSED);
 					oldkfocused->getref()->kunfocus();
 					if (oldkfocused == NULL)
 						return False;
@@ -429,6 +438,8 @@ Boolean MCCard::kfocusprev(Boolean bottom)
             // MW-2014-07-29: [[ Bug 13001 ]] Sync the view focus before the engine state
             //   (otherwise the engine state can change due to script).
 			MCscreen -> controlgainedfocus(getstack(), kfocused -> getid());
+			// Mark card as focused
+			setstate(true, CS_KFOCUSED);
 			kfocused->getref()->kfocus();
 			done = True;
 			break;
@@ -452,6 +463,8 @@ void MCCard::kunfocus()
         // MW-2014-08-12: [[ Bug 13167 ]] Sync the view focus before the engine state
         //   (otherwise the engine state can change due to script).
         MCscreen -> controllostfocus(getstack(), oldkfocused -> getid());
+		// Mark card as unfocused
+		setstate(false, CS_KFOCUSED);
 		oldkfocused->getref()->kunfocus();
 	}
 	else
@@ -665,8 +678,10 @@ Boolean MCCard::mfocus(int2 x, int2 y)
 
 				MCRedrawUnlockScreen();
 
-				// MW-2011-08-19: [[ Layers ]] Ensure the selection rect is updated.
-				layer_selectedrectchanged(oldrect, selrect);
+                /* The set of selected controls has changed so dirty the old
+                 * rect, and the new. */
+				dirtyselection(oldrect);
+                dirtyselection(selrect);
 			}
 			message_with_args(MCM_mouse_move, x, y);
 			return true;
@@ -918,8 +933,10 @@ Boolean MCCard::mup(uint2 which, bool p_release)
 				if (state & CS_SIZE)
 				{
 					state &= ~CS_SIZE;
-					// MW-2011-08-18: // MW-2011-08-19: [[ Layers ]] Ensure the selection rect is updated.
-					layer_dirtyrect(selrect);
+                    
+                    /* The selection marquee has finished, so update the selection
+                     * layer. */
+                    dirtyselection(selrect);
 					
 					// MM-2012-11-05: [[ Object selection started/ended message ]]
 					if (m_selecting_objects)
@@ -1377,6 +1394,8 @@ void MCCard::kfocusset(MCControl *target)
             // MW-2014-08-12: [[ Bug 13167 ]] Sync the view focus before the engine state
             //   (otherwise the engine state can change due to script).
             MCscreen -> controllostfocus(getstack(), tkfocused -> getid());
+			// Mark card as unfocused
+			setstate(false, CS_KFOCUSED);
 			tkfocused->getref()->kunfocus();
 		}
 		if (kfocused != NULL)
@@ -1390,6 +1409,8 @@ void MCCard::kfocusset(MCControl *target)
                 // MW-2014-08-12: [[ Bug 13167 ]] Sync the view focus before the engine state
                 //   (otherwise the engine state can change due to script).
                 MCscreen -> controlgainedfocus(getstack(), kfocused -> getid());
+				// Mark card as focused
+				setstate(true, CS_KFOCUSED);
 				kfocused->getref()->kfocus();
 
 				// OK-2009-04-29: [[Bug 8013]] - Its possible that kfocus() can set kfocused to NULL if the 
@@ -1589,12 +1610,12 @@ void MCCard::relayercontrol(MCControl *p_source, MCControl *p_target)
 		t_target_ptr = nil;
 
 	// Get the previous / next ptrs.
-	MCObjptr *t_previous, *t_next;
-	t_previous = t_source_ptr -> prev() != objptrs ? t_source_ptr -> prev() : nil;
-	t_next = t_source_ptr -> next() != objptrs ? t_source_ptr -> next() : nil;
+	MCControl *t_previous, *t_next;
+	t_previous = MCControlPreviousByLayer(p_source);
+	t_next = MCControlNextByLayer(p_source);
 
 	// If the source control already precedes the target then we are done.
-	if (t_next == t_target_ptr)
+	if (t_next == p_target)
 		return;
 
 	// Otherwise, remove the layer.
@@ -1611,7 +1632,9 @@ void MCCard::relayercontrol(MCControl *p_source, MCControl *p_target)
 	}
 	else
 		t_source_ptr -> appendto(objptrs);
-	layer_added(p_source, t_source_ptr -> prev() != objptrs ? t_source_ptr -> prev() : nil, t_source_ptr -> next() != objptrs ? t_source_ptr -> next() : nil);
+	layer_added(p_source, MCControlPreviousByLayer(p_source), MCControlNextByLayer(p_source));
+
+	p_source->layerchanged();
 }
 
 void MCCard::relayercontrol_remove(MCControl *p_control)
@@ -1619,12 +1642,15 @@ void MCCard::relayercontrol_remove(MCControl *p_control)
 	MCObjptr *t_control_ptr;
 	t_control_ptr = getobjptrforcontrol(p_control);
 	
-	MCObjptr *t_previous, *t_next;
-	t_previous = t_control_ptr -> prev() != objptrs ? t_control_ptr -> prev() : nil;
-	t_next = t_control_ptr -> next() != objptrs ? t_control_ptr -> next() : nil;
+	MCControl *t_previous, *t_next;
+	t_previous = MCControlPreviousByLayer(p_control);
+	t_next = MCControlNextByLayer(p_control);
 	
 	// Remove the control from the card's objptr list.
 	t_control_ptr -> remove(objptrs);
+	// make sure this card no longer points to the removed control
+	clearfocus(t_control_ptr, nullptr);
+	
 	delete t_control_ptr;
 
 	// Remove the control from the stack's list.
@@ -1663,7 +1689,9 @@ void MCCard::relayercontrol_insert(MCControl *p_control, MCControl *p_target)
 	}
 	else
 		t_control_ptr -> appendto(objptrs);
-	layer_added(p_control, t_control_ptr -> prev() != objptrs ? t_control_ptr -> prev() : nil, t_control_ptr -> next() != objptrs ? t_control_ptr -> next() : nil);
+	layer_added(p_control, MCControlPreviousByLayer(p_control), MCControlNextByLayer(p_control));
+
+	p_control->layerchanged();
 }
 
 Exec_stat MCCard::relayer(MCControl *optr, uint2 newlayer)
@@ -1794,9 +1822,7 @@ Exec_stat MCCard::relayer(MCControl *optr, uint2 newlayer)
                 t_insert_iter->append(newptr);
         }
 
-        layer_added(optr,
-                    (newptr->prev() != objptrs->prev()) ? newptr->prev() : nil,
-                    (newptr->next() != objptrs)         ? newptr->next() : nil);
+		layer_added(optr, MCControlPreviousByLayer(optr), MCControlNextByLayer(optr));
 	}
 
 	if (oldparent == this)
@@ -2486,7 +2512,6 @@ Boolean MCCard::removecontrol(MCControl *cptr, Boolean needredraw, Boolean cf)
 	t_stack = getstack();
 
 	MCObjptr *optr = objptrs;
-	MCObjptr *t_previous_optr = nil;
 	do
 	{
 		if (optr->getref() == cptr)
@@ -2497,17 +2522,16 @@ Boolean MCCard::removecontrol(MCControl *cptr, Boolean needredraw, Boolean cf)
 				removedcontrol = optr;
 
 			// MW-2011-08-19: [[ Layers ]] Compute the next objptr, or nil if we are at the end.
-			MCObjptr *t_next_optr;
-			t_next_optr = optr -> next();
-			if (t_next_optr == objptrs)
-				t_next_optr = nil;
+			MCControl *t_previous, *t_next;
+			t_previous = MCControlPreviousByLayer(optr->getref());
+			t_next = MCControlNextByLayer(optr->getref());
 
 			// Remove the control from the card and close it.
 			optr->remove(objptrs);
 			delete optr;
             
             // MW-2011-08-19: [[ Layers ]] Notify the stack that a layer has been removed.
-            layer_removed(cptr, t_previous_optr, t_next_optr);
+            layer_removed(cptr, t_previous, t_next);
             
 			if (opened)
 			{
@@ -2517,7 +2541,6 @@ Boolean MCCard::removecontrol(MCControl *cptr, Boolean needredraw, Boolean cf)
 
 			return True;
 		}
-		t_previous_optr = optr;
 		optr = optr->next();
 	}
 	while (optr != objptrs);
@@ -2557,8 +2580,7 @@ void MCCard::erasefocus(MCObject *p_object)
 
 MCObjptr *MCCard::newcontrol(MCControl *cptr, Boolean needredraw)
 {
-	if (opened)
-		cptr->setparent(this);
+	cptr->setparent(this);
 
 	MCObjptr *newptr = new (nothrow) MCObjptr;
 	newptr->setparent(this);
@@ -2566,7 +2588,7 @@ MCObjptr *MCCard::newcontrol(MCControl *cptr, Boolean needredraw)
 	newptr->appendto(objptrs);
 
 	// MW-2011-08-19: [[ Layers ]] Notify the stack that a layer may have ben inserted.
-	layer_added(cptr, objptrs != newptr ? newptr -> prev() : nil, nil);
+	layer_added(cptr, MCControlPreviousByLayer(cptr), MCControlNextByLayer(cptr));
 
 	if (opened)
 		cptr->open();
@@ -3028,78 +3050,51 @@ void MCCard::drawbackground(MCContext *p_context, const MCRectangle &p_dirty)
 	p_context->fillrect(p_dirty);
 }
 
-// IM-2013-09-13: [[ RefactorGraphics ]] Factor out card selection rect drawing to separate method
-void MCCard::drawselectionrect(MCContext *p_context)
-{
-    drawmarquee(p_context, selrect);
-}
-
-void MCCard::drawselectedchildren(MCDC *dc)
+/* The card's drawselection method first renders the selections of all children
+ * and then renders the marquee. */
+void MCCard::drawselection(MCContext *p_context, const MCRectangle& p_dirty)
 {
     MCObjptr *tptr = objptrs;
     if (tptr == nil)
         return;
+
     do
     {
         MCControl *t_control = tptr->getref();
-        if (t_control != nullptr)
+        if (t_control != nullptr &&
+            t_control->getopened() != 0 &&
+            (t_control->getflag(F_VISIBLE) || showinvisible()))
         {
-            if (tptr -> getref() -> getstate(CS_SELECTED))
-                tptr->getref()->drawselected(dc);
-        
-            if (tptr -> getrefasgroup() != nil)
-                tptr -> getrefasgroup() -> drawselectedchildren(dc);
+            t_control->drawselection(p_context, p_dirty);
         }
             
         tptr = tptr->next();
     }
     while (tptr != objptrs);
+    
+    if (getstate(CS_SIZE))
+    {
+        drawmarquee(p_context, selrect);
+    }
 }
 
 void MCCard::dirtyselection(const MCRectangle &p_rect)
 {
-	// redraw marquee rect
-	// selrect with 0 width or height will still draw a 1px line, so increase rect size to account for this.
-	layer_dirtyrect(MCU_reduce_rect(p_rect, -1));
-	
-	// redraw selection handles
-	MCRectangle t_handles[8];
-	MCControl::sizerects(p_rect, t_handles);
-
-	for (uint32_t i = 0; i < 8; i++)
-		layer_dirtyrect(t_handles[i]);
-}
-
-bool MCCard::updatechildselectedrect(MCRectangle& x_rect)
-{
-    bool t_updated;
-    t_updated = false;
+    MCRectangle t_rect = MCU_reduce_rect(p_rect, -(1 + MCsizewidth / 2));
     
-    MCObjptr *t_objptr = objptrs;
-    if (t_objptr == nil)
-        return t_updated;
-    do
+    MCTileCacheRef t_tilecache = getstack()->view_gettilecache();
+    if (t_tilecache != nullptr)
     {
-        MCControl *t_control;
-        t_control = t_objptr -> getref();
+        MCGAffineTransform t_transform =
+                getstack()->getdevicetransform();
         
-        if (t_control -> getstate(CS_SELECTED))
-        {
-            x_rect = MCU_union_rect(t_control -> geteffectiverect(), x_rect);
-            t_updated = true;
-        }
+        MCRectangle32 t_device_rect =
+                MCRectangle32GetTransformedBounds(t_rect, t_transform);
         
-        if (t_control -> gettype() == CT_GROUP)
-        {
-            MCGroup *t_group = static_cast<MCGroup *>(t_control);
-            t_updated = t_updated | t_group -> updatechildselectedrect(x_rect);
-        }
-        
-        t_objptr = t_objptr->next();
+        MCTileCacheUpdateScenery(t_tilecache, m_fg_layer_id, t_device_rect);
     }
-    while (t_objptr != objptrs);
     
-    return t_updated;
+    layer_dirtyrect(t_rect);
 }
 
 void MCCard::draw(MCDC *dc, const MCRectangle& dirty, bool p_isolated)
@@ -3127,18 +3122,14 @@ void MCCard::draw(MCDC *dc, const MCRectangle& dirty, bool p_isolated)
 		}
 		while (tptr != objptrs);
 	}
-    
-    // Draw the selection outline and handles on top of everything
-    drawselectedchildren(dc);
-    
+
 	dc -> setopacity(255);
 	dc -> setfunction(GXcopy);
 
 	if (t_draw_cardborder)
 		drawcardborder(dc, dirty);
 	
-	if (getstate(CS_SIZE))
-		drawselectionrect(dc);
+    drawselection(dc, dirty);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -294,13 +294,21 @@ template <>
 struct PodFieldPropType<MCInterfaceFieldTabAlignments>
 {
     typedef MCInterfaceFieldTabAlignments value_type;
-    typedef MCInterfaceFieldTabAlignments stack_type;
+    struct stack_type
+    {
+        MCInterfaceFieldTabAlignments alignments;
+        ~stack_type()
+        {
+            if (alignments.m_alignments != nil)
+                MCMemoryDeallocate(alignments.m_alignments);
+        }
+    };
     typedef MCInterfaceFieldTabAlignments return_type;
     typedef const MCInterfaceFieldTabAlignments& arg_type;
     
-    template<typename X> static void getter(MCExecContext& ctxt, X *sptr, void (X::*p_getter)(MCExecContext& ctxt, return_type&), return_type& r_value)
+    template<typename X> static void getter(MCExecContext& ctxt, X *sptr, void (X::*p_getter)(MCExecContext& ctxt, return_type&), stack_type& r_value)
     {
-        (sptr ->* p_getter)(ctxt, r_value);
+        (sptr ->* p_getter)(ctxt, r_value.alignments);
     }
     
     template<typename X> static void setter(MCExecContext &ctxt, X *sptr, void (X::*p_setter)(MCExecContext& ctxt, arg_type), arg_type p_value)
@@ -308,21 +316,21 @@ struct PodFieldPropType<MCInterfaceFieldTabAlignments>
         (sptr ->* p_setter)(ctxt, p_value);
     }
     
-    static void init(MCInterfaceFieldTabAlignments& self)
+    static void init(stack_type& self)
     {
-        self . m_count = 0;
-        self . m_alignments = 0;
+        self.alignments.m_count = 0;
+        self.alignments.m_alignments = 0;
     }
     
     static void input(value_type p_value, stack_type& r_value)
     {
-        r_value = p_value;
+        r_value.alignments = p_value;
     }
     
     static bool equal(const stack_type& a, const stack_type& b)
     {
-        return (a . m_count == b . m_count
-                && MCMemoryCompare(a . m_alignments, b . m_alignments, a . m_count * sizeof(intenum_t)) == 0);
+        return (a.alignments.m_count == b.alignments.m_count
+                && MCMemoryCompare(a.alignments.m_alignments, b.alignments.m_alignments, a.alignments.m_count * sizeof(intenum_t)) == 0);
     }
     
     //static void assign(stack_type& x, stack_type y)
@@ -330,9 +338,10 @@ struct PodFieldPropType<MCInterfaceFieldTabAlignments>
     //    x = y;
     //}
     
-    static void output(stack_type p_value, return_type& r_value)
+    static void output(stack_type& p_value, return_type& r_value)
     {
-        r_value = p_value;
+        r_value = p_value.alignments;
+        p_value.alignments.m_alignments = nil;
     }
     
     static bool need_layout()
@@ -340,9 +349,9 @@ struct PodFieldPropType<MCInterfaceFieldTabAlignments>
         return true;
     }
     
-    static bool is_set(const MCInterfaceFieldTabAlignments& p_alignments)
+    static bool is_set(stack_type& p_alignments)
     {
-        return p_alignments.m_alignments != nil;
+        return p_alignments.alignments.m_alignments != nil;
     }
 };
 
@@ -557,6 +566,7 @@ template<typename T> void GetParagraphPropOfCharChunk(MCExecContext& ctxt, MCFie
     do
     {
         typename T::stack_type t_new_value;
+        T::init(t_new_value);
         T::getter(ctxt, sptr, p_getter, t_new_value);
         if (ctxt . HasError())
             return;
@@ -611,6 +621,11 @@ template<typename T> void GetCharPropOfCharChunk(MCExecContext& ctxt, MCField *p
         
         t_firstblock = sptr -> getblocks();
         t_block = sptr -> indextoblock(si, False);
+        
+        while(t_block->next() != t_firstblock && t_block->GetLength() == 0)
+        {
+            t_block = t_block->next();
+        }
         
         for(;;)
         {
@@ -949,7 +964,7 @@ template<typename T> void SetParagraphPropOfCharChunk(MCExecContext& ctxt, MCFie
         ei -= sptr->gettextlengthcr();
         sptr = sptr->next();
     }
-    while(ei > 0);
+    while(ei >= 0);
 
     // SN-2014-11-04: [[ Bug 13934 ]] Laying out a field refactored.
     FinishLayout(t_layout_settings);
@@ -1283,6 +1298,11 @@ static void setparagraphattr_uint8(MCParagraphAttrs*& attrs, uint32_t p_flag, si
 static void setparagraphattr_int16(MCParagraphAttrs*& attrs, uint32_t p_flag, size_t p_field_offset, integer_t *p_value)
 {
     setparagraphattr_int<int16_t, INT16_MIN, INT16_MAX>(attrs, p_flag, p_field_offset, (int16_t *)p_value);
+}
+
+static void setparagraphattr_uint16(MCParagraphAttrs*& attrs, uint32_t p_flag, size_t p_field_offset, uinteger_t *p_value)
+{
+    setparagraphattr_int<uint16_t, 0, UINT16_MAX>(attrs, p_flag, p_field_offset, (uint16_t *)p_value);
 }
 
 static void setparagraphattr_color(MCParagraphAttrs*& attrs, uint32_t p_flag, size_t p_field_offset, const MCInterfaceNamedColor& p_color)
@@ -1774,16 +1794,23 @@ void MCField::SetVisitedOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int
     SetCharPropOfCharChunk< PodFieldPropType<bool> >(ctxt, this, false, p_part_id, si, ei, &MCBlock::SetVisited,p_value);
 }
 
-void MCField::GetEncodingOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, intenum_t &r_encoding)
+void MCField::GetEncodingOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t p_start, int32_t p_finish, intenum_t& r_encoding)
 {
-    intenum_t t_encoding;
-    bool t_mixed;
-    GetParagraphPropOfCharChunk< PodFieldPropType<intenum_t> >(ctxt, this, p_part_id, si, ei, &MCParagraph::GetEncoding, t_mixed, t_encoding);
-
-    if (!t_mixed)
-        r_encoding = t_encoding;
+    MCAutoStringRef t_value;
+    if (!exportastext(p_part_id, p_start, p_finish, &t_value))
+    {
+        ctxt.Throw();
+        return;
+    }
+     
+    if (MCStringCanBeNative(*t_value))
+    {
+        r_encoding = 0;
+    }
     else
-        r_encoding = 2;
+    {
+        r_encoding = 1;
+    }
 }
 
 void MCField::GetFlaggedOfCharChunk(MCExecContext& ctxt, uint32_t p_part_id, int32_t si, int32_t ei, bool& r_mixed, bool& r_value)
@@ -2712,7 +2739,7 @@ void MCParagraph::GetEffectiveSpaceAbove(MCExecContext& ctxt, uinteger_t& r_spac
 
 void MCParagraph::SetSpaceAbove(MCExecContext& ctxt, uinteger_t *p_space)
 {
-    setparagraphattr_int<uinteger_t, 0, 32767>(attrs, PA_HAS_SPACE_ABOVE, offsetof(MCParagraphAttrs, space_above), p_space);
+    setparagraphattr_uint16(attrs, PA_HAS_SPACE_ABOVE, offsetof(MCParagraphAttrs, space_above), p_space);
 }
 
 void MCParagraph::GetSpaceBelow(MCExecContext& ctxt, uinteger_t *&r_space)
@@ -2730,7 +2757,7 @@ void MCParagraph::GetEffectiveSpaceBelow(MCExecContext& ctxt, uinteger_t& r_spac
 
 void MCParagraph::SetSpaceBelow(MCExecContext& ctxt, uinteger_t *p_space)
 {
-    setparagraphattr_int<uinteger_t, 0, 32767>(attrs, PA_HAS_SPACE_BELOW, offsetof(MCParagraphAttrs, space_below), p_space);
+    setparagraphattr_uint16(attrs, PA_HAS_SPACE_BELOW, offsetof(MCParagraphAttrs, space_below), p_space);
 }
 
 void MCParagraph::DoSetTabStops(MCExecContext &ctxt, bool p_is_relative, const vector_t<uinteger_t>& p_tabs)

@@ -38,10 +38,9 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "cmds.h"
 #include "license.h"
 #include "redraw.h"
+#include "keywords.h"
 
 #include "exec.h"
-
-#include "syntax.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -170,8 +169,9 @@ Parse_stat MCHandler::parse(MCScriptPoint &sp, Boolean isprop)
 	
 	const LT *te;
 	// MW-2010-01-08: [[Bug 7792]] Check whether the handler name is a reserved function identifier
+    // special case log command is a permitted handler name
 	if (t_type != ST_ID ||
-			sp.lookup(SP_COMMAND, te) != PS_NO_MATCH ||
+			(sp.lookup(SP_COMMAND, te) != PS_NO_MATCH && te -> which != S_LOG) ||
 			(sp.lookup(SP_FACTOR, te) != PS_NO_MATCH &&
 			te -> type == TT_FUNCTION))
 	{
@@ -358,9 +358,8 @@ Exec_stat MCHandler::exec(MCExecContext& ctxt, MCParameter *plist)
 				}
                 
                 MCVariable *t_new_var;
-                /* UNCHECKED */ newparams[i] = new(nothrow) MCContainer;
-				/* UNCHECKED */ MCVariable::createwithname(i < npnames ? pinfo[i] . name : kMCEmptyName, t_new_var);
-                /* UNCHECKED */ MCContainer::createwithvariable(t_new_var, *newparams[i]);
+                /* UNCHECKED */ MCVariable::createwithname(i < npnames ? pinfo[i] . name : kMCEmptyName, t_new_var);
+                /* UNCHECKED */ newparams[i] = new(nothrow) MCContainer(t_new_var);
                 
 				newparams[i]->give_value(ctxt, t_value);
 			}
@@ -380,9 +379,8 @@ Exec_stat MCHandler::exec(MCExecContext& ctxt, MCParameter *plist)
 				break;
 			}
             MCVariable *t_new_var;
-            /* UNCHECKED */ newparams[i] = new(nothrow) MCContainer;
             /* UNCHECKED */ MCVariable::createwithname(i < npnames ? pinfo[i] . name : kMCEmptyName, t_new_var);
-            /* UNCHECKED */ MCContainer::createwithvariable(t_new_var, *newparams[i]);
+            /* UNCHECKED */ newparams[i] = new(nothrow) MCContainer(t_new_var);
 		}
 	}
 	if (err)
@@ -865,46 +863,6 @@ uint4 MCHandler::linecount()
 		stmp = stmp->getnext();
 	}
 	return count;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void MCHandler::compile(MCSyntaxFactoryRef ctxt)
-{
-	MCSyntaxHandlerType t_type;
-	switch(type)
-	{
-		case HT_MESSAGE:
-			t_type = is_private ? kMCSyntaxHandlerTypePrivateCommand : kMCSyntaxHandlerTypeMessage;
-			break;
-		case HT_FUNCTION:
-			t_type = is_private ? kMCSyntaxHandlerTypePrivateFunction : kMCSyntaxHandlerTypeFunction;
-			break;
-		case HT_GETPROP:
-			t_type = kMCSyntaxHandlerTypeGetProp;
-			break;
-		case HT_SETPROP:
-			t_type = kMCSyntaxHandlerTypeSetProp;
-			break;
-		case HT_BEFORE:
-			t_type = kMCSyntaxHandlerTypeBeforeMessage;
-			break;
-		case HT_AFTER:
-			t_type = kMCSyntaxHandlerTypeAfterMessage;
-			break;
-        default:
-            MCUnreachableReturn();
-	}
-	
-	MCSyntaxFactoryBeginHandler(ctxt, t_type, name);
-	
-	for(uindex_t i = 0; i < npnames; i++)
-		MCSyntaxFactoryDefineParameter(ctxt, pinfo[i] . name, pinfo[i] . is_reference);
-	
-	for(MCStatement *t_statement = statements; t_statement != nil; t_statement = t_statement -> getnext())
-		t_statement -> compile(ctxt);
-	
-	MCSyntaxFactoryEndHandler(ctxt);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -56,6 +56,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "stacksecurity.h"
 #include "scriptpt.h"
 #include "widget-events.h"
+#include "parentscript.h"
 
 #include "exec.h"
 #include "exec-interface.h"
@@ -172,6 +173,11 @@ MCDispatch::~MCDispatch()
 	delete m_externals;
     // AL-2015-02-10: [[ Standalone Inclusions ]] Delete library mapping
     MCValueRelease(m_library_mapping);
+}
+
+bool MCDispatch::visit_self(MCObjectVisitor* p_visitor)
+{
+    return p_visitor -> OnObject(this);
 }
 
 bool MCDispatch::isdragsource(void)
@@ -361,14 +367,32 @@ void MCDispatch::removestack(MCStack *sptr)
 
 void MCDispatch::destroystack(MCStack *sptr, Boolean needremove)
 {
+    /* Make sure no messages are sent when destroying the given stack as this
+     * destruction method is only ever used for stacks which are not-yet-alive
+     * (e.g. failed to deserialize) or in restricted contexts (e.g. licensing
+     * dialog on startup). */
+    Boolean oldstate = MClockmessages;
+    MClockmessages = True;
+    
 	if (needremove)
     {
         MCStack *t_substacks = sptr -> getsubstacks();
-        while (t_substacks)
+        while(t_substacks != nullptr)
         {
+            /* The MCStack::dodel() method removes the stack from its mainstack 
+             * so we must explicitly delete it explicitly. Note that there is
+             * no need to scheduledelete() in this case as destroystack() is
+             * only called when it is known that no script is running from the
+             * stack. */
             t_substacks -> dodel();
+            delete t_substacks;
+            
+            /* Refetch the substacks list - the substack we just processed will
+             * have been removed from it. */
             t_substacks = sptr -> getsubstacks();
         }
+        
+        /* Release any references to the mainstack */
         sptr -> dodel();
     }
 	if (sptr == MCstaticdefaultstackptr)
@@ -377,9 +401,13 @@ void MCDispatch::destroystack(MCStack *sptr, Boolean needremove)
 		MCdefaultstackptr = MCstaticdefaultstackptr;
 	if (MCacptr && MCacptr->getmessagestack() == sptr)
 		MCacptr->setmessagestack(NULL);
-	Boolean oldstate = MClockmessages;
-	MClockmessages = True;
+    
+    /* Delete the stack explicitly. Note that there is no need to use
+     * scheduledelete here as destroystack() is only called when it is known
+     * that no script is running from the stack. */
 	delete sptr;
+    
+    /* Restore the previous message lock state. */
 	MClockmessages = oldstate;
 }
 
@@ -517,16 +545,10 @@ IO_stat MCDispatch::readstartupstack(IO_handle stream, MCStack*& r_stack)
     // crash when searching substacks.
     stacks = t_stack;
     
-#ifndef _MOBILE
-	// Make sure parent script references are up to date.
-	if (s_loaded_parent_script_reference)
-		t_stack -> resolveparentscripts();
-#else
 	// Mark the stack as needed parentscript resolution. This is done after
 	// aux stacks have been loaded.
 	if (s_loaded_parent_script_reference)
 		t_stack -> setextendedstate(True, ECS_USES_PARENTSCRIPTS);
-#endif
     
     r_stack = t_stack;
 	return IO_NORMAL;
@@ -556,6 +578,11 @@ IO_stat MCDispatch::readscriptonlystartupstack(IO_handle stream, uindex_t p_leng
     // We are reading the startup stack, so this becomes the root of the
     // stack list.
     stacks = t_stack;
+    
+    // Mark the stack as needed parentscript resolution. This is done after
+    // aux stacks have been loaded.
+    if (s_loaded_parent_script_reference)
+        t_stack -> setextendedstate(True, ECS_USES_PARENTSCRIPTS);
     
     r_stack = t_stack;
     return IO_NORMAL;
@@ -706,6 +733,25 @@ static MCStack* script_only_stack_from_bytes(uint8_t *p_bytes,
     
     MCNewAutoNameRef t_script_name = sp.gettoken_nameref();
     
+    // If 'with' is next then parse the behavior reference.
+    MCNewAutoNameRef t_behavior_name;
+    if (sp.skip_token(SP_REPEAT, TT_UNDEFINED, RF_WITH) == PS_NORMAL)
+    {
+        // Ensure 'behavior' is next 
+        if (sp.skip_token(SP_FACTOR, TT_PROPERTY, P_PARENT_SCRIPT) != PS_NORMAL)
+        {
+            return nullptr;
+        }
+        
+        // Read the behavior name
+        if (sp.next(t_type) != PS_NORMAL || t_type != ST_LIT)
+        {
+            return nullptr;
+        }
+        
+        t_behavior_name = sp.gettoken_nameref();
+    }
+
     // Parse end of line.
     Parse_stat t_stat;
     t_stat = sp . next(t_type);
@@ -755,6 +801,12 @@ static MCStack* script_only_stack_from_bytes(uint8_t *p_bytes,
     
     // Save line endings from raw script string to restore when saving file.
     t_stack -> setlineencodingstyle(t_line_encoding_style);
+
+    // If we parsed a behavior reference, then set it.
+    if (*t_behavior_name != nullptr)
+    {
+        t_stack->setparentscript_onload(0, *t_behavior_name);
+    }
     
     return t_stack;
 }
@@ -896,7 +948,10 @@ void MCDispatch::processstack(MCStringRef p_openpath, MCStack* &x_stack)
     // this - so we just ignore the result for now (note that all the 'load'
     // methods *fail* to check for no-memory errors!).
     if (s_loaded_parent_script_reference)
+    {
         x_stack -> resolveparentscripts();
+        x_stack -> setextendedstate(True, ECS_USES_PARENTSCRIPTS);
+    }
 }
 
 // MW-2012-02-17: [[ LogFonts ]] Actually load the stack file (wrapped by readfile
@@ -1133,8 +1188,22 @@ IO_stat MCDispatch::dosavescriptonlystack(MCStack *sptr, const MCStringRef p_fna
         // Ensure script isn't encrypted if a password was removed in session
         sptr -> unsecurescript(sptr);
         
-        // Write out the standard script stack header, and then the script itself
-        MCStringFormat(&t_script_body, "script \"%@\"\n%@", sptr -> getname(), sptr->_getscript());
+        // Write out the standard script stack header with behavior reference 
+        // (if applicable) and then the script itself
+        MCParentScript *t_parent_script = sptr->getparentscript();
+        if (t_parent_script != nullptr &&
+            t_parent_script->GetObjectId() == 0)
+        {
+            MCStringFormat(&t_script_body,
+                           "script \"%@\" with behavior \"%@\"\n%@",
+                           sptr->getname(),
+                           t_parent_script->GetObjectStack(),
+                           sptr->_getscript());
+        }
+        else
+        {
+            MCStringFormat(&t_script_body, "script \"%@\"\n%@", sptr -> getname(), sptr->_getscript());
+        }
 
         MCStringNormalizeLineEndings(*t_script_body, 
                                      sptr -> getlineencodingstyle(), 
@@ -1641,7 +1710,7 @@ void MCDispatch::wmdragleave(Window w)
 	}
     
     // We are no longer the drop target and no longer care about the drag data.
-    MCdragboard->Unlock();
+    MCdragboard->PushUpdates();
     MCdragboard->ReleaseData();
 	m_drag_target = false;
 }
@@ -1658,7 +1727,7 @@ MCDragAction MCDispatch::wmdragdrop(Window w)
 		dodrop(false);
 
     // The drag operation has ended. Remove the drag board contents.
-	MCmousestackptr = nil;
+    MCmousestackptr = findstackd(w);
     MCdragboard->Clear();
 	m_drag_target = false;
 
@@ -2003,7 +2072,7 @@ check:
             MCU_geturl(*ctxt, MCNameGetString(p_name), &t_output);
             // SN-2014-05-09 [[ Bug 12409 ]] Fields in LC 7 fail to display binfile url imagesource
             // isempty is not what we want to use, since it returns false for a cleared result
-			if (MCresult->isclear())
+			if (MCresult->isclear() || MCresult->isempty())
             {
                 MCAutoDataRef t_data;
 
@@ -2722,6 +2791,12 @@ bool MCDispatch::fetchlibrarymapping(MCStringRef p_name, MCStringRef& r_path)
     return true;
 }
 
+bool MCDispatch::haslibrarymapping(MCStringRef p_name)
+{
+    MCAutoStringRef t_mapping;
+    return fetchlibrarymapping(p_name, &t_mapping);
+}
+
 bool MCDispatch::recomputefonts(MCFontRef, bool p_force)
 {
     // Call the general recompute function first
@@ -2738,3 +2813,22 @@ bool MCDispatch::recomputefonts(MCFontRef, bool p_force)
     
     return true;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCDispatch::resolveparentscripts()
+{
+    if (stacks != NULL)
+    {
+        MCStack* t_stack = stacks;
+        do
+        {
+            if (t_stack -> getextendedstate(ECS_USES_PARENTSCRIPTS))
+                t_stack -> resolveparentscripts();
+            
+            t_stack = t_stack->next();
+        }
+        while(t_stack != stacks);
+    }
+}
+

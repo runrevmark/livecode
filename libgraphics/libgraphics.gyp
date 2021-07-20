@@ -9,13 +9,33 @@
 		{
 			'target_name': 'libGraphics',
 			'type': 'static_library',
+
+			'toolsets': ['host', 'target'],
 			
 			'dependencies':
 			[
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_gif',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_png',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_jpeg',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_skia',
 				'../libfoundation/libfoundation.gyp:libFoundation',
-				'../thirdparty/libskia/libskia.gyp:libskia',
 			],
-			
+
+			'conditions':
+			[
+				[
+					'OS in ("emscripten", "android")',
+					{
+						'dependencies':
+						[
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_freetype',
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_harfbuzz',
+							'../prebuilt/libicu.gyp:libicu',
+						],
+					},
+				],
+			],		
+	
 			'include_dirs':
 			[
 				'include',
@@ -43,12 +63,18 @@
 				'src/utils.cpp',
 				'src/SkStippleMaskFilter.cpp',
 				'src/legacygradients.cpp',
+				'src/drawing.cpp',
+			],
+
+			'sources!':
+			[
+				'src/hb-sk.cpp',
 			],
 			
-			'conditions':
+			'target_conditions':
 			[
 				[
-					'OS != "mac" and OS != "ios"',
+					'toolset_os != "mac" and toolset_os != "ios"',
 					{
 						'sources!':
 						[
@@ -57,7 +83,7 @@
 					},
 				],
 				[
-					'OS != "win"',
+					'toolset_os != "win"',
 					{
 						'sources!':
 						[
@@ -66,23 +92,11 @@
 					},
 				],
 				[
-					'OS != "android" and OS != "emscripten"',
+					'toolset_os != "android" and toolset_os != "emscripten"',
 					{
 						'sources!':
 						[
 							'src/harfbuzztext.cpp',
-							'src/hb-sk.cpp',
-						],
-					},
-				],
-				[
-					'OS == "android" or OS == "emscripten"',
-					{
-						'dependencies':
-						[
-							'../prebuilt/libicu.gyp:libicu',
-							'../thirdparty/libfreetype/libfreetype.gyp:libfreetype',
-							'../thirdparty/libharfbuzz/libharfbuzz.gyp:libharfbuzz',
 						],
 					},
 				],

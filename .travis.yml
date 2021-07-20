@@ -37,7 +37,7 @@ env:
    - CXX_STD: "c++11"
 
 jdk:
-  - openjdk6
+  - openjdk8
 
 # Build using clang on mac and gcc on linux
 matrix:
@@ -64,7 +64,7 @@ before_install:
 
 # Set up the source tree by fetching Linux-specific prebuilt objects
 install: 
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then (cd prebuilt && ./fetch-libraries.sh linux) ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then (cd prebuilt && ./fetch-libraries.sh linux x86_64) ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx"   ]] ; then (cd prebuilt && ./fetch-libraries.sh mac)   ; fi
 
 # Bootstrap the LCB compiler, build the default target set and run a
@@ -113,6 +113,7 @@ addons:
   # Packages needed for building LiveCode
   apt:
     packages:
+      - gawk
       - libx11-dev
       - libxext-dev
       - libxrender-dev

@@ -2,28 +2,29 @@
 
 # Libraries to fetch
 PLATFORMS=( mac linux win32 android ios emscripten )
-ARCHS_android=( armv6 )
+ARCHS_android=( armv7 arm64 x86 x86_64 )
 ARCHS_mac=( Universal )
 ARCHS_ios=( Universal )
 ARCHS_win32=( x86 x86_64 )
 ARCHS_linux=( i386 x86_64 )
 ARCHS_emscripten=( js )
-LIBS_android=( OpenSSL ICU )
-LIBS_mac=( OpenSSL ICU )
-LIBS_ios=( OpenSSL ICU )
-LIBS_win32=( OpenSSL Curl ICU CEF )
-LIBS_linux=( OpenSSL Curl ICU CEF )
-LIBS_emscripten=( ICU )
+LIBS_android=( Thirdparty OpenSSL ICU )
+LIBS_mac=( Thirdparty OpenSSL ICU )
+LIBS_ios=( Thirdparty OpenSSL ICU )
+LIBS_win32=( Thirdparty OpenSSL Curl ICU CEF )
+LIBS_linux=( Thirdparty OpenSSL Curl ICU CEF )
+LIBS_emscripten=( Thirdparty ICU )
 
-SUBPLATFORMS_ios=(iPhoneSimulator8.2 iPhoneSimulator9.2 iPhoneSimulator10.2 iPhoneSimulator11.0 iPhoneOS9.2 iPhoneOS10.2 iPhoneOS11.0)
-SUBPLATFORMS_win32=(v140_static_debug v140_static_release)
+SUBPLATFORMS_ios=(iPhoneSimulator11.2 iPhoneSimulator12.1 iPhoneSimulator13.2 iPhoneSimulator14.4 iPhoneSimulator14.5 iPhoneOS11.2 iPhoneOS12.1 iPhoneOS13.2 iPhoneOS14.4 iPhoneOS14.5)
+SUBPLATFORMS_win32=(v141_static_debug v141_static_release)
+SUBPLATFORMS_android=(ndk16r15)
 
 # Fetch settings
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FETCH_DIR="${SCRIPT_DIR}/fetched"
 EXTRACT_DIR="${SCRIPT_DIR}"
 WIN32_EXTRACT_DIR="${SCRIPT_DIR}/unpacked"
-URL="http://downloads.livecode.com/prebuilts"
+URL="https://downloads.livecode.com/prebuilts"
 
 # Platform specific settings
 if [ "${OS}" = "Windows_NT" ]; then
@@ -58,15 +59,7 @@ function fetchLibrary {
 	# We now use standard GNU triple ordering for the naming of windows prebuilts
 	local NAME=""
 	if [ "${PLATFORM}" = "win32" ]; then
-		if [ "${LIB}" = "CEF" ]; then
-			if [ "${ARCH}" = "x86" ]; then
-				NAME="CEF-${VERSION}-win32-i386"
-			elif [ "${ARCH}" = "x86_64" ]; then
-				NAME="CEF-${VERSION}-win32-x86_64"
-			fi
-		else
-			NAME="${LIB}-${VERSION}-${ARCH}-${PLATFORM}-${SUBPLATFORM}"
-		fi
+		NAME="${LIB}-${VERSION}-${ARCH}-${PLATFORM}-${SUBPLATFORM}"
 	else
 		NAME="${LIB}-${VERSION}-${PLATFORM}-${ARCH}"
 		if [ ! -z "${SUBPLATFORM}" ] ; then
@@ -87,7 +80,7 @@ function fetchLibrary {
 		
 			# Download using an HTTP client of some variety
 			if $(which curl 1>/dev/null 2>/dev/null) ; then
-				curl --silent "${URL}/${NAME}.tar.bz2" -o "${FETCH_DIR}/${NAME}.tar.bz2" --fail
+				curl -k "${URL}/${NAME}.tar.bz2" -o "${FETCH_DIR}/${NAME}.tar.bz2" --fail
 			elif $(which wget 1>/dev/null 2>/dev/null) ; then
 				wget "${URL}/${NAME}.tar.bz2" -O "${FETCH_DIR}/${NAME}.tar.bz2"
 			else
@@ -104,12 +97,8 @@ function fetchLibrary {
 		echo "Extracting library: ${NAME}"
 		DIR="`pwd`"
 		if [ "${PLATFORM}" = "win32" ]; then
-			if [ "${LIB}" = "CEF" ]; then
-				cd "${EXTRACT_DIR}"
-			else
-				mkdir -p "${WIN32_EXTRACT_DIR}/${LIB}"
-				cd "${WIN32_EXTRACT_DIR}/${LIB}"
-			fi
+			mkdir -p "${WIN32_EXTRACT_DIR}/${LIB}"
+			cd "${WIN32_EXTRACT_DIR}/${LIB}"
 		else
 			cd "${EXTRACT_DIR}"
 		fi
@@ -129,7 +118,29 @@ function fetchLibrary {
 if [ 0 -eq "$#" ]; then
     SELECTED_PLATFORMS="${PLATFORMS[@]}"
 else
-    SELECTED_PLATFORMS="$@"
+    ARGS_ARE_PLATFORMS=1
+    for SELECTED_PLATFORM in "$@" ; do
+        ARG_IS_PLATFORM=0
+        for AVAILABLE_PLATFORM in "${PLATFORMS[@]}"; do
+            if [ "$AVAILABLE_PLATFORM" == "$SELECTED_PLATFORM" ]; then
+                ARG_IS_PLATFORM=1
+                break
+            fi
+        done
+        if [ "$ARG_IS_PLATFORM" != "1" ]; then
+            ARGS_ARE_PLATFORMS=0
+            break
+        fi
+    done
+
+    if [ "$ARGS_ARE_PLATFORMS" == "1" ]; then
+        SELECTED_PLATFORMS="$@"
+    else
+        # If not all args are platforms, assume first arg is platform and the
+        # rest are architectures
+        SELECTED_PLATFORMS="$1"
+        shift 1
+    fi
 fi
 
 FETCH_HEADERS=0
@@ -143,11 +154,17 @@ for PLATFORM in ${SELECTED_PLATFORMS} ; do
 		FETCH_HEADERS=1
 	fi
 
-	eval "ARCHS=( \${ARCHS_${PLATFORM}[@]} )"
+    if [ "$ARGS_ARE_PLATFORMS" == "1" ]; then
+	    eval "ARCHS=( \${ARCHS_${PLATFORM}[@]} )"
+        SELECTED_ARCHS="${ARCHS[@]}"
+    else
+        SELECTED_ARCHS="$@"
+    fi
+
 	eval "LIBS=( \${LIBS_${PLATFORM}[@]} )"
 	eval "SUBPLATFORMS=( \${SUBPLATFORMS_${PLATFORM}[@]} )"
 
-	for ARCH in "${ARCHS[@]}" ; do
+	for ARCH in ${SELECTED_ARCHS} ; do
 		for LIB in "${LIBS[@]}" ; do
 			if [ ! -z "${SUBPLATFORMS}" ] ; then
 				for SUBPLATFORM in "${SUBPLATFORMS[@]}" ; do
@@ -179,7 +196,7 @@ for PLATFORM in ${SELECTED_PLATFORMS} ; do
 		# the "Release" configuration, in terms of linkability.  So if
 		# there's a "Release" build of any given library, duplicate
 		# it for "Fast"
-        for ARCH in "${ARCHS[@]}" ; do
+        for ARCH in ${SELECTED_ARCHS} ; do
                 for LIB in "${LIBS[@]}" ; do
                         echo "Providing 'Fast' configuration for ${LIB} library"
                         for SUBPLATFORM in "${SUBPLATFORMS[@]}"; do
@@ -197,7 +214,7 @@ for PLATFORM in ${SELECTED_PLATFORMS} ; do
                 done
         done
                         
-        for ARCH in "${ARCHS[@]}" ; do
+        for ARCH in ${SELECTED_ARCHS} ; do
                 for LIB in "${LIBS[@]}" ; do
                         echo "Monkey patching toolset/arch for ${LIB} library"
                         for SUBPLATFORM in "v140_static_debug" "v140_static_release" "v140_static_fast"; do

@@ -25,9 +25,15 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <unistd.h>
 
 #include "mbliphoneview.h"
+#include "graphics_util.h"
 
 #include "mblnotification.h"
 #import <sys/utsname.h>
+
+#ifdef __IPHONE_14_0
+#import <AppTrackingTransparency/AppTrackingTransparency.h>
+#endif
+
 
 #include "libscript/script.h"
 
@@ -90,7 +96,7 @@ static void dispatch_notification_events(void)
         MCAutoStringRef t_text;
 		// PM-2015-10-27: [[ Bug 16279 ]] Prevent crash when the payload is empty
 		if (t_event -> text != nil)
-			/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_event -> text, &t_text);
+			/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)t_event -> text, &t_text);
 		else
 			t_text = MCValueRetain(kMCEmptyString);
 
@@ -265,13 +271,23 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	// PM-2016-09-08: [[ Bug 18327 ]] Take into account if x.y.z version of iOS has more than one digits in x,y,z
     NSArray *t_sys_version_array = [[UIDevice currentDevice].systemVersion componentsSeparatedByString:@"."];
     
-    MCmajorosversion = [[t_sys_version_array objectAtIndex:0] intValue] * 100;
-    MCmajorosversion += [[t_sys_version_array objectAtIndex:1] intValue] * 10;
-    
+    uint8_t t_major;
+    t_major = [[t_sys_version_array objectAtIndex:0] intValue];
+
+	uint8_t t_minor;
+    t_minor = [[t_sys_version_array objectAtIndex:1] intValue];
+
+    uint8_t t_bugfix;
     if ([t_sys_version_array count] == 3)
-    {
-        MCmajorosversion += [[t_sys_version_array objectAtIndex:2] intValue];
-    }
+		t_bugfix = [[t_sys_version_array objectAtIndex:2] intValue];
+	else
+		t_bugfix = 0;
+	
+	MCmajorosversion = MCOSVersionMake(t_major, t_minor, t_bugfix);
+    
+    m_keyboard_display = kMCIPhoneKeyboardDisplayModeOver;
+    m_keyboard_type = UIKeyboardTypeDefault;
+    m_return_key_type = UIReturnKeyDefault;
 
 	// We are done (successfully) so return ourselves.
 	return self;
@@ -333,7 +349,8 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	m_window = [[MCIPhoneWindow alloc] initWithFrame: [[UIScreen mainScreen] bounds]];
 	
 	// Create the initial view controller.
-	m_startup_controller = [[MCIPhoneStartupViewController alloc] init];
+	UIStoryboard *sb = [UIStoryboard storyboardWithName:@"StartupScreen" bundle:nil];
+	m_startup_controller = [[sb instantiateInitialViewController] retain];
 	
 	// Create the main view controller.
 	m_main_controller = [[MCIPhoneMainViewController alloc] init];
@@ -388,7 +405,7 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
     if (t_launch_url)
     {    
         MCAutoStringRef t_url_text;
-		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)[t_launch_url absoluteString], &t_url_text);
+		/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)[t_launch_url absoluteString], &t_url_text);
         MCValueAssign(m_launch_url, *t_url_text);
 		
         // HSC-2012-03-13 [[ Bug 10076 ]] Prevent Push Notification crashing when applicationDidBecomeActive is called multiple times
@@ -405,60 +422,41 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 	NSDictionary *t_info_dict;
 	t_info_dict = [[NSBundle mainBundle] infoDictionary];
     
+    // Show dialog about app tracking transparency
+#ifdef __IPHONE_14_0
+    if (@available(iOS 14, *))
+    {
+        NSString *t_app_tracking_transparency_key = [t_info_dict objectForKey: @"NSUserTrackingUsageDescription"];
+        if (t_app_tracking_transparency_key != nil)
+            [ATTrackingManager requestTrackingAuthorizationWithCompletionHandler:^(ATTrackingManagerAuthorizationStatus status) {}];
+    }
+#endif
+    
     // Read the allowed notification types from the plist.
     NSArray *t_allowed_push_notifications_array;
     t_allowed_push_notifications_array = [t_info_dict objectForKey: @"CFSupportedRemoteNotificationTypes"];
    
-    if (t_allowed_push_notifications_array != nil)
-    {
-        // MM-2014-09-30: [[ iOS 8 Support ]] Use new iOS 8 registration methods for push notifications.
-        if (![[UIApplication sharedApplication] respondsToSelector :@selector(registerUserNotificationSettings:)])
-        {
-            UIRemoteNotificationType t_allowed_notifications = UIRemoteNotificationTypeNone;
-            for (NSString *t_push_notification_string in t_allowed_push_notifications_array)
-            {
-                if ([t_push_notification_string isEqualToString: @"CFBadge"])
-                    t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIRemoteNotificationTypeBadge);
-                else if ([t_push_notification_string isEqualToString: @"CFSound"])
-                    t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIRemoteNotificationTypeSound);
-                else if ([t_push_notification_string isEqualToString: @"CFAlert"])
-                    t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIRemoteNotificationTypeAlert);
-            }
-            
-            // IM-2012-02-13 don't try to register if there are no allowed push notification types
-            if (t_allowed_notifications != UIRemoteNotificationTypeNone)
-            {
-                // Inform the device what kind of push notifications we can handle.
-                
-                // MW-2013-07-29: [[ Bug 10979 ]] Dynamically call the 'registerForRemoteNotificationTypes' to
-                //   avoid app-store warnings.
-                objc_msgSend([UIApplication sharedApplication], sel_getUid("registerForRemoteNotificationTypes:"), t_allowed_notifications);
-            }
-        }
-#ifdef __IPHONE_8_0
-        else
-        {
-            UIUserNotificationType t_allowed_notifications;
-            t_allowed_notifications = UIUserNotificationTypeNone;
-            for (NSString *t_push_notification_string in t_allowed_push_notifications_array)
-            {
-                if ([t_push_notification_string isEqualToString: @"CFBadge"])
-                    t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIUserNotificationTypeBadge);
-                else if ([t_push_notification_string isEqualToString: @"CFSound"])
-                    t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIUserNotificationTypeSound);
-                else if ([t_push_notification_string isEqualToString: @"CFAlert"])
-                    t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIUserNotificationTypeAlert);
-            }
-            if (t_allowed_notifications != UIUserNotificationTypeNone)
-            {
-                m_is_remote_notification = true;
-                UIUserNotificationSettings *t_push_settings;
-                t_push_settings = [UIUserNotificationSettings settingsForTypes: t_allowed_notifications categories:nil];
-                [[UIApplication sharedApplication] registerUserNotificationSettings: t_push_settings];
-            }
-        }
-#endif
-    }
+	if (t_allowed_push_notifications_array != nil)
+	{
+		UIUserNotificationType t_allowed_notifications;
+		t_allowed_notifications = UIUserNotificationTypeNone;
+		for (NSString *t_push_notification_string in t_allowed_push_notifications_array)
+		{
+			if ([t_push_notification_string isEqualToString: @"CFBadge"])
+				t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIUserNotificationTypeBadge);
+			else if ([t_push_notification_string isEqualToString: @"CFSound"])
+				t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIUserNotificationTypeSound);
+			else if ([t_push_notification_string isEqualToString: @"CFAlert"])
+				t_allowed_notifications = (UIRemoteNotificationType) (t_allowed_notifications | UIUserNotificationTypeAlert);
+		}
+		if (t_allowed_notifications != UIUserNotificationTypeNone)
+		{
+			m_is_remote_notification = true;
+			UIUserNotificationSettings *t_push_settings;
+			t_push_settings = [UIUserNotificationSettings settingsForTypes: t_allowed_notifications categories:nil];
+			[[UIApplication sharedApplication] registerUserNotificationSettings: t_push_settings];
+		}
+	}
 
     // MM-2014-09-26: [[ iOS 8 Support ]] Move the registration for orientation updates to here from init. Was causing issues with iOS 8.
     // Tell the device we want orientation notifications.
@@ -523,13 +521,31 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
 
 - (void)application:(UIApplication*)p_application didRegisterForRemoteNotificationsWithDeviceToken:(NSData*)p_device_token
 {
-    NSString *t_to_log = [NSString stringWithFormat:@"%s%@%s", "Application: push notification device token (", p_device_token, ")"];
-    NSString *t_registration_text = [NSString stringWithFormat:@"%@", p_device_token];
-    
+    NSMutableString *t_registration_text = nil;
+    NSUInteger t_length = p_device_token.length;
+    const unsigned char *t_bytes = (const unsigned char *)p_device_token.bytes;
+    if (t_length != 0)
+    {
+        t_registration_text = [[NSMutableString alloc] init];
+        // Desired format: 8 segments of 8 letters/digits each, separated by spaces,
+        // bracketed by <>
+        [t_registration_text appendString: @"<"];
+        for(int i = 0; i < t_length; i++)
+        {
+            // %4 because each byte produces two chars
+            if (i > 0 && i % 4 == 0)
+            {
+                [t_registration_text appendString: @" "];
+            }
+            [t_registration_text appendFormat: @"%02x", t_bytes[i]];
+        }
+        [t_registration_text appendString: @">"];
+    }
+
     if (t_registration_text != nil)
     {
         MCAutoStringRef t_device_token;
-		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_registration_text, &t_device_token);
+		/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)t_registration_text, &t_device_token);
         MCValueAssign(m_device_token, *t_device_token);
     
         // MW-2014-09-22: [[ Bug 13446 ]] Queue the event.
@@ -538,21 +554,13 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
         // If we are already active, dispatch.
         if (m_did_become_active)
             dispatch_notification_events();
+        
+        [t_registration_text release];
     }
-    
-/*    if (t_registration_text != nil)
-    {
-        MCString t_device_token;
-        t_device_token.set ([t_registration_text cStringUsingEncoding:NSMacOSRomanStringEncoding], [t_registration_text length]);
-        m_device_token = t_device_token.clone();
-        MCLog("%s\n", [t_to_log cStringUsingEncoding: NSMacOSRomanStringEncoding]);
-        MCNotificationPostPushRegistered(m_device_token);
-    }*/
 }
 
 - (void)application:(UIApplication*)p_application didFailToRegisterForRemoteNotificationsWithError:(NSError*)p_error
 {
-    NSString *t_to_log = [NSString stringWithFormat:@"%s%@%s", "Application: push notification device token error (", p_error, ")"];
     NSString *t_error_text = [NSString stringWithFormat:@"%@", p_error];
     
     // MW-2014-09-22: [[ Bug 13446 ]] Queue the event.
@@ -561,26 +569,18 @@ static UIDeviceOrientation patch_device_orientation(id self, SEL _cmd)
     // If we are already active, dispatch.
     if (m_did_become_active)
         dispatch_notification_events();
-    
-//    if (t_error_text != nil)
-//    {
-//        MCAutoStringRef t_mc_error_text;
-//		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_error_text, &t_mc_error_text);
-//        MCLog("%s\n", [t_to_log cStringUsingEncoding: NSMacOSRomanStringEncoding]);
-//        MCNotificationPostPushRegistrationError(*t_mc_error_text);
-//    }
 }
 
 // Check if we have received a custom URL
 // This handler is called at runtime, for example if the application tries to launch itself
-- (BOOL)application:(UIApplication *)p_application openURL:(NSURL*)p_url sourceApplication:(NSString *)p_source_application annotation:(id)p_annotation
+- (BOOL)application:(UIApplication *)p_application openURL:(NSURL *)p_url options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)p_options
 {
     BOOL t_result = NO;
     if (p_url != nil)
     {
         MCAutoStringRef t_url_text;
-		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)[p_url absoluteString], &t_url_text);
-		MCValueAssign(m_launch_url, *t_url_text);
+        /* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)[p_url absoluteString], &t_url_text);
+        MCValueAssign(m_launch_url, *t_url_text);
         if (m_did_become_active)
             MCNotificationPostUrlWakeUp(m_launch_url);
         t_result = YES;
@@ -662,7 +662,7 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
     if (m_pending_local_notification != nil)
     {
         MCAutoStringRef t_mc_reminder_text;
-		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)m_pending_local_notification, &t_mc_reminder_text);
+		/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)m_pending_local_notification, &t_mc_reminder_text);
 		MCNotificationPostLocalNotificationEvent(*t_mc_reminder_text);
 		
 		// HSC-2012-03-13 [[ Bug 10076 ]] Prevent Push Notification crashing when applicationDidBecomeActive is called multiple times
@@ -672,7 +672,7 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
     if (m_pending_push_notification != nil)
     {
         MCAutoStringRef t_mc_reminder_text;
-		/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)m_pending_push_notification, &t_mc_reminder_text);
+		/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)m_pending_push_notification, &t_mc_reminder_text);
         MCNotificationPostPushNotificationEvent(*t_mc_reminder_text);
        
 		// HSC-2012-03-13 [[ Bug 10076 ]] Prevent Push Notification crashing when applicationDidBecomeActive is called multiple times
@@ -817,16 +817,86 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	t_info = [notification userInfo];
 	
     CGSize t_size;
-	t_size = [[t_info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
-
+	t_size = [[t_info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size;
+    
     // MM-2012-02-26: [[ Bug 10677 ]] Keyboard dimensions do not take into account orientation.
     //  We want height here, so assume the keyboard is always wider than it is taller and take the min of the two.
-	MCIPhoneHandleKeyboardWillActivate(MCMin(t_size . height, t_size . width));
+    CGFloat t_height = MCMin(t_size . height, t_size . width);
+    MCIPhoneHandleKeyboardWillActivate(t_height);
+    
+    if (m_keyboard_display == kMCIPhoneKeyboardDisplayModePan)
+    {
+        MCObject *t_object = nullptr;
+        if (MCactivefield.IsValid())
+        {
+            t_object = MCactivefield;
+        }
+        
+        if (t_object == nullptr)
+        {
+            t_object = MCdefaultstackptr->getcard()->getkfocused();
+        }
+        
+        CGRect t_focused_rect;
+        if (t_object != nullptr)
+        {
+            MCRectangle t_object_rect = t_object -> getrect();
+            MCGAffineTransform t_transform = t_object->getstack()->getroottransform();
+            
+            MCRectangle t_transformed_object_rect =
+                    MCRectangleGetTransformedBounds(t_object_rect, t_transform);
+            t_focused_rect = MCRectangleToCGRect(t_transformed_object_rect);
+        }
+        else
+        {
+            UIView *t_responder = [[m_main_controller rootView] com_runrev_livecode_findFirstResponder];
+            if (t_responder == nil)
+            {
+                return;
+            }
+            
+            t_focused_rect = t_responder.frame;
+        }
+        
+        UIView* t_view = [m_main_controller rootView];
+        CGRect t_frame = t_view.frame;
+        
+        CGFloat t_pan = t_frame.size.height - t_height - (t_focused_rect.origin.y + t_focused_rect.size.height);
+        
+        // if the focused rect is high we don't want to pan the top of it out of view
+        if (t_pan < -t_focused_rect.origin.y)
+        {
+            t_pan = -t_focused_rect.origin.y;
+        }
+        
+        if (t_pan > 0)
+        {
+            // no need to pan
+            return;
+        }
+        
+        [UIView beginAnimations: @"panrootviewup" context: nil];
+        [UIView setAnimationBeginsFromCurrentState: YES];
+        [UIView setAnimationDuration: 0.2f];
+        t_frame.origin.y = t_pan;
+        t_view.frame = t_frame;
+        [UIView commitAnimations];
+    }
 }
 
 - (void)keyboardWillDeactivate:(NSNotification *)notification
 {
 	MCIPhoneHandleKeyboardWillDeactivate();
+    
+    UIView* t_view = [m_main_controller rootView];
+    if (t_view.frame.origin.y != 0)
+    {
+        [UIView beginAnimations: @"panrootviewdown" context: nil];
+        [UIView setAnimationBeginsFromCurrentState: YES];
+        [UIView setAnimationDuration: 0.2f];
+        t_view.frame = CGRectOffset(t_view.frame, 0, -t_view.frame.origin.y);
+        [UIView commitAnimations];
+    }
 }
 
 - (void)keyboardDidActivate:(NSNotification *)notification
@@ -837,6 +907,10 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 - (void)keyboardDidDeactivate:(NSNotification *)notification
 {
     m_keyboard_is_visible = false;
+    
+    [[[m_main_controller rootView] textView] setKeyboardType: m_keyboard_type];
+    [[[m_main_controller rootView] textView] setReturnKeyType: m_return_key_type];
+    
 }
 
 - (BOOL)isKeyboardVisible
@@ -876,7 +950,7 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	t_viewport = [[UIScreen mainScreen] bounds];
 	
     // MW-2014-10-02: [[ iOS 8 Support ]] iOS 8 already takes into account orientation when returning the bounds.
-	if (MCmajorosversion < 800 && UIInterfaceOrientationIsLandscape([self fetchOrientation]))
+	if (MCmajorosversion < MCOSVersionMake(8,0,0) && UIInterfaceOrientationIsLandscape([self fetchOrientation]))
 		return CGRectMake(0.0f, 0.0f, t_viewport . size . height, t_viewport . size . width);
 	
 	return t_viewport;
@@ -892,13 +966,13 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
     // MM-2013-09-25: [[ iOS7Support ]] The status bar is always overlaid ontop of the view, irrespective of its style.
     // PM-2015-02-17: [[ Bug 14482 ]] If the style is "solid", do not put status bar on top of the view
 	CGFloat t_status_bar_size;
-	if (m_status_bar_hidden || (MCmajorosversion >= 700 && !m_status_bar_solid)|| ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone && m_status_bar_style == UIStatusBarStyleBlackTranslucent))
+	if (m_status_bar_hidden || (MCmajorosversion >= MCOSVersionMake(7,0,0) && !m_status_bar_solid)|| ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone && m_status_bar_style == UIStatusBarStyleBlackTranslucent))
 		t_status_bar_size = 0.0f;
 	else
 		t_status_bar_size = 20.0f;
 	
     // MM-2014-09-26: [[ iOS 8 Support ]] iOS 8 already takes into account orientation when returning the bounds.
-	if (MCmajorosversion < 800 && UIInterfaceOrientationIsLandscape([self fetchOrientation]))
+	if (MCmajorosversion < MCOSVersionMake(8,0,0) && UIInterfaceOrientationIsLandscape([self fetchOrientation]))
 		return CGRectMake(0.0f, t_status_bar_size, t_viewport . size . height, t_viewport . size . width - t_status_bar_size);
 	
 	return CGRectMake(0.0f, t_status_bar_size, t_viewport . size . width, t_viewport . size . height - t_status_bar_size);
@@ -953,6 +1027,9 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	return m_launch_url;
 }
 
+extern UIKeyboardType MCInterfaceGetUIKeyboardTypeFromExecEnum(MCInterfaceKeyboardType p_type);
+extern UIReturnKeyType MCInterfaceGetUIReturnKeyTypeFromExecEnum(MCInterfaceReturnKeyType p_type);
+
 - (void)activateKeyboard
 {
 	// If we are still starting up, then record the request.
@@ -961,6 +1038,31 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 		m_keyboard_activation_pending = true;
 		return;
 	}
+    
+    if (MCactivefield.IsValid())
+    {
+        MCInterfaceKeyboardType t_ktype = MCactivefield->getkeyboardtype();
+        if (t_ktype != kMCInterfaceKeyboardTypeNone)
+        {
+            UIKeyboardType t_keyboard_type = MCInterfaceGetUIKeyboardTypeFromExecEnum(t_ktype);
+            [[[m_main_controller rootView] textView] setKeyboardType: t_keyboard_type];
+        }
+        else
+        {
+            [[[m_main_controller rootView] textView] setKeyboardType: m_keyboard_type];
+        }
+        
+        MCInterfaceReturnKeyType t_rtype = MCactivefield->getreturnkeytype();
+        if (t_rtype != kMCInterfaceReturnKeyTypeNone)
+        {
+            UIReturnKeyType t_return_key_type = MCInterfaceGetUIReturnKeyTypeFromExecEnum(t_rtype);
+            [[[m_main_controller rootView] textView] setReturnKeyType:(UIReturnKeyType) t_return_key_type];
+        }
+        else
+        {
+            [[[m_main_controller rootView] textView] setReturnKeyType: m_return_key_type];
+        }
+    }
 	
 	// Tell the root view to activate it's text view.
 	[[m_main_controller rootView] activateKeyboard];
@@ -997,14 +1099,21 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 
 - (void)configureKeyboardType: (UIKeyboardType)p_new_type
 {
+    m_keyboard_type = p_new_type;
+    
 	[[[m_main_controller rootView] textView] setKeyboardType: p_new_type];
 }
 
 - (void)configureReturnKeyType: (UIReturnKeyType)p_new_type
 {
+    m_return_key_type = p_new_type;
 	[[[m_main_controller rootView] textView] setReturnKeyType: p_new_type];
 }
 
+- (void)configureKeyboardDisplay: (MCIPhoneKeyboardDisplayMode)p_mode
+{
+    m_keyboard_display = p_mode;
+}
 //////////
 
 - (uint32_t)allowedOrientations
@@ -1302,8 +1411,6 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	if (self == nil)
 		return nil;
 	
-	// We start off with no image.
-	m_image_view = nil;
 	m_image_orientation = UIInterfaceOrientationPortrait;
 	
 	// We always use full screen layout.
@@ -1314,9 +1421,6 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 
 - (void)dealloc
 {
-	// Release the image.
-	[m_image_view release];
-	
 	// Finalize the superclass.
 	[super dealloc];
 }
@@ -1348,25 +1452,6 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	return ([[MCIPhoneApplication sharedApplication] allowedOrientations] & (1 << p_new_orientation)) != 0;
 }
 
-- (void)loadView
-{
-	MCLog("StartupViewController: loadView (%d)\n", [self interfaceOrientation]);
-	
-	// Create an empty view covering the application frame.
-	UIView *t_view;
-	t_view = [[UIView alloc] initWithFrame: [[UIScreen mainScreen] applicationFrame]];
-	[t_view setContentMode: UIViewContentModeCenter];
-	
-	// We turn off user interaction as we don't need any events from the startup
-	// image.
-	[t_view setUserInteractionEnabled: NO];
-	
-	// Set the view, and release our reference to it - we can manipulate the empty
-	// view using [self view];
-	[self setView: t_view];
-	[t_view release];
-}
-
 - (void)viewDidLoad;
 {
 	MCLog("StartupViewController: viewDidLoad\n");
@@ -1380,11 +1465,6 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 - (void)viewWillAppear:(BOOL)animated
 {
 	MCLog("StartupViewController: viewWillAppear\n");
-	
-	// If we don't have an image view yet, make sure we get one. This can happen
-	// when the device starts up in portrait - 'WillAnimate' will never be called.
-	if (m_image_view == nil)
-		[self switchImageToOrientation: [self interfaceOrientation]];
 }
 
 - (void)viewDidAppear:(BOOL)animated
@@ -1400,11 +1480,6 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 - (void)viewDidDisappear:(BOOL)animated
 {
 	MCLog("StartupViewController: viewDidDisappear\n");
-	
-	// When the view disappears, get rid of the image view to save space.
-	[m_image_view removeFromSuperview];
-	[m_image_view release];
-	m_image_view = nil;
 }
 
 - (void)willRotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration
@@ -1416,191 +1491,12 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 - (void)willAnimateRotationToInterfaceOrientation:(UIInterfaceOrientation)newInterfaceOrientation duration:(NSTimeInterval)duration
 {
 	MCLog("StartupViewController: willAnimateToInterfaceOrientation (%d)\n", newInterfaceOrientation);
-	
-	// We switch the image here, which should mean we get a nice smooth rotation
-	// animation (this method is invoked within an animation block).
-	[self switchImageToOrientation: newInterfaceOrientation];
 }
 
 - (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)fromInterfaceOrientation
 {
 	MCLog("StartupViewController: didRotateFromInterfaceOrientation (%d)\n", fromInterfaceOrientation);
 	[[MCIPhoneApplication sharedApplication] endAutorotation];
-}
-
-- (void)switchImageToOrientation: (UIInterfaceOrientation)p_new_orientation
-{
-	MCLog("StartupViewController: switchImageToOrientation (%d)\n", p_new_orientation);
-	
-	if (m_image_view != nil && m_image_orientation == p_new_orientation)
-		return;
-	
-	// Remove any existing image view from the main view.
-	if (m_image_view != nil)
-	{
-		[m_image_view removeFromSuperview];
-		[m_image_view release];
-		m_image_view = nil;
-	}
-    
-    // MM-2014-10-02: [[ Bug ]] If we are a retina device, attempt to use retina splash screens.
-    bool t_is_retina;
-    t_is_retina = [[UIScreen mainScreen] respondsToSelector:@selector(scale)] == YES && [[UIScreen mainScreen] scale] > 1.0;
-    uint32_t t_img_cnt;
-    t_img_cnt = 0;
-    
-	// Compute the list of image names (and rotations) to try in order.
-	NSString *t_image_names[5];
-	CGFloat t_image_angles[5];
-	if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad)
-	{
-		// MW-2011-10-18: [[ Bug 9823 ]] The S/B only ever has portrait / landscape
-		//   images, so simplify the switch to handle that case.
-		// On iPad we use and rotate the appropriate image.
-		switch(p_new_orientation)
-		{
-			default:
-			case UIInterfaceOrientationPortrait:
-            case UIInterfaceOrientationPortraitUpsideDown:
-                if (t_is_retina)
-                {
-                    t_image_names[t_img_cnt] = @"Default-Portrait@2x.png";
-                    t_image_angles[t_img_cnt++] = 0.0f;
-                    
-                    // iPad Pro 12.9 has retina
-                    t_image_names[t_img_cnt] = @"Default-iPadProPortrait@2x.png";
-                    t_image_angles[t_img_cnt++] = 0.0f;
-
-                }
-				t_image_names[t_img_cnt] = @"Default-Portrait.png";
-				t_image_angles[t_img_cnt++] = 0.0f;
-				t_image_names[t_img_cnt] = @"Default.png";
-				t_image_angles[t_img_cnt++] = 0.0f;
-				t_image_names[t_img_cnt] = nil;
-				break;
-            case UIInterfaceOrientationLandscapeLeft:
-            case UIInterfaceOrientationLandscapeRight:
-                if (t_is_retina)
-                {
-                    t_image_names[t_img_cnt] = @"Default-Landscape@2x.png";
-                    t_image_angles[t_img_cnt++] = 0.0f;
-                    
-                    // iPad Pro 12.9 has retina
-                    t_image_names[t_img_cnt] = @"Default-iPadProLandscape@2x.png";
-                    t_image_angles[t_img_cnt++] = 0.0f;
-                }
-                t_image_names[t_img_cnt] = @"Default-Landscape.png";
-                t_image_angles[t_img_cnt++] = 0.0f;
-                t_image_names[t_img_cnt] = @"Default.png";
-                t_image_angles[t_img_cnt++] = -90.0f;
-                t_image_names[t_img_cnt] = nil;
-                break;
-		}
-	}
-	else
-	{
-        // MM-2014-10-02: [[ iOS 8 Support ]] Like the iPad, the iPhone 6 Plus allows for portrait and landscape splash screens.
-        if ([[UIScreen mainScreen] bounds] . size . height == 736 || [[UIScreen mainScreen] bounds] . size . width == 736)
-        {
-            switch(p_new_orientation)
-            {
-                case UIInterfaceOrientationPortrait:
-                case UIInterfaceOrientationPortraitUpsideDown:
-                    t_image_names[0] = @"Default-736h@3x.png";
-                    t_image_angles[0] = 0.0f;
-                    break;
-                case UIInterfaceOrientationLandscapeLeft:
-                case UIInterfaceOrientationLandscapeRight:
-                    t_image_names[0] = @"Default-414h@3x.png";
-                    t_image_angles[0] = 0.0f;
-                    break;
-            }
-            t_image_names[1] = nil;
-        }
-        else
-        {
-            // On iPhone there is only ever a 'Default' image, which we must
-            // rotate appropriately since the screen could be in any orientation.
-            // MM-2012-10-08: [[ Bug 10448 ]] Make sure the startup view uses the 568px tall splash screen for 4 inch devices.
-            // MW-2014-10-02: [[ iOS 8 Support ]] Check height and width for 568, as mainScreen bounds are rotated
-            //   on iOS 8.
-            // MM-2014-10-02: [[ iOS 8 Support ]] Take into account new iPhone 6 splash screens.
-            if ([[UIScreen mainScreen] bounds] . size . height == 667 || [[UIScreen mainScreen] bounds] . size . width == 667)
-            {
-                t_image_names[0] = @"Default-667h@2x.png";
-                t_image_names[1] = nil;
-            }
-            // PM-2015-03-19: [[ Bug 13969 ]] Make sure the correct splash screen is used for iPhone6
-            else if ([[UIScreen mainScreen] bounds] . size . height == 568 || [[UIScreen mainScreen] bounds] . size . width == 568)
-            {
-                t_image_names[0] = @"Default-568h@2x.png";
-                t_image_names[1] = nil;
-            }
-            else
-            {
-                if (t_is_retina)
-                    t_image_names[t_img_cnt++] = @"Default@2x.png";
-                t_image_names[t_img_cnt++] = @"Default.png";
-                t_image_names[t_img_cnt] = nil;
-            }
-            
-            CGFloat t_angle;
-            t_angle = 0.0f;
-            switch(p_new_orientation)
-            {
-                default:
-                case UIInterfaceOrientationPortrait:
-                    t_angle = 0.0f;
-                    break;
-                case UIInterfaceOrientationPortraitUpsideDown:
-                    t_angle = 180.0f;
-                    break;
-                case UIInterfaceOrientationLandscapeLeft:
-                    t_angle = 90.0f;
-                    break;
-                case UIInterfaceOrientationLandscapeRight:
-                    t_angle = 270.0f;
-                    break;
-            }
-            for(uint32_t i = 0; t_image_names[i] != nil; i++)
-                t_image_angles[i] = t_angle;
-        }
-	}
-	
-	// Loop through the image names until we succeed.
-	UIImage *t_image;
-	CGFloat t_angle;
-	t_image = nil;
-	t_angle = 0.0f;
-	for(int i = 0; t_image_names[i] != nil; i++)
-	{
-		t_image = [UIImage imageWithContentsOfFile: [NSString stringWithFormat: @"%@/%@", [[NSBundle mainBundle] bundlePath], t_image_names[i]]];
-		if (t_image != nil)
-		{
-			MCLog("StartupViewController:   using image '%@' with angle %f\n", t_image_names[i], t_image_angles[i]);
-			t_angle = t_image_angles[i];
-			break;
-		}
-	}
-	
-	// We have an image, and an angle so create and set our image view.
-	m_image_view = [[UIImageView alloc] initWithImage: t_image];
-	
-	// Rotate the image view appropriately.
-	[m_image_view setTransform: CGAffineTransformMakeRotation(t_angle * M_PI / 180.0f)];
-	
-	// Get the bounds of the screen, for placement.
-	CGRect t_screen_bounds;
-	t_screen_bounds = [[MCIPhoneApplication sharedApplication] fetchScreenBounds];
-	
-	// Center the image in the screen.
-    [m_image_view setCenter: CGPointMake(t_screen_bounds . size . width / 2.0f, t_screen_bounds . size . height / 2.0f)];
-	
-	// Insert the image view into our view.
-	[[self view] addSubview: m_image_view];
-	
-	// Store the orientation of the image to stop unnecessary switches.
-	m_image_orientation = p_new_orientation;
 }
 
 @end
@@ -1697,7 +1593,7 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
 	
     // MM-2012-09-25: [[ iOS 6.0 ]] When the startup view controller is visible, it appears that didRotateFromInterfaceOrientation is not called.
     //   Set current orientation here instead.
-    if (MCmajorosversion >= 600)
+    if (MCmajorosversion >= MCOSVersionMake(6,0,0))
         m_current_orientation = m_pending_orientation;
 }
 
@@ -1793,6 +1689,11 @@ void MCiOSFilePostProtectedDataUnavailableEvent();
     }
 }
 
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
+{
+	MCNotificationPostSystemAppearanceChanged();
+}
+
 @end
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1805,66 +1706,7 @@ NSString* MCIPhoneGetDeviceModelName(void)
     
     NSString *t_machine_name = [NSString stringWithCString:t_system_info.machine encoding:NSUTF8StringEncoding];
     
-    // MARK: We can just return t_machine_name. Following is for convenience
-    // Full list at http://theiphonewiki.com/wiki/Models
-    
-	NSDictionary *commonNamesDictionary = [NSDictionary dictionaryWithObjectsAndKeys:
-										   @"iPhone",       @"iPhone1,1",
-										   @"iPhone 3G",    @"iPhone1,2",
-										   @"iPhone 3GS",   @"iPhone2,1",
-                                           @"iPhone 4",     @"iPhone3,1",
-										   
-										   @"iPhone 4(Rev A)",      @"iPhone3,2",
-										   @"iPhone 4(CDMA)",       @"iPhone3,3",
-										   @"iPhone 4S",            @"iPhone4,1",
-										   @"iPhone 5(GSM)",        @"iPhone5,1",
-										   @"iPhone 5(GSM+CDMA)",   @"iPhone5,2",
-										   @"iPhone 5c(GSM)",       @"iPhone5,3",
-										   @"iPhone 5c(GSM+CDMA)",  @"iPhone5,4",
-										   @"iPhone 5s(GSM)",       @"iPhone6,1",
-                                           @"iPhone 5s(GSM+CDMA)",  @"iPhone6,2",
-										   
-										   @"iPhone 6+ (GSM+CDMA)", @"iPhone7,1",
-                                           @"iPhone 6 (GSM+CDMA)",  @"iPhone7,2",
-										   
-                                           @"iPad",                     @"iPad1,1",
-                                           @"iPad 2(WiFi)",             @"iPad2,1",
-                                           @"iPad 2(GSM)",              @"iPad2,2",
-										   @"iPad 2(CDMA)",             @"iPad2,3",
-										   @"iPad 2(WiFi Rev A)",       @"iPad2,4",
-										   @"iPad Mini 1G (WiFi)",      @"iPad2,5",
-										   @"iPad Mini 1G (GSM)",       @"iPad2,6",
-										   @"iPad Mini 1G (GSM+CDMA)",  @"iPad2,7",
-                                           @"iPad 3(WiFi)",             @"iPad3,1",
-										   @"iPad 3(GSM+CDMA)",         @"iPad3,2",
-										   @"iPad 3(GSM)",              @"iPad3,3",
-										   @"iPad 4(WiFi)",             @"iPad3,4",
-                                           @"iPad 4(GSM)",              @"iPad3,5",
-										   @"iPad 4(GSM+CDMA)",         @"iPad3,6",
-                                        
-                                           @"iPad Air(WiFi)",        @"iPad4,1",
-                                           @"iPad Air(GSM)",         @"iPad4,2",
-                                           @"iPad Air(GSM+CDMA)",    @"iPad4,3",
-										   
-                                           @"iPad Mini 2G (WiFi)",       @"iPad4,4",
-                                           @"iPad Mini 2G (GSM)",        @"iPad4,5",
-                                           @"iPad Mini 2G (GSM+CDMA)",   @"iPad4,6",
-										   
-                                           @"iPod 1st Gen",         @"iPod1,1",
-                                           @"iPod 2nd Gen",         @"iPod2,1",
-                                           @"iPod 3rd Gen",         @"iPod3,1",
-										   @"iPod 4th Gen",         @"iPod4,1",
-                                           @"iPod 5th Gen",         @"iPod5,1",
-                                           // PM-2015-03-03: [[ Bug 14689 ]] Cast to NSString* to prevent EXC_BAD_ACCESS when in release mode and run in 64bit device/sim
-                                           (NSString *)nil];
-										   
-	
-	NSString *t_device_name = [commonNamesDictionary objectForKey: t_machine_name];
-    
-    if (t_device_name == nil)
-        t_device_name = t_machine_name;
-    
-    return t_device_name;
+	return t_machine_name;
 }
 
 MCIPhoneApplication *MCIPhoneGetApplication(void)
@@ -1922,6 +1764,11 @@ UIKeyboardType MCIPhoneGetKeyboardType(void)
 void MCIPhoneSetReturnKeyType(UIReturnKeyType p_type)
 {
 	[[MCIPhoneApplication sharedApplication] configureReturnKeyType: p_type];
+}
+
+void MCIPhoneSetKeyboardDisplay(MCIPhoneKeyboardDisplayMode p_mode)
+{
+    [[MCIPhoneApplication sharedApplication] configureKeyboardDisplay: p_mode];
 }
 
 void MCIPhoneActivateKeyboard(void)

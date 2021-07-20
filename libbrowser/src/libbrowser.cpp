@@ -50,6 +50,53 @@ void MCBrowserRefCounted::Destroy()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+MCBrowserBase::MCBrowserBase(void)
+    : m_navigation_request_handler(nil),
+	  m_event_handler(nil),
+      m_javascript_handler(nil),
+      m_progress_handler(nil)
+{
+}
+
+MCBrowserBase::~MCBrowserBase(void)
+{
+	if (m_navigation_request_handler)
+		m_navigation_request_handler->Release();
+	
+    if (m_event_handler)
+        m_event_handler->Release();
+    
+    if (m_javascript_handler)
+        m_javascript_handler->Release();
+
+	if (m_progress_handler)
+		m_progress_handler->Release();
+}
+
+void MCBrowserBase::SetNavigationRequestHandler(MCBrowserNavigationRequestHandler *p_handler)
+{
+	if (p_handler)
+		p_handler->Retain();
+	
+	if (m_navigation_request_handler)
+		m_navigation_request_handler->Release();
+	
+	m_navigation_request_handler = p_handler;
+}
+
+MCBrowserNavigationRequestHandler *MCBrowserBase::GetNavigationRequestHandler()
+{
+	return m_navigation_request_handler;
+}
+
+bool MCBrowserBase::OnNavigationRequest(MCBrowserNavigationRequest *p_request)
+{
+	if (m_navigation_request_handler)
+		return m_navigation_request_handler->OnNavigationRequest(this, p_request);
+	
+	return false;
+}
+
 void MCBrowserBase::SetEventHandler(MCBrowserEventHandler *p_handler)
 {
 	if (p_handler)
@@ -132,6 +179,30 @@ void MCBrowserBase::OnJavaScriptCall(const char *p_handler, MCBrowserListRef p_p
 
 //////////
 
+void MCBrowserBase::SetProgressHandler(MCBrowserProgressHandler *p_handler)
+{
+	if (p_handler != nil)
+		p_handler->Retain();
+
+	if (m_progress_handler != nil)
+		m_progress_handler->Release();
+
+	m_progress_handler = p_handler;
+}
+
+MCBrowserProgressHandler *MCBrowserBase::GetProgressHandler(void)
+{
+	return m_progress_handler;
+}
+
+void MCBrowserBase::OnProgressChanged(const char *p_url, uint32_t p_progress)
+{
+	if (m_progress_handler != nil)
+		m_progress_handler->OnProgressChanged(this, p_url, p_progress);
+}
+
+//////////
+
 MCBrowserBase::MCBrowserListEntry *MCBrowserBase::s_browser_list = nil;
 
 bool MCBrowserBase::BrowserListAdd(MCBrowser *p_browser)
@@ -180,6 +251,38 @@ bool MCBrowserBase::BrowserListIterate(MCBrowserIterateCallback p_callback, void
 	}
 	
 	return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Browser navigation request base
+
+MCBrowserNavigationRequestBase::MCBrowserNavigationRequestBase(const char *p_url, bool p_frame, MCBrowserNavigationType p_type)
+{
+	/* UNCHECKED */ MCCStringClone(p_url, m_url);
+	m_frame = p_frame;
+	m_navigation_type = p_type;
+}
+
+MCBrowserNavigationRequestBase::~MCBrowserNavigationRequestBase()
+{
+	if (m_url != nil)
+		MCCStringFree(m_url);
+}
+
+const char *MCBrowserNavigationRequestBase::GetURL()
+{
+	return m_url;
+}
+
+bool MCBrowserNavigationRequestBase::IsFrame()
+{
+	return m_frame;
+}
+
+MCBrowserNavigationType MCBrowserNavigationRequestBase::GetNavigationType()
+{
+	return m_navigation_type;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -273,6 +376,76 @@ bool MCBrowserFactoryCreateBrowser(MCBrowserFactoryRef p_factory, void *p_displa
 //////////
 
 MC_BROWSER_DLLEXPORT_DEF
+MCBrowserNavigationRequestRef MCBrowserNavigationRequestRetain(MCBrowserNavigationRequestRef p_request)
+{
+	if (p_request == nil)
+		return nil;
+	
+	p_request->Retain();
+	return p_request;
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+void MCBrowserNavigationRequestRelease(MCBrowserNavigationRequestRef p_request)
+{
+	if (p_request == nil)
+		return;
+	
+	p_request->Release();
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserNavigationRequestGetURL(MCBrowserNavigationRequestRef p_request, char *&r_url)
+{
+	if (p_request == nil)
+		return false;
+	
+	return MCCStringClone(p_request->GetURL(), r_url);
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserNavigationRequestGetNavigationType(MCBrowserNavigationRequestRef p_request, MCBrowserNavigationType &r_type)
+{
+	if (p_request == nil)
+		return false;
+	
+	r_type = p_request->GetNavigationType();
+	return true;
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserNavigationRequestIsFrame(MCBrowserNavigationRequestRef p_request, bool &r_frame)
+{
+	if (p_request == nil)
+		return false;
+	
+	r_frame = p_request->IsFrame();
+	return true;
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserNavigationRequestContinue(MCBrowserNavigationRequestRef p_request)
+{
+	if (p_request == nil)
+		return false;
+	
+	p_request->Continue();
+	return true;
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserNavigationRequestCancel(MCBrowserNavigationRequestRef p_request)
+{
+	if (p_request == nil)
+		return false;
+	
+	p_request->Cancel();
+	return true;
+}
+
+//////////
+
+MC_BROWSER_DLLEXPORT_DEF
 MCBrowserRef MCBrowserRetain(MCBrowserRef p_browser)
 {
 	if (p_browser == nil)
@@ -357,6 +530,24 @@ bool MCBrowserSetStringProperty(MCBrowserRef p_browser, MCBrowserProperty p_prop
 }
 
 MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserGetIntegerProperty(MCBrowserRef p_browser, MCBrowserProperty p_property, int32_t &r_value)
+{
+	if (p_browser == nil)
+		return false;
+	
+	return p_browser->GetIntegerProperty(p_property, r_value);
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserSetIntegerProperty(MCBrowserRef p_browser, MCBrowserProperty p_property, int32_t p_value)
+{
+	if (p_browser == nil)
+		return false;
+	
+	return p_browser->SetIntegerProperty(p_property, p_value);
+}
+
+MC_BROWSER_DLLEXPORT_DEF
 bool MCBrowserGoBack(MCBrowserRef p_browser)
 {
 	if (p_browser == nil)
@@ -384,6 +575,33 @@ bool MCBrowserGoToURL(MCBrowserRef p_browser, const char *p_url)
 }
 
 MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserLoadHTMLText(MCBrowserRef p_browser, const char *p_htmltext, const char *p_baseurl)
+{
+	if (p_browser == nil)
+		return false;
+	
+	return p_browser->LoadHTMLText(p_htmltext, p_baseurl);
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserStopLoading(MCBrowserRef p_browser)
+{
+	if (p_browser == nil)
+		return false;
+	
+	return p_browser->StopLoading();
+}
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserReload(MCBrowserRef p_browser)
+{
+	if (p_browser == nil)
+		return false;
+	
+	return p_browser->Reload();
+}
+
+MC_BROWSER_DLLEXPORT_DEF
 bool MCBrowserEvaluateJavaScript(MCBrowserRef p_browser, const char *p_script, char *&r_result)
 {
 	if (p_browser == nil)
@@ -394,11 +612,61 @@ bool MCBrowserEvaluateJavaScript(MCBrowserRef p_browser, const char *p_script, c
 
 //////////
 
+// Navigation request handler c++ wrapper
+class MCBrowserNavigationRequestHandlerWrapper : public MCBrowserNavigationRequestHandler
+{
+public:
+	MCBrowserNavigationRequestHandlerWrapper(MCBrowserNavigationRequestCallback p_callback, void *p_context)
+	{
+		m_callback = p_callback;
+		m_context = p_context;
+	}
+	
+	bool OnNavigationRequest(MCBrowser *p_browser, MCBrowserNavigationRequest *p_request)
+	{
+		if (m_callback)
+			return m_callback(m_context, p_browser, p_request);
+		
+		return false;
+	}
+
+private:
+	MCBrowserNavigationRequestCallback m_callback;
+	void *m_context;
+};
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserSetNavigationRequestHandler(MCBrowserRef p_browser, MCBrowserNavigationRequestCallback p_callback, void *p_context)
+{
+	if (p_browser == nil)
+		return false;
+	
+	if (p_callback == nil)
+	{
+		p_browser->SetNavigationRequestHandler(nil);
+		return true;
+	}
+	
+	MCBrowserNavigationRequestHandlerWrapper *t_wrapper;
+	t_wrapper = new (nothrow) MCBrowserNavigationRequestHandlerWrapper(p_callback, p_context);
+	
+	if (t_wrapper == nil)
+		return false;
+	
+	p_browser->SetNavigationRequestHandler(t_wrapper);
+	
+    t_wrapper->Release();
+	
+	return true;
+}
+
+//////////
+
 // Event handler c++ wrapper
 class MCBrowserEventHandlerWrapper : public MCBrowserEventHandler
 {
 public:
-	MCBrowserEventHandlerWrapper(MCBrowserRequestCallback p_callback, void *p_context)
+	MCBrowserEventHandlerWrapper(MCBrowserNavigationCallback p_callback, void *p_context)
 	{
 		m_callback = p_callback;
 		m_context = p_context;
@@ -407,52 +675,52 @@ public:
 	virtual void OnNavigationBegin(MCBrowser *p_browser, bool p_in_frame, const char *p_url)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeNavigate, kMCBrowserRequestStateBegin, p_in_frame, p_url, nil);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeNavigate, kMCBrowserNavigationStateBegin, p_in_frame, p_url, nil);
 	}
 	
 	virtual void OnNavigationComplete(MCBrowser *p_browser, bool p_in_frame, const char *p_url)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeNavigate, kMCBrowserRequestStateComplete, p_in_frame, p_url, nil);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeNavigate, kMCBrowserNavigationStateComplete, p_in_frame, p_url, nil);
 	}
 	
 	virtual void OnNavigationFailed(MCBrowser *p_browser, bool p_in_frame, const char *p_url, const char *p_error)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeNavigate, kMCBrowserRequestStateFailed, p_in_frame, p_url, p_error);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeNavigate, kMCBrowserNavigationStateFailed, p_in_frame, p_url, p_error);
 	}
 	
 	virtual void OnDocumentLoadBegin(MCBrowser *p_browser, bool p_in_frame, const char *p_url)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeDocumentLoad, kMCBrowserRequestStateBegin, p_in_frame, p_url, nil);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeDocumentLoad, kMCBrowserNavigationStateBegin, p_in_frame, p_url, nil);
 	}
 	
 	virtual void OnDocumentLoadComplete(MCBrowser *p_browser, bool p_in_frame, const char *p_url)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeDocumentLoad, kMCBrowserRequestStateComplete, p_in_frame, p_url, nil);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeDocumentLoad, kMCBrowserNavigationStateComplete, p_in_frame, p_url, nil);
 	}
 	
 	virtual void OnDocumentLoadFailed(MCBrowser *p_browser, bool p_in_frame, const char *p_url, const char *p_error)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeDocumentLoad, kMCBrowserRequestStateFailed, p_in_frame, p_url, p_error);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeDocumentLoad, kMCBrowserNavigationStateFailed, p_in_frame, p_url, p_error);
 	}
 	
 	virtual void OnNavigationRequestUnhandled(MCBrowser *p_browser, bool p_in_frame, const char *p_url)
 	{
 		if (m_callback)
-			m_callback(m_context, p_browser, kMCBrowserRequestTypeNavigate, kMCBrowserRequestStateUnhandled, p_in_frame, p_url, nil);
+			m_callback(m_context, p_browser, kMCBrowserNavigationEventTypeNavigate, kMCBrowserNavigationStateUnhandled, p_in_frame, p_url, nil);
 	}
 	
 private:
-	MCBrowserRequestCallback m_callback;
+	MCBrowserNavigationCallback m_callback;
 	void *m_context;
 };
 
 MC_BROWSER_DLLEXPORT_DEF
-bool MCBrowserSetRequestHandler(MCBrowserRef p_browser, MCBrowserRequestCallback p_callback, void *p_context)
+bool MCBrowserSetNavigationHandler(MCBrowserRef p_browser, MCBrowserNavigationCallback p_callback, void *p_context)
 {
 	if (p_browser == nil)
 		return false;
@@ -470,6 +738,9 @@ bool MCBrowserSetRequestHandler(MCBrowserRef p_browser, MCBrowserRequestCallback
 		return false;
 	
 	p_browser->SetEventHandler(t_wrapper);
+    
+    t_wrapper->Release();
+    
 	return true;
 }
 
@@ -515,6 +786,56 @@ bool MCBrowserSetJavaScriptHandler(MCBrowserRef p_browser, MCBrowserJavaScriptCa
 		return false;
 	
 	p_browser->SetJavaScriptHandler(t_wrapper);
+    
+    t_wrapper->Release();
+    
+	return true;
+}
+
+//////////
+
+class MCBrowserProgressHandlerWrapper : public MCBrowserProgressHandler
+{
+public:
+	MCBrowserProgressHandlerWrapper(MCBrowserProgressCallback p_callback, void *p_context)
+	{
+		m_callback = p_callback;
+		m_context = p_context;
+	}
+
+	virtual void OnProgressChanged(MCBrowser *p_browser, const char *p_url, uint32_t p_progress)
+	{
+		if (m_callback)
+			m_callback(m_context, p_browser, p_url, p_progress);
+	}
+
+private:
+	MCBrowserProgressCallback m_callback;
+	void *m_context;
+};
+
+MC_BROWSER_DLLEXPORT_DEF
+bool MCBrowserSetProgressHandler(MCBrowserRef p_browser, MCBrowserProgressCallback p_callback, void *p_context)
+{
+	if (p_browser == nil)
+		return false;
+
+	if (p_callback == nil)
+	{
+		p_browser->SetProgressHandler(nil);
+		return true;
+	}
+
+	MCBrowserProgressHandlerWrapper *t_wrapper;
+	t_wrapper = new (nothrow) MCBrowserProgressHandlerWrapper(p_callback, p_context);
+
+	if (t_wrapper == nil)
+		return false;
+
+	p_browser->SetProgressHandler(t_wrapper);
+
+	t_wrapper->Release();
+
 	return true;
 }
 

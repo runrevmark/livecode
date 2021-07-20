@@ -365,7 +365,7 @@ bool MCS_registry_root_to_hkey(MCStringRef p_root, HKEY& r_hkey, uint32_t& x_acc
 		if (MCStringIsEqualToCString(p_root, Regkeys[i].token, kMCCompareCaseless))
 		{
 			r_hkey = Regkeys[i].key;
-			if (MCmajorosversion >= 0x0501)
+			if (MCmajorosversion >= MCOSVersionMake(5,1,0))
 				x_access_mode |= Regkeys[i].mode;
 			return true;
 		}
@@ -1497,8 +1497,6 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 		WORD request = MAKEWORD(1, 1);
 		WSADATA t_data;
 		WSAStartup(request, &t_data);
-
-		return true;
 #endif // _WINDOWS_SERVER
 
 		// MW-2004-11-28: The ctype array seems to have changed in the latest version of VC++
@@ -1536,23 +1534,32 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 			}
 		}
 
-		// On NT systems 'cmd.exe' is the command processor
-		MCValueAssign(MCshellcmd, MCSTR("cmd.exe"));
+		/* Default the shellCommand to the value of the COMSPEC environment
+		 * variable. */
+		MCAutoStringRef t_comspec;
+		if (MCS_getenv(MCSTR("COMSPEC"), &t_comspec))
+		{
+			MCValueAssign(MCshellcmd, *t_comspec);
+		}
+		else
+		{
+			MCValueAssign(MCshellcmd, kMCEmptyString);
+		}
 
 		// MW-2005-05-26: Store a global variable containing major OS version...
 		OSVERSIONINFOA osv;
 		memset(&osv, 0, sizeof(OSVERSIONINFOA));
 		osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFOA);
 		GetVersionExA(&osv);
-		MCmajorosversion = osv . dwMajorVersion << 8 | osv . dwMinorVersion;
+		MCmajorosversion = MCOSVersionMake(osv.dwMajorVersion, osv.dwMinorVersion, 0);
 
 		// MW-2012-09-19: [[ Bug ]] Adjustment to tooltip metrics for Windows.
-		if (MCmajorosversion >= 0x0500)
+		if (MCmajorosversion >= MCOSVersionMake(5,0,0))
 		{
 			MCttsize = 11;
 			MCValueAssign(MCttfont, MCSTR("Tahoma"));
 		}
-		else if (MCmajorosversion >= 0x0600)
+		else if (MCmajorosversion >= MCOSVersionMake(6,0,0))
 		{
 			MCttsize = 11;
 			MCValueAssign(MCttfont, MCSTR("Segoe UI"));
@@ -1610,24 +1617,12 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
     
 	virtual bool GetVersion(MCStringRef& r_string)
     {
-        return MCStringFormat(r_string, "NT %d.%d", (MCmajorosversion >> 8) & 0xFF, MCmajorosversion & 0xFF);
+        return MCStringFormat(r_string, "NT %d.%d", MCOSVersionGetMajor(MCmajorosversion), MCOSVersionGetMinor(MCmajorosversion));
     }
     
 	virtual bool GetMachine(MCStringRef& r_string)
     {
-		r_string = MCValueRetain(MCNameGetString(GetProcessor()));
-		return true;
-    }
-    
-	virtual MCNameRef GetProcessor(void)
-    {
-#if defined _M_IX86
-        return MCN_x86;
-#elif defined _M_AMD64
-		return MCN_x86_64;
-#else
-#  error Unknown processor
-#endif
+        return MCS_getprocessor(r_string);
     }
     
 	virtual bool GetAddress(MCStringRef& r_address)
@@ -1917,7 +1912,7 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
         return True;
     }
 	
-	// NOTE: 'GetStandardFolder' returns a standard (not native) path.
+	// NOTE: 'GetStandardFolder' returns a native path.
 	virtual Boolean GetStandardFolder(MCNameRef p_type, MCStringRef& r_folder)
     {
         bool t_wasfound = false;
@@ -1945,12 +1940,21 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
         else if (MCNameIsEqualToCaseless(p_type, MCN_engine)
                  || MCNameIsEqualToCaseless(p_type, MCN_resources))
         {
-            MCSAutoLibraryRef t_self;
-            MCSLibraryCreateWithAddress(reinterpret_cast<void *>(legacy_path_to_nt_path),
-                                        &t_self);
-            MCSLibraryCopyNativePath(*t_self,
-                                     &t_native_path);
-            t_wasfound = True;
+            MCAutoStringRef t_engine_folder;
+            uindex_t t_last_slash;
+            
+            if (!MCStringLastIndexOfChar(MCcmd, '/', UINDEX_MAX, kMCStringOptionCompareExact, t_last_slash))
+                t_last_slash = MCStringGetLength(MCcmd);
+            
+            MCAutoStringRef t_livecode_path;
+            if (!MCStringCopySubstring(MCcmd, MCRangeMake(0, t_last_slash), &t_livecode_path))
+                return False;
+
+            if (!PathToNative(*t_livecode_path, &t_native_path))
+                return False;
+            
+            t_wasfound = true;
+            
         }
         else
         {
@@ -2387,6 +2391,10 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
 		if (!t_search_wstr.Lock(*t_search_path))
 			return false;
 		ffh = FindFirstFileW(*t_search_wstr, &data);
+		if (ffh == INVALID_HANDLE_VALUE)
+		{
+			return false;
+		}
 
 		do
 		{
@@ -2996,7 +3004,7 @@ struct MCWindowsDesktop: public MCSystemInterface, public MCWindowsSystemService
                 t_cmdline = (MCStringRef) MCValueRetain(MCNameGetString(p_name));
             
             // There's no such thing as Elevation before Vista (majorversion 6)
-            if (!p_elevated || MCmajorosversion < 0x0600)
+            if (!p_elevated || MCmajorosversion < MCOSVersionMake(6,0,0))
             {
                 HANDLE hChildStdinRd = NULL;
                 HANDLE hChildStdoutWr = NULL;

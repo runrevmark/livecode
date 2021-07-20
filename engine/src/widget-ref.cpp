@@ -484,6 +484,45 @@ bool MCWidgetBase::OnMouseScroll(coord_t p_delta_x, coord_t p_delta_y, bool& r_b
     return DispatchBubbly(MCNAME("OnMouseScroll"), t_args . Ptr(), t_args . Count(), r_bubble);
 }
 
+bool MCWidgetBase::HandlesTouchEvents(void)
+{
+    if (HasHandler(MCNAME("OnTouchStart")) ||
+        HasHandler(MCNAME("OnTouchMove")) ||
+        HasHandler(MCNAME("OnTouchFinish")) ||
+        HasHandler(MCNAME("OnTouchCancel")))
+    {
+        return true;
+    }
+    
+    MCWidgetRef t_owner = GetOwner();
+    if (t_owner != nullptr)
+    {
+        return MCWidgetHandlesTouchEvents(t_owner);
+    }
+    
+    return false;
+}
+
+bool MCWidgetBase::OnTouchStart(bool& r_bubble)
+{
+    return DispatchBubbly(MCNAME("OnTouchStart"), nil, 0, r_bubble);
+}
+
+bool MCWidgetBase::OnTouchMove(bool& r_bubble)
+{
+    return DispatchBubbly(MCNAME("OnTouchMove"), nil, 0, r_bubble);
+}
+
+bool MCWidgetBase::OnTouchFinish(bool& r_bubble)
+{
+    return DispatchBubbly(MCNAME("OnTouchFinish"), nil, 0, r_bubble);
+}
+
+bool MCWidgetBase::OnTouchCancel(bool& r_bubble)
+{
+    return DispatchBubbly(MCNAME("OnTouchCancel"), nil, 0, r_bubble);
+}
+
 bool MCWidgetBase::OnGeometryChanged(void)
 {
     return Dispatch(MCNAME("OnGeometryChanged"));
@@ -652,6 +691,22 @@ void MCWidgetBase::RedrawRect(MCGRectangle *p_area)
         return;
     
     MCWidgetAsBase(t_owner) -> RedrawRect(p_area);
+}
+
+void MCWidgetBase::TriggerAll()
+{
+    if (IsRoot())
+    {
+        GetHost() -> signallisteners(P_CUSTOM);
+        return;
+    }
+    
+    MCWidgetRef t_owner;
+    t_owner = GetOwner();
+    if (t_owner == nil)
+        return;
+    
+    MCWidgetAsBase(t_owner) -> TriggerAll();
 }
 
 bool MCWidgetBase::CopyChildren(MCProperListRef& r_children)
@@ -1004,6 +1059,11 @@ bool MCWidgetRoot::IsRoot(void) const
 
 MCWidget *MCWidgetRoot::GetHost(void) const
 {
+	if (!m_host.IsValid())
+	{
+		return nullptr;
+	}
+
     return m_host;
 }
 
@@ -1324,6 +1384,33 @@ bool MCWidgetOnMouseScroll(MCWidgetRef self, real32_t p_delta_x, real32_t p_delt
     return MCWidgetAsBase(self) -> OnMouseScroll(p_delta_x, p_delta_y, r_bubble);
 }
 
+/* TOUCH MESSAGE METHODS */
+
+bool MCWidgetHandlesTouchEvents(MCWidgetRef self)
+{
+    return MCWidgetAsBase(self)->HandlesTouchEvents();
+}
+
+bool MCWidgetOnTouchStart(MCWidgetRef self, bool& r_bubble)
+{
+    return MCWidgetAsBase(self)->OnTouchStart(r_bubble);
+}
+
+bool MCWidgetOnTouchMove(MCWidgetRef self, bool& r_bubble)
+{
+    return MCWidgetAsBase(self)->OnTouchMove(r_bubble);
+}
+
+bool MCWidgetOnTouchFinish(MCWidgetRef self, bool& r_bubble)
+{
+    return MCWidgetAsBase(self)->OnTouchFinish(r_bubble);
+}
+
+bool MCWidgetOnTouchCancel(MCWidgetRef self, bool& r_bubble)
+{
+    return MCWidgetAsBase(self)->OnTouchCancel(r_bubble);
+}
+
 bool MCWidgetOnGeometryChanged(MCWidgetRef self)
 {
     return MCWidgetAsBase(self) -> OnGeometryChanged();
@@ -1362,6 +1449,11 @@ bool MCWidgetSetAnnotation(MCWidgetRef self, MCNameRef p_annotation, MCValueRef 
 void MCWidgetRedrawAll(MCWidgetRef self)
 {
     return MCWidgetAsBase(self) -> RedrawRect(nil);
+}
+
+void MCWidgetTriggerAll(MCWidgetRef self)
+{
+    return MCWidgetAsBase(self) -> TriggerAll();
 }
 
 bool MCWidgetPost(MCWidgetRef self, MCNameRef p_event, MCProperListRef p_args)

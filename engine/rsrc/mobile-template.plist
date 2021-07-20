@@ -15,21 +15,16 @@
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1.0</string>
+	<string>${BUNDLE_BUILD}</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${BUNDLE_VERSION}</string>
 	${URL_TYPES}
-	<key>CFBundleIconFiles</key>
-	<array>
-		${BUNDLE_ICONS}
-	</array>
+	${BUNDLE_ICONS}
 	${DISABLE_ATS}
 	<key>CFBundleDisplayName</key>
 		${BUNDLE_DISPLAY_NAME_SUPPORT}
 	<key>MinimumOSVersion</key>
 		${MINIMUM_OS_SUPPORT}
-	<key>UILaunchImages</key>
-	<array>
-		${SPLASHSCREENS}
-	</array>
 	<key>UIDeviceFamily</key>
 	<array>
 		${DEVICE_SUPPORT}
@@ -38,10 +33,10 @@
 	<dict>
 		${DEVICE_CAPABILITY}
 	</dict>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>UIRequiresPersistentWiFi</key>
 		${PERSISTENT_WIFI}
-	<key>UIApplicationExitsOnSuspend</key>
-		${APPLICATION_EXITS_ON_SUSPEND}
 	<key>UIInitialInterfaceOrientation</key>
 		${IPHONE_INITIAL_ORIENTATION}
 	<key>UISupportedInterfaceOrientations</key>
@@ -57,6 +52,14 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		${PLAY_AUDIO_WHEN_IN_BACKGROUND}
+		${BACKGROUND_LOCATION_UPDATE}
+		${BACKGROUND_VOIP}
+		${BACKGROUND_NEWSSTAND_DOWNLOADS}
+		${EXTERNAL_ACC_COMM}
+		${USE_BT_LE}
+		${ACTS_AS_BT_LE}
+		${BACKGROUND_FETCH}
+		${REMOTE_NOTIFICATIONS}
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
@@ -95,9 +98,12 @@
 	<string>This application requires access to your Reminders</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This application requires access to Photo Library</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>This application requires access to read the user's health data</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>This application requires access to update the user's health data</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This application requires access to Photo Library</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This application requires access to Bluetooth always</string>
+	${APP_TRACKING_TRANSPARENCY}
+	${HEALTHKIT}
+	${UI_STYLE}
 </dict>
 </plist>

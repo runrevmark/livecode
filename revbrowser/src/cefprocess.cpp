@@ -37,7 +37,7 @@ bool MCCefV8ValueConvertToString(CefRefPtr<CefV8Context> p_context, CefRefPtr<Ce
 
 	CefRefPtr<CefV8Value> t_string_func;
 	if (t_success)
-		t_success = p_context->Eval("String", t_string_func, t_exception);
+		t_success = p_context->Eval("String", "", 1, t_string_func, t_exception);
 
 	CefRefPtr<CefV8Value> t_string_value;
 	if (t_success)
@@ -73,7 +73,7 @@ bool MCCefHandleExecuteScript(CefRefPtr<CefBrowser> p_browser, const CefString &
 	t_success = t_context != NULL;
 
 	if (t_success)
-		t_success = t_context->Eval(p_script, t_return_value, t_exception);
+		t_success = t_context->Eval(p_script, "", 1, t_return_value, t_exception);
 
 	if (t_success)
 		r_return_value = t_return_value;
@@ -129,6 +129,9 @@ bool MCCefListToV8List(CefRefPtr<CefV8Context> p_context, CefRefPtr<CefListValue
 		case VTYPE_LIST:
 			/* TODO - IMPLEMENT */
 			t_success = false;
+			break;
+		case VTYPE_INVALID:
+			t_success = false;
 		}
 
 		t_success = t_v8 != NULL;
@@ -162,7 +165,7 @@ bool MCCefHandleCallScript(CefRefPtr<CefBrowser> p_browser, const CefString &p_f
 	t_success = t_context != NULL;
 
 	if (t_success)
-		t_success = t_context->Eval(p_function_name, t_function, t_exception);
+		t_success = t_context->Eval(p_function_name, "", 1, t_function, t_exception);
 
 	if (t_success)
 		t_success = MCCefListToV8List(t_context, p_args, t_args);
@@ -238,7 +241,7 @@ public:
 		m_title = p_dom->GetTitle();
 	}
 
-	IMPLEMENT_REFCOUNTING(MCGetTitleDOMVisitor)
+	IMPLEMENT_REFCOUNTING(MCGetTitleDOMVisitor);
 };
 
 bool MCCefHandleGetTitle(CefRefPtr<CefBrowser> p_browser, CefString &r_return_value)
@@ -374,7 +377,7 @@ public:
 		return false;
 	}
 
-	IMPLEMENT_REFCOUNTING(MCCefLCFuncHandler)
+	IMPLEMENT_REFCOUNTING(MCCefLCFuncHandler);
 };
 
 class MCCefRenderApp : public CefApp, CefRenderProcessHandler
@@ -425,7 +428,7 @@ private:
 			}
 			else
 			{
-				t_obj = CefV8Value::CreateObject(nil);
+				t_obj = CefV8Value::CreateObject(nullptr, nullptr);
 				t_success = t_obj != nil;
 				
 				if (t_success)
@@ -603,7 +606,7 @@ public:
 			return CefRenderProcessHandler::OnProcessMessageReceived(p_browser, p_source_process, p_message);
 	}
 
-	IMPLEMENT_REFCOUNTING(MCCefRenderApp)
+	IMPLEMENT_REFCOUNTING(MCCefRenderApp);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -188,6 +188,8 @@ At the moment, the following keys are understood:
  - description: a simple description of the module's purpose
  - version: a string in the form X.Y.Z (with X, Y and Z integers) describing the modules version
  - author: the name of the author of the module
+ - os: the operating systems where the module can be used
+ - platforms: the platforms where the module can be used
 
 > **Note:** The current metadata mechanism is unlikely to remain part of
 > the language. It is intended that it will be replaced by a package
@@ -249,9 +251,6 @@ definitions can only be used within the module.
 
 A constant definition defines a named constant. The value can be any
 expression which depends on only on constant values to evaluate.
-
-> **Note:** Constants are not currently implemented, although the syntax
-> is recognised.
 
 ### Types
 
@@ -580,9 +579,15 @@ on Android and iOS).
 
 The Obj-C binding string has the following form:
 
-    "objc:class.(+|-)method[?thread]"
+    "objc:[library>][class.](+|-)method[?thread]"
 
-Here *class* specifies the name of the class containing the method to bind to.
+Here *library* specifies the name of the library or framework to bind to (if no
+library is specified a symbol from the engine executable or a library it is
+linked to is assumed).
+
+Here *class* specifies the name of the class containing the method to
+bind to. If the method is an instance method, the class can be omitted,
+creating a 'dynamic binding', i.e. just resolving the selector.
 
 Here *method* specifies the method name to bind to in standard Obj-C selector
 form, e.g. addTarget:action:forControlEvents:. If the method is a class method
@@ -1063,7 +1068,8 @@ Result expressions are not assignable.
       : '[' [ <Elements: ExpressionList> ] ']'
 
 A list expression evaluates all the elements in the expression list from
-left to right and constructs a list value with them as elements.
+left to right and constructs a list value with them as elements. Each 
+expression is converted to `optional any` when constructing the list.
 
 The elements list is optional, so the empty list can be specified as
 *[]*.
@@ -1081,7 +1087,8 @@ List expressions are not assignable.
 
 An array expression evaluates all of the key and value expressions
 from left to right, and constructs an **Array** value as appropriate.
-Each key expression must evaluate to a **String**.
+Each key expression must evaluate to a **String**. Each value expression 
+is converted to `optional any` when constructing the array.
 
 The contents are optional, so the empty array can be written as `{}`.
 

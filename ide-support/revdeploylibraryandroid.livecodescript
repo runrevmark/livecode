@@ -53,6 +53,23 @@ command deployDo pTargetStack, pTargetDevice
       put "com.yourcompany.yourapp" into tIdentifier
    end if
    
+   if tError is empty then
+      revStandaloneProgress "Checking target device architecture..."
+      
+      executeShellCommand pathToAdb(), "-s", word 2 to -1 of pTargetDevice, "shell", "getprop", "ro.product.cpu.abi"
+      local tABI
+      put word 1 of line 1 of the result into tABI
+      if not (tABI is among the items of "armeabi-v7a,arm64-v8a,x86,x86_64") then
+         put "Checking target device architecture failed:" && the result into tError
+      end if
+      
+      local tArch
+      put __ABIArch(tABI) into tArch
+      repeat for each item tItem in revSBPlatformArchitectures("Android")
+         put tItem is tArch into tSettings["Android",tItem]
+      end repeat
+   end if
+   
    local tTempApkFIle
    if tError is empty then
       // SN-2014-10-27: [[ Bug 13800 ]] The APK must be "specified as a full path to an .apk file"
@@ -93,6 +110,20 @@ command deployDo pTargetStack, pTargetDevice
    
    return tError
 end deployDo
+
+private function __ABIArch pABI
+   switch pABI
+      case "armeabi"
+         return "armv6"
+      case "armeabi-v7a"
+         return "armv7"
+      case "arm64-v8a"
+         return "arm64"
+      case "x86"
+      case "x86_64"
+         return pABI
+   end switch
+end __ABIArch
 
 command deployAutoconfigure
    local tSDK
@@ -150,6 +181,9 @@ on androidDevicesChanged
    
    put empty into sAvailableDevices
    repeat for each line tDevice in tDevices
+      if tDevice contains "no serial number" then
+         put quote&quote into word 1 to -2 of tDevice
+      end if
       put word 2 of tDevice into sAvailableDevices[word 1 of tDevice]
    end repeat
    
@@ -178,8 +212,17 @@ function deployIsValidJDK pPath
    return true
 end deployIsValidJDK
 
+constant kDeployAndroidTargetSDK = "29"
+function deployTargetSdkVersion
+   return kDeployAndroidTargetSDK
+end deployTargetSdkVersion
+
 function deployRequiredSDK
-   return "Android 4.0.3 (API 15)"
+   local tMap
+   put deployGetVersionsMap() into tMap
+   local tAndroidVersion
+   put word 1 of tMap[kDeployAndroidTargetSDK] into tAndroidVersion
+   return format("%s (API %s)", tAndroidVersion, kDeployAndroidTargetSDK)
 end deployRequiredSDK
 
 function deployIsValidSDK pPath 
@@ -190,10 +233,8 @@ function deployIsValidSDK pPath
       return false
    end if
    
-   // We need API 15 in order to be able to give the value 'screenSize' to the manifest variable configChanges
-   // That was introduced in the API 13, but the SDK manager only have API 15 nowadays
-   if there is no folder (pPath & slash & "platforms/android-15") then
-      --return "could not find install of SDK level 8, make sure it has been installed with the Android SDK Manager"
+   if there is no folder pathToRootPlatform(pPath) then
+      --return "could not find install of required target SDK, make sure it has been installed with the Android SDK Manager"
       return false
    end if
    
@@ -240,33 +281,33 @@ end deployGetJDK
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// SN-2015-05-13: [[ AndroidVersions ]] Make the available Android minimum versions
-//  something changeable from a script-only stack
-function deployGetVersionsList
-   return "2.3.3 - Gingerbread,3.0 - Honeycomb,3.1,3.2,4.0 - IceCream Sandwich,4.1 - Jelly Bean,4.2,4.3,4.4 - KitKat,5.0 - Lollipop,5.1"
-end deployGetVersionsList
+function deployGetVersionsMap
+   local tMap
+   put "5.0 - Lollipop" into tMap[21]
+   put "5.1" into tMap[22]
+   put "6.0 - Marshmallow" into tMap[23]
+   put "7.0 - Nougat" into tMap[24]
+   put "7.1" into tMap[25]
+   put "8.0 - Oreo" into tMap[26]
+   put "8.1" into tMap[27]
+   put "9.0 - Pie" into tMap[28]
+   put "10 - Q" into tMap[29]
+   return tMap
+end deployGetVersionsMap
 
-function deployGetAPIsList
-   return "10,11,12,13,14,16,17,18,19,21,22"
-end deployGetAPIsList
-
+constant kDefaultMinAPIVersion = 9
 function deployGetApiFromVersion pVersion
-   local tItemNumber, tAPI
-   put 1 into tItemNumber
-   put 0 into tAPI
+   local tAPI
+   put kDefaultMinAPIVersion into tAPI
    
-   repeat for each item tAndroidVersion in deployGetVersionsList()
-      if pVersion is tAndroidVersion then
-         put item tItemNumber of deployGetAPIsList() into tAPI
+   local tMap
+   put deployGetVersionsMap() into tMap
+   repeat for each key tAPIKey in tMap
+      if pVersion is tMap[tAPIKey] then
+         put tAPIKey into tAPI
          exit repeat
-      else
-         add 1 to tItemNumber
       end if
    end repeat
-   
-   if tAPI = 0 then // Keep the previous behaviour: defaulting to the smallest API
-      put 9 into tAPI
-   end if
    
    return tAPI
 end deployGetApiFromVersion
@@ -314,11 +355,16 @@ end doShellCommand
 
 ////////////////////////////////////////////////////////////////////////////////
 
-function pathToRootClasses pRoot
+function pathToRootPlatform pRoot
    if pRoot is empty then
       put sAndroidRoot into pRoot
    end if
-   return pRoot & slash & "platforms/android-15/android.jar"
+
+   return pRoot & slash & "platforms/android-" & kDeployAndroidTargetSDK
+end pathToRootPlatform
+
+function pathToRootClasses pRoot
+   return pathToRootPlatform(pRoot) & slash & "android.jar"
 end pathToRootClasses
 
 function pathToSDKClasses pRoot
@@ -491,6 +537,20 @@ function pathToJarSigner pRoot
    end if
    return pRoot & slash & "bin" & slash & executableName("jarsigner")
 end pathToJarSigner
+
+function pathToJar pRoot
+   if pRoot is empty then
+      put sJavaRoot into pRoot
+   end if
+   return pRoot & slash & "bin" & slash & executableName("jar")
+end pathToJar
+
+function pathToPlayServices  pRoot
+   if pRoot is empty then
+      put sAndroidRoot into pRoot
+   end if
+   return pRoot & slash & "extras/google/m2repository/com/google/android/gms"
+end pathToPlayServices
 
 ////////////////////////////////////////////////////////////////////////////////
 

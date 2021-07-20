@@ -121,7 +121,8 @@ static MCPropertyInfo kMCPropertyInfoTable[] =
 	DEFINE_RO_PROPERTY(P_SCRIPT_EXECUTION_ERRORS, String, Engine, ScriptExecutionErrors)
 	DEFINE_RO_PROPERTY(P_SCRIPT_PARSING_ERRORS, String, Engine, ScriptParsingErrors)
 	
-	DEFINE_RO_ARRAY_PROPERTY(P_REV_LICENSE_INFO, Array, License, RevLicenseInfoByKey)
+    DEFINE_RW_ARRAY_PROPERTY(P_REV_LIBRARY_MAPPING, String, Engine, RevLibraryMappingByKey)
+    DEFINE_RO_ARRAY_PROPERTY(P_REV_LICENSE_INFO, Array, License, RevLicenseInfoByKey)
 	DEFINE_RO_PROPERTY(P_REV_LICENSE_INFO, String, License, RevLicenseInfo)
 	DEFINE_RW_PROPERTY(P_REV_LICENSE_LIMITS, Array, License, RevLicenseLimits)
 	DEFINE_RW_PROPERTY(P_REV_RUNTIME_BEHAVIOUR, UInt16, Legacy, RevRuntimeBehaviour)
@@ -361,6 +362,7 @@ static MCPropertyInfo kMCPropertyInfoTable[] =
 	DEFINE_RO_PROPERTY(P_EXECUTION_CONTEXTS, String, Debugging, ExecutionContexts)
 	DEFINE_RW_PROPERTY(P_BREAK_POINTS, String, Debugging, Breakpoints)
 	DEFINE_RW_PROPERTY(P_WATCHED_VARIABLES, String, Debugging, WatchedVariables)
+    DEFINE_RW_PROPERTY(P_LOG_MESSAGE, String, Debugging, LogMessage)
 
     DEFINE_RW_ARRAY_PROPERTY(P_CLIPBOARD_DATA, Any, Pasteboard, ClipboardData)
     DEFINE_RW_ARRAY_PROPERTY(P_DRAG_DATA, Any, Pasteboard, DragData)
@@ -401,6 +403,8 @@ static MCPropertyInfo kMCPropertyInfoTable[] =
     
     // MW-2014-12-10: [[ Extensions ]] Returns a list of loaded extensions.
     DEFINE_RO_PROPERTY(P_LOADED_EXTENSIONS, ProperLinesOfString, Engine, LoadedExtensions)
+	
+	DEFINE_RO_ENUM_PROPERTY(P_SYSTEM_APPEARANCE, InterfaceSystemAppearance, Interface, SystemAppearance)
 };
 
 static bool MCPropertyInfoTableLookup(Properties p_which, Boolean p_effective, const MCPropertyInfo*& r_info, bool p_is_array_prop)
@@ -859,6 +863,7 @@ Parse_stat MCProperty::parse(MCScriptPoint &sp, Boolean the)
 	case P_EXECUTION_CONTEXTS:
 	case P_MESSAGE_MESSAGES:
 	case P_WATCHED_VARIABLES:
+    case P_LOG_MESSAGE:
 	case P_ALLOW_INLINE_INPUT:
 	case P_ACCEPT_DROP:
 	case P_ALLOWABLE_DRAG_ACTIONS:
@@ -937,8 +942,10 @@ Parse_stat MCProperty::parse(MCScriptPoint &sp, Boolean the)
             
     // MW-2014-12-10: [[ Extensions ]] Add support for global loadedExtensions property.
     case P_LOADED_EXTENSIONS:
+	case P_SYSTEM_APPEARANCE:
         break;
-	        
+    
+    case P_REV_LIBRARY_MAPPING:
 	case P_REV_CRASH_REPORT_SETTINGS: // DEVELOPMENT only
 	case P_REV_LICENSE_INFO:
 	case P_DRAG_DATA:

@@ -65,6 +65,7 @@ protected:
 
 	// MW-2011-08-24: [[ Layers ]] The layer id of the control.
 	uint32_t m_layer_id;
+    MCRectangle m_layer_clip_rect;
 	
 	// MW-2011-09-21: [[ Layers ]] Whether something about the control has
 	//   changed requiring a recompute the layer attributes.
@@ -90,6 +91,8 @@ protected:
 	// MW-2011-09-21: [[ Layers ]] Whether the layer is a sprite or scenery
 	//   layer.
 	bool m_layer_is_sprite : 1;
+    
+    bool m_layer_has_clip_rect : 1;
 
 	static int2 defaultmargin;
 	static int2 xoffset;
@@ -165,7 +168,10 @@ public:
 	// IM-2016-09-26: [[ Bug 17247 ]] Return rect of selection handles for the given object rect
 	static void sizerects(const MCRectangle &p_object_rect, MCRectangle rects[8]);
 	
-	void drawselected(MCDC *dc);
+    /* The drawselection method should render any selection / edit related
+     * decorations the control currently has. */
+	virtual void drawselection(MCDC *dc, const MCRectangle& p_dirty);
+    
 	void drawarrow(MCDC *dc, int2 x, int2 y, uint2 size,
 	               Arrow_direction dir, Boolean border, Boolean hilite);
 	void continuesize(int2 x, int2 y);
@@ -254,10 +260,18 @@ public:
 	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is a sprite or not.
 	bool layer_issprite(void) { return m_layer_is_sprite; }
 	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is scrolling or not.
-	bool layer_isscrolling(void) { return m_layer_mode == kMCLayerModeHintScrolling; }
+    bool layer_isscrolling(void) { return m_layer_mode == kMCLayerModeHintScrolling; }
+    // MW-2011-09-21: [[ Layers ]] Returns whether the layer is a container or not.
+    bool layer_iscontainer(void) { return m_layer_mode == kMCLayerModeHintContainer; }
 	// MW-2011-09-21: [[ Layers ]] Returns whether the layer is opaque or not.
 	bool layer_isopaque(void) { return m_layer_is_opaque; }
 
+    bool layer_has_clip_rect(void) { return m_layer_has_clip_rect; }
+    
+    // Note: The returned value only has meaning if layer_has_clip_rect() returns
+    // true.
+    MCRectangle layer_get_clip_rect(void) { return m_layer_clip_rect; }
+    
 	// MW-2011-09-21: [[ Layers ]] Make sure the layerMode attr's are accurate.
 	MCLayerModeHint layer_computeattrs(bool commit);
 	// MW-2011-09-21: [[ Layers ]] Reset the attributes to defaults.
@@ -354,8 +368,10 @@ public:
 	void SetToolTip(MCExecContext& ctxt, MCStringRef p_tooltip);
 	void GetUnicodeToolTip(MCExecContext& ctxt, MCDataRef& r_tooltip);
 	void SetUnicodeToolTip(MCExecContext& ctxt, MCDataRef p_tooltip);
+    void GetLayerClipRect(MCExecContext& ctxt, MCRectangle*& r_layer_clip_rect);
+    void SetLayerClipRect(MCExecContext& ctxt, MCRectangle* p_layer_clip_rect);
 	void GetLayerMode(MCExecContext& ctxt, intenum_t& r_mode);
-	void SetLayerMode(MCExecContext& ctxt, intenum_t p_mode);
+    void SetLayerMode(MCExecContext& ctxt, intenum_t p_mode);
 	void GetEffectiveLayerMode(MCExecContext& ctxt, intenum_t& r_mode);
     virtual void SetMargins(MCExecContext& ctxt, const MCInterfaceMargins& p_margins);
     void GetMargins(MCExecContext& ctxt, MCInterfaceMargins& r_margins);

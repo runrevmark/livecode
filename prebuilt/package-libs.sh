@@ -47,6 +47,8 @@ function doPackage {
 		source "scripts/ios.inc"
 		queryiOS "${SUBPLATFORM}"
 		local PACKAGE_SUBPLATFORM="${SUBPLATFORM_NAME}${VERSION}"
+	elif  [ "${PLATFORM}" == "android" ] ; then
+		local PACKAGE_SUBPLATFORM="${SUBPLATFORM}"
 	else
 		local PACKAGE_SUBPLATFORM=
 	fi
@@ -73,6 +75,7 @@ function doPackage {
 	generateTarFileName Curl "${SUFFIX}"
 	generateTarFileName ICU "${SUFFIX}"
 	generateTarFileName CEF "${SUFFIX}"
+	generateTarFileName Thirdparty "${SUFFIX}"
 	
 	# Package up OpenSSL
 	if [ -f "${LIBPATH}/libcustomcrypto.a" ] ; then
@@ -114,10 +117,33 @@ function doPackage {
 	fi
 
 	# Package up CEF
-	if [ "$PLATFORM" = "win32" -o "$PLATFORM" = "linux" ] ; then
-		if [ -f "${LIBPATH}/CEF" ] ; then
+	if [ "${PLATFORM}" == "linux" ] ; then
+		if [ -d "${LIBPATH}/CEF" ] ; then
 			tar -cf "${CEF_TAR}" "${LIBPATH}/CEF"
 		fi
+	fi
+
+	# Package up Thirdparty
+	local Thirdparty_FILES=
+	local Thirdparty_LIBS_I="Thirdparty_LIBS_$PLATFORM"
+	if [ -f "${LIBPATH}/libz.a" ] ; then
+		for LIB in ${!Thirdparty_LIBS_I} ; do
+			Thirdparty_FILES+="${LIBPATH}/${LIB}.a "
+			if [ -e "${LIBPATH}/${LIB}_opt_none.a" ]; then
+				Thirdparty_FILES+="${LIBPATH}/${LIB}_*.a "
+			fi
+		done
+	else
+		for LIB in ${!Thirdparty_LIBS_I} ; do
+			Thirdparty_FILES+="${LIBPATH}/${LIB}.lib "
+			if [ "${LIB}" == "libskia" ]; then
+				Thirdparty_FILES+="${LIBPATH}/${LIB}_*.lib "
+			fi
+		done
+	fi
+
+	if [ ! -z "${Thirdparty_FILES}" ] ; then
+		tar -cf "${Thirdparty_TAR}" ${Thirdparty_FILES}
 	fi
 
 	# Compress the packages
@@ -133,13 +159,16 @@ function doPackage {
 	if [ -f "${CEF_TAR}" ] ; then
 		bzip2 -zf --best "${CEF_TAR}"
 	fi
+	if [ -f "${Thirdparty_TAR}" ] ; then
+		bzip2 -zf --best "${Thirdparty_TAR}"
+	fi
 }
 
 PLATFORM=$1
 ARCH=$2
 
-#only ios subplatforms are used
-if [ "${PLATFORM}" = "ios" ] ; then
+#only ios and android subplatforms are used
+if [ "${PLATFORM}" == "ios" ] || [ "${PLATFORM}" == "android" ] ; then
 	SUBPLATFORM=$3
 else
 	SUBPLATFORM=

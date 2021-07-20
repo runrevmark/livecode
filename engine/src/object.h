@@ -170,6 +170,8 @@ struct MCObjectVisitor
 	virtual bool OnImage(MCImage *p_image);
 	virtual bool OnScrollbar(MCScrollbar *p_scrollbar);
 	virtual bool OnPlayer(MCPlayer *p_player);
+    virtual bool OnGraphic(MCGraphic *p_graphic);
+    virtual bool OnEps(MCEPS *p_eps);
 	virtual bool OnParagraph(MCParagraph *p_paragraph);
 	virtual bool OnBlock(MCBlock *p_block);
 	virtual bool OnStyledText(MCStyledText *p_styled_text);
@@ -504,6 +506,8 @@ struct MCExecValue;
 struct MCDeletedObjectPool;
 void MCDeletedObjectsSetup(void);
 void MCDeletedObjectsTeardown(void);
+void MCDeletedObjectsFreezePool(void);
+void MCDeletedObjectsThawPool(void);
 void MCDeletedObjectsEnterWait(bool p_dispatching);
 void MCDeletedObjectsLeaveWait(bool p_dispatching);
 void MCDeletedObjectsOnObjectCreated(MCObject *object);
@@ -646,7 +650,7 @@ public:
     virtual const MCObjectPropertyTable *getmodepropertytable(void) const { return &kModePropertyTable; }
 	
 	virtual bool visit(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor *p_visitor);
-	virtual bool visit_self(MCObjectVisitor *p_visitor);
+    virtual bool visit_self(MCObjectVisitor *p_visitor) = 0;
 	virtual bool visit_children(MCObjectVisitorOptions p_options, uint32_t p_part, MCObjectVisitor *p_visitor);
 
 	virtual IO_stat save(IO_handle stream, uint4 p_part, bool p_force_ext, uint32_t p_version);
@@ -936,6 +940,10 @@ public:
 	// is no parentScript, it returns NULL - note that this is an MCParentScript,
 	// not an MCParentScriptUse.
 	MCParentScript *getparentscript(void) const;
+    
+    // Set the parentScript of the object at load time of it (used by the script
+    // only stack loader).
+    bool setparentscript_onload(uint32_t p_id, MCNameRef p_stack);
 
 	// MW-2009-01-28: [[ Inherited parentScripts ]]
 	// This method returns false if there was not enough memory to complete the
@@ -1197,7 +1205,7 @@ public:
     bool is_rtl() const { return false; }
     
     // AL-2015-06-30: [[ Bug 15556 ]] Refactored function to sync mouse focus
-    void sync_mfocus(void);
+	void sync_mfocus(bool p_visiblility_changed, bool p_resize_parent);
     
     // This accessor is used by the widget event manager to trigger tooltip
     // display for widgets.
@@ -1206,6 +1214,10 @@ public:
     // Returns true if this object is an ancestor *control* of p_object
     //  in the parent chain.
     bool isancestorof(MCObject *p_object);
+    
+    // Reinstate the weak proxy object (used after an object is deleted, but is
+    // in the undo queue).
+    void ensure_weak_proxy(void) { if (m_weak_proxy == nullptr) m_weak_proxy = new MCObjectProxyBase(this); }
     
     ////////// PROPERTY SUPPORT METHODS
 

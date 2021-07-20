@@ -34,24 +34,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, LinesOfTextByRange, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, LinesOfTextByExpression, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, LinesOfTextByOrdinal, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ItemsOfTextByRange, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ItemsOfTextByExpression, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ItemsOfTextByOrdinal, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, WordsOfTextByRange, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, WordsOfTextByExpression, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, WordsOfTextByOrdinal, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TokensOfTextByRange, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TokensOfTextByExpression, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TokensOfTextByOrdinal, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CharsOfTextByRange, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CharsOfTextByExpression, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CharsOfTextByOrdinal, 3)
-
-////////////////////////////////////////////////////////////////////////////////
-
 struct MCChunkCountState
 {
     MCStringRef string;
@@ -82,12 +64,11 @@ void MCStringsCountChunksInRange(MCExecContext& ctxt, Chunk_term p_chunk_type, M
         return;
     }
 
-    MCTextChunkIterator *tci;
+    MCAutoPointer<MCTextChunkIterator> tci;
     tci = MCStringsTextChunkIteratorCreateWithRange(ctxt, p_string, p_range, p_chunk_type);
     
     r_count = tci -> CountChunks();
     
-    delete tci;
     return;
 }
 
@@ -1163,9 +1144,7 @@ MCTextChunkIterator *MCStringsTextChunkIteratorCreate(MCExecContext& ctxt, MCStr
 {
     if (p_chunk_type == CT_TOKEN)
     {
-        MCTextChunkIterator *tci;
-        tci = new (nothrow) MCTextChunkIterator_Tokenized(p_text, MCChunkTypeFromChunkTerm(p_chunk_type));
-        return tci;
+        return new (nothrow) MCTextChunkIterator_Tokenized(p_text, MCChunkTypeFromChunkTerm(p_chunk_type));
     }
     
     return MCChunkCreateTextChunkIterator(p_text, nil, MCChunkTypeFromChunkTerm(p_chunk_type), ctxt . GetLineDelimiter(), ctxt . GetItemDelimiter(), ctxt . GetStringComparisonType());
@@ -1175,9 +1154,7 @@ MCTextChunkIterator *MCStringsTextChunkIteratorCreateWithRange(MCExecContext& ct
 {
     if (p_chunk_type == CT_TOKEN)
     {
-        MCTextChunkIterator *tci;
-        tci = new (nothrow) MCTextChunkIterator_Tokenized(p_text, MCChunkTypeFromChunkTerm(p_chunk_type), p_range);
-        return tci;
+        return new (nothrow) MCTextChunkIterator_Tokenized(p_text, MCChunkTypeFromChunkTerm(p_chunk_type), p_range);
     }
     
     return MCChunkCreateTextChunkIterator(p_text, &p_range, MCChunkTypeFromChunkTerm(p_chunk_type), ctxt . GetLineDelimiter(), ctxt . GetItemDelimiter(), ctxt . GetStringComparisonType());

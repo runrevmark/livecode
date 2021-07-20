@@ -149,7 +149,7 @@ class DialogModule
         Calendar t_calendar = Calendar.getInstance();
         t_calendar.setTimeInMillis(p_current * 1000);
         
-        DatePickerDialog t_dialog = new DatePickerDialog(m_engine.getContext(), t_date_listener,
+        DatePickerDialog t_dialog = new DatePickerDialog(m_engine.getContext(), android.R.style.Theme_DeviceDefault_Dialog_Alert, t_date_listener,
                                                          t_calendar.get(Calendar.YEAR),
                                                          t_calendar.get(Calendar.MONTH),
                                                          t_calendar.get(Calendar.DAY_OF_MONTH));
@@ -171,14 +171,14 @@ class DialogModule
                 if (p_with_min)
                 {
                     Method t_setMinDate;
-                    t_setMinDate = t_dialog.getClass().getMethod("setMinDate", new Class[] {Long.TYPE});
+                    t_setMinDate = t_date_picker.getClass().getMethod("setMinDate", new Class[] {Long.TYPE});
                     t_setMinDate.invoke(t_date_picker, new Object[] {p_min * 1000});
                 }
 
                 if (p_with_max)
                 {
                     Method t_setMaxDate;
-                    t_setMaxDate = t_dialog.getClass().getMethod("setMaxDate", new Class[] {Long.TYPE});
+                    t_setMaxDate = t_date_picker.getClass().getMethod("setMaxDate", new Class[] {Long.TYPE});
                     t_setMaxDate.invoke(t_date_picker, new Object[] {p_max * 1000});
                 }
             }
@@ -216,7 +216,7 @@ class DialogModule
             }
         };
 
-        TimePickerDialog t_dialog = new TimePickerDialog(m_engine.getContext(), t_time_listener,
+        TimePickerDialog t_dialog = new TimePickerDialog(m_engine.getContext(), android.R.style.Theme_DeviceDefault_Dialog_Alert, t_time_listener,
                                                          p_hour, p_minute,
                                                          false);
         t_dialog.setOnCancelListener(t_cancel_listener);

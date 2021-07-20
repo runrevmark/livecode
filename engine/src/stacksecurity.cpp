@@ -103,6 +103,27 @@ IO_stat MCStackSecurityRead(char *r_string, uint32_t p_length, IO_handle p_strea
 	return t_stat;
 }
 
+IO_stat MCStackSecurityReadUTF8StringRef(MCStringRef& r_string, uint32_t p_length, IO_handle p_stream)
+{
+    MCAutoArray<byte_t> t_utf8_string;
+    if (!t_utf8_string.New(p_length))
+        return IO_ERROR;
+    
+    if (MCStackSecurityRead(reinterpret_cast<char *>(t_utf8_string.Ptr()),
+                            p_length,
+                            p_stream) != IO_NORMAL)
+        return IO_ERROR;
+    
+    if (!MCStringCreateWithBytes(t_utf8_string.Ptr(),
+                                 p_length,
+                                 kMCStringEncodingUTF8,
+                                 false,
+                                 r_string))
+        return IO_ERROR;
+    
+    return IO_NORMAL;
+}
+
 ///////////
 
 void MCStackSecurityProcessCapsule(void *p_start, void *p_finish)
@@ -119,31 +140,5 @@ bool MCStackSecurityPreDeploy(uint32_t p_platform, MCDeployParameters& p_params)
 void MCStackSecurityExecutionTimeout(void)
 {
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-/* ================================================================
- * Emscripten standalone deployment
- * ================================================================ */
-
-bool
-MCStackSecurityEmscriptenPrepareStartupStack(MCStack *r_stack)
-{
-	return true;
-}
-
-#if defined(__EMSCRIPTEN__)
-
-/* ================================================================
- * Emscripten standalone startup checks
- * ================================================================ */
-
-bool
-MCStackSecurityEmscriptenStartupCheck(MCStack *p_stack)
-{
-	return true;
-}
-
-#endif /* __EMSCRIPTEN__ */
 
 ////////////////////////////////////////////////////////////////////////////////

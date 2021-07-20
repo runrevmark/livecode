@@ -41,7 +41,7 @@ References: itemLabels (property), itemIcons (property),
 
 Name: hiliteChanged
 Type: message
-Syntax: on hiliteChanged
+Syntax: hiliteChanged
 
 Summary: Sent when the hilite of the segmented control widget changes
 
@@ -121,9 +121,10 @@ use com.livecode.library.scriptitems
 -- metadata
 metadata title is "Segmented Control"
 metadata author is "LiveCode"
-metadata version is "1.1.0"
+metadata version is "1.2.0"
 metadata svgicon is "M72.6,0H7.7C3.4,0,0,3.4,0,7.7v14c0,4.2,3.4,7.7,7.7,7.7h64.9c4.2,0,7.7-3.4,7.7-7.7v-14C80.2,3.4,76.8,0,72.6,0z M7.8,13.5h8v2.3h-8V13.5z M19.7,20.6h-12v-2.3h12V20.6z M19.7,11h-12V8.8h12V11z M27.8,25.5h-1V3.8h1V25.5z M46.1,20.6h-12v-2.3h12V20.6zM36.1,15.7v-2.3h8v2.3H36.1z M46.1,11h-12V8.8h12V11z M54.4,25.5h-1V3.8h1V25.5z M72.7,20.6h-12v-2.3h12V20.6z M72.7,15.7h-8v-2.3h8V15.7z M72.7,11h-12V8.8h12V11z"
 metadata preferredSize is "200,32"
+metadata _ide is "true"
 
 -- property declarations
 
@@ -168,6 +169,16 @@ metadata hilitedTextColor.label is "Hilited segment label color"
 metadata themeClass.default is "list"
 metadata themeClass.user_visible is "false"
 
+/**
+Syntax: set the horizontal of <widget> to {true | false}
+Syntax: get the horizontal of <widget>
+
+Summary: Whether the segmented widget is horizontal or not
+
+Description:
+Use the <horizontal> property to control whether the segmented widget
+is laid out horizontally or vertically.
+**/
 property horizontal get mIsHorizontal set SetHorizontal
 metadata horizontal.editor is "com.livecode.pi.boolean"
 metadata horizontal.default is "true"
@@ -212,6 +223,8 @@ constant kDefaultSegmentLabel is "Label"
 constant kDefaultSegmentMinExtent is 50
 constant kDefaultSelectedLabelColor is [1,1,1]
 
+constant kPostMessage is true
+constant kDontPostMessage is false
 --
 
 public handler OnSave(out rProperties as Array)
@@ -225,8 +238,11 @@ public handler OnSave(out rProperties as Array)
 	put mSelectedIcons		into rProperties["selectedIcons"]
 	put mSegmentDisplay		into rProperties["segmentDisplay"]
 	put mSegmentMinExtent	into rProperties["segmentMinExtent"]
+	put mSegmentMinExtent	into rProperties["segmentMinWidth"]
 	put getSelected()		into rProperties["selectedSegment"]
 	put mShowFrameBorder	into rProperties["showFrameBorder"]
+	put mIsHorizontal		into rProperties["horizontal"]
+	put mRadius into rProperties["cornerRadius"]
 	
 	if mSelectedLabelColor is not nothing then
 		put colorToString(mSelectedLabelColor, false) into rProperties["selectedLabelColor"]
@@ -251,13 +267,21 @@ public handler OnLoad(in pProperties as Array)
 	else if "segmentMinExtent" is among the keys of pProperties then
 		put pProperties["segmentMinExtent"]	into mSegmentMinExtent
 	end if
+
 	put pProperties["showFrameBorder"]	into mShowFrameBorder
-	setSelected(pProperties["selectedSegment"])
+	setSelected(pProperties["selectedSegment"], kDontPostMessage)
+
+	if "cornerRadius" is among the keys of pProperties then
+	    put pProperties["cornerRadius"] into mRadius
+	end if
 
 	if "selectedLabelColor" is among the keys of pProperties then
 		put stringToColor(pProperties["selectedLabelColor"]) into mSelectedLabelColor
 	end if
-
+	
+	if "horizontal" is among the keys of pProperties then
+		put pProperties["horizontal"] into mIsHorizontal
+	end if
 	
 end handler
 
@@ -270,10 +294,10 @@ public handler OnCreate()
 	put ["Label 1","Label 2","Label 3"] into mSegmentLabels
 	put ["align left","align center","align right"] into mSegmentIcons
 	put ["align left","align center","align right"] into mSelectedIcons
+	put [false, false, false] into mSegmentSelected
 	
 	put "text" into mSegmentDisplay
 	put [kDefaultSegmentMinExtent, kDefaultSegmentMinExtent, kDefaultSegmentMinExtent] into mSegmentMinExtent
-	setSelected([])
 	
 	put true into mShowFrameBorder
 	put true into mIsHorizontal	
@@ -283,8 +307,7 @@ public handler OnCreate()
 	put (the number of elements in mSegmentNames) into mNumSegments
 	put the empty path into mPerimeter
 	put the empty list into mLines
-	put 0 into mRadius
-
+        put 15 into mRadius
 	put [] into mCalculatedExtents
 end handler
 
@@ -292,7 +315,6 @@ public handler OnPaint()
 	if mGeometryIsChanged then
 		calculateExtents()
 		-- update mPerimeter and mLines variables if the geometry has changed
-		put (the trunc of my height)/5 into mRadius
 		updatePerimeter()
 		updateLines()
 	end if
@@ -355,9 +377,9 @@ public handler OnClick() returns nothing
 		-- deselect the currently selected segment. If the clicked-on segment is
 		-- already selected, then act according to toggleHilites property
 		if mSegmentSelected[tSegmentIndex] and mToggleHilites then
-				setSelected([])
+				setSelected([], kPostMessage)
 		else if not mSegmentSelected[tSegmentIndex] then
-			setSelected([tSegmentIndex])
+			setSelected([tSegmentIndex], kPostMessage)
 		end if
 	else
 		-- If can multiselect, then select the clicked-on segment if it is
@@ -379,7 +401,7 @@ end handler
 -- vertical pixel span to a whole number of pixels, in such a way that
 -- the input span is always fully contained within the output span.
 handler hintLower(in pBound as Number) returns Number
-	return the floor of (pBound - 0.5)
+	return the ceiling of (pBound - 0.5)
 end handler
 handler hintUpper(in pBound as Number) returns Number
 	return the floor of (pBound + 0.5)
@@ -434,7 +456,8 @@ private handler drawSegments() returns nothing
 
 		if tSegmentIndex is 1 then
 			put tBorderOffset into element tStartIndex of tSegmentRect
-		else if tSegmentIndex is mNumSegments then
+        end if
+		if tSegmentIndex is mNumSegments then
 			subtract tBorderOffset from element tEndIndex of tSegmentRect
 		end if
 
@@ -442,7 +465,9 @@ private handler drawSegments() returns nothing
 		clip to rectangle tSegmentRect on this canvas
 		-- For the rounded rectangle segments at the ends, we fill the round rect beyond the
 		-- curvature and use the clip rect to display as we would like.
-		if tSegmentIndex = 1 then
+        if tSegmentIndex = 1 and tSegmentIndex = mNumSegments then
+           fill rounded rectangle path of rectangle tSegmentRect with radius mRadius on this canvas
+		else if tSegmentIndex = 1 then
 			put tStart + tExtent + mRadius into element tEndIndex of tSegmentRect
 			fill rounded rectangle path of rectangle tSegmentRect with radius mRadius on this canvas
 		else if tSegmentIndex = mNumSegments then
@@ -668,7 +693,7 @@ private handler setSelectedLabelColor(in pColor as String)
 	redraw all
 end handler
 
-handler setSelected(in pIndices as List) returns nothing
+handler setSelected(in pIndices as List, in pPostMessage as Boolean) returns nothing
 	variable tState as List
 	variable tIndex as Number
 
@@ -697,7 +722,9 @@ handler setSelected(in pIndices as List) returns nothing
 
 	put tState into mSegmentSelected
 	redraw all
-	post "hiliteChanged"
+	if pPostMessage then
+		post "hiliteChanged"
+	end if
 end handler
 
 handler getSelected() returns List
@@ -714,7 +741,7 @@ handler getSelected() returns List
 end handler
 
 handler updateSelected()
-	setSelected(getSelected())
+	setSelected(getSelected(), kPostMessage)
 end handler
 
 ----------------------------------------------------------------
@@ -1104,7 +1131,7 @@ private handler setMultiSelect(in pCanMultiSelect as Boolean)
 	-- the selection
 	if not pCanMultiSelect and \
 			the number of elements in getSelected() > 1 then
-		setSelected([])
+		setSelected([], kPostMessage)
 	end if
 end handler
 
@@ -1226,7 +1253,7 @@ private handler setSelectedSegmentIndices(in pIndices as String) returns nothing
 		end if
 	end repeat
 
-	setSelected(tIndices)
+	setSelected(tIndices, kPostMessage)
 end handler
 
 private handler getSelectedSegmentIndices() returns String
@@ -1276,7 +1303,7 @@ private handler setSelectedSegmentNames(in pItemNames as String) returns nothing
 		end if
 	end repeat
 
-	setSelected(tIndices)
+	setSelected(tIndices, kPostMessage)
 end handler
 
 private handler getSelectedSegmentNames() returns String
@@ -1290,6 +1317,31 @@ end handler
 
 public handler SetHorizontal(in pHorizontal as Boolean) returns nothing
 	put pHorizontal into mIsHorizontal
+	put true into mGeometryIsChanged
+	redraw all
+end handler
+
+/**
+Name: cornerRadius
+Type: property
+
+Syntax: set the cornerRadius of <widget> to <value>
+Syntax: get the cornerRadius of <widget>
+
+Summary: The corner radius of the widget
+
+Description:
+The cornerRadius is the radius (in pixels) of the corner curve of the <widget>. The default value is usually suitable for horizantal orientations, however with a vertical orientation, depending on the size of the labels, you may wish to adjust.
+**/
+property cornerRadius get mRadius set setCornerRadius
+metadata cornerRadius.editor is "com.livecode.pi.number"
+metadata cornerRadius.default is "15"
+metadata cornerRadius.section is "Basic"
+metadata cornerRadius.label is "Corner Radius"
+
+public handler setCornerRadius(in pCornerRadius as Number) returns nothing
+	put pCornerRadius into mRadius
+	put true into mGeometryIsChanged
 	redraw all
 end handler
 

@@ -33,24 +33,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, Base64Encode, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, Base64Decode, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, BinaryEncode, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, BinaryDecode, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, Compress, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, Decompress, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, IsoToMac, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, MacToIso, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, UrlEncode, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, UrlDecode, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, UniEncode, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, UniDecode, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, MD5Digest, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, SHA1Digest, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Filters, MessageDigest, 3)
-
-////////////////////////////////////////////////////////////////////////////////
-
 bool MCFiltersIsoToMac(MCDataRef p_source, MCDataRef &r_result)
 {
 	MCAutoByteArray t_buffer;
@@ -719,7 +701,8 @@ void MCFiltersEvalBinaryDecode(MCExecContext& ctxt, MCStringRef p_format, MCData
                     
                     while (!t_space_skipped)
                     {
-                        if (offset > offset + t_temp_size - t_space_length)
+                        // stop looking for spaces when an encoded space char won't fit within the remaining data
+                        if (t_space_length > t_temp_size)
                         {
                             // No char remaining
                             t_space_skipped = true;
@@ -860,8 +843,10 @@ void MCFiltersEvalBinaryEncode(MCExecContext& ctxt, MCStringRef p_format, MCValu
                 MCAutoStringRefAsNativeChars t_auto_native;
                 const char_t* t_native;
                 uindex_t t_length;
-                /* UNCHECKED */ t_auto_native . Lock(*t_string, t_native, t_length);
-
+                t_success = t_auto_native . Lock(*t_string, t_native, t_length);
+								if (!t_success)
+									break;
+									
 				switch (cmd)
 				{
 				case 'a':

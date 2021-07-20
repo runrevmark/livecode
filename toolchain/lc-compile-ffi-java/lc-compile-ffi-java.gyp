@@ -13,6 +13,11 @@
 			
 			'toolsets': ['host','target'],
 			
+			'dependencies':
+			[
+				'../../prebuilt/thirdparty.gyp:thirdparty_prebuilt_ffi',
+			],
+
 			'conditions':
 			[
 				[
@@ -54,7 +59,7 @@
 										{
 											'dist_files':
 											[
-												'<(lc-compile-ffi-java_target)',
+												'>(lc-compile-ffi-java_target)',
 											],
 										},
 									},

@@ -798,11 +798,18 @@ bool MCDataFirstIndexOf(MCDataRef p_data, MCDataRef p_chunk, MCRange p_range, ui
 	if (p_range.length == 0)
 		return false;
     
-    uindex_t t_limit, t_chunk_byte_count;
+    uindex_t t_limit, t_chunk_byte_count, t_data_byte_count;
     t_chunk_byte_count = MCDataGetLength(p_chunk);
+	t_data_byte_count = MCDataGetLength(p_data);
+	
 	if (t_chunk_byte_count == 0)
 		return false;
-    t_limit = p_range . offset + p_range . length - t_chunk_byte_count + 1;
+	else if (t_data_byte_count < t_chunk_byte_count)
+		return false;
+	else if (p_range.length < t_chunk_byte_count)
+		return false;
+
+	t_limit = p_range . offset + t_data_byte_count- t_chunk_byte_count + 1;
     
     const byte_t *t_bytes = MCDataGetBytePtr(p_data);
     const byte_t *t_chunk_bytes = MCDataGetBytePtr(p_chunk);
@@ -866,20 +873,6 @@ MCDataLastIndexOf (MCDataRef self,
 	}
 	return false;
 }
-
-#if defined(__MAC__) || defined (__IOS__)
-MC_DLLEXPORT_DEF
-bool MCDataConvertToCFDataRef(MCDataRef p_data, CFDataRef& r_cfdata)
-{
-	__MCAssertIsData(p_data);
-
-    if (__MCDataIsIndirect(p_data))
-        p_data = p_data -> contents;
-    
-    r_cfdata = CFDataCreate(nil, MCDataGetBytePtr(p_data), MCDataGetLength(p_data));
-    return r_cfdata != nil;
-}
-#endif
 
 static void __MCDataClampRange(MCDataRef p_data, MCRange& x_range)
 {

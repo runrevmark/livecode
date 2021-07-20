@@ -135,10 +135,20 @@ extern "C" MC_DLLEXPORT_DEF void MCWidgetEvalInEditMode(bool& r_in_edit_mode)
     r_in_edit_mode = MCcurtool != T_BROWSE;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+extern "C" MC_DLLEXPORT_DEF void MCWidgetExecTriggerAll(void)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    MCWidgetTriggerAll(MCcurrentwidget);
+}
 
-extern MCValueRef MCEngineDoSendToObjectWithArguments(bool p_is_function, MCStringRef p_message, MCObject *p_object, MCProperListRef p_arguments);
-extern void MCEngineDoPostToObjectWithArguments(MCStringRef p_message, MCObject *p_object, MCProperListRef p_arguments);
+extern "C" MC_DLLEXPORT_DEF void MCWidgetExecTriggerAllInWidget(MCWidgetRef p_widget)
+{
+	MCWidgetTriggerAll(p_widget);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMyScriptObject(MCScriptObjectRef& r_script_object)
 {
@@ -149,51 +159,29 @@ extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMyScriptObject(MCScriptObjectRef& r_
         return;
 }
 
-extern "C" MC_DLLEXPORT_DEF MCValueRef MCWidgetExecSendWithArguments(bool p_is_function, MCStringRef p_message, MCProperListRef p_arguments)
-{
-    if (!MCWidgetEnsureCurrentWidgetIsRoot())
-        return nil;
-    
-    return MCEngineDoSendToObjectWithArguments(p_is_function, p_message, MCWidgetGetHost(MCcurrentwidget), p_arguments);
-}
-
-extern "C" MC_DLLEXPORT_DEF MCValueRef MCWidgetExecSend(bool p_is_function, MCStringRef p_message)
-{
-    return MCWidgetExecSendWithArguments(p_is_function, p_message, kMCEmptyProperList);
-}
-
-extern "C" MC_DLLEXPORT_DEF void MCWidgetExecPostWithArguments(MCStringRef p_message, MCProperListRef p_arguments)
+// This should only be called internally when MCcurrentwidget is known
+// to be a non-root widget.
+void MCWidgetExecPostToParentWithArguments(MCStringRef p_message, MCProperListRef p_arguments)
 {
     if (!MCWidgetEnsureCurrentWidget())
         return;
     
-    if (MCWidgetIsRoot(MCcurrentwidget))
-        MCEngineDoPostToObjectWithArguments(p_message, MCWidgetGetHost(MCcurrentwidget), p_arguments);
-    else
-    {
-        MCAutoStringRef t_modified_name;
-        if (!MCStringFormat(&t_modified_name, "On%@", p_message))
-            return;
-        
-        MCNewAutoNameRef t_message;
-        if (!MCNameCreate(*t_modified_name, &t_message))
-            return;
-        
-        // Note: At the moment 'post' isn't really a post in this case - it calls
-        //   the handler immediately.
-        MCWidgetRef t_old_target;
-        t_old_target = MCwidgeteventmanager -> SetTargetWidget(MCcurrentwidget);
-        MCWidgetPost(MCWidgetGetOwner(MCcurrentwidget), *t_message, p_arguments);
-        MCwidgeteventmanager -> SetTargetWidget(t_old_target);
-    }
-}
-
-extern "C" MC_DLLEXPORT_DEF void MCWidgetExecPost(MCStringRef p_message)
-{
-    if (!MCWidgetEnsureCurrentWidget())
+    MCAssert(!MCWidgetIsRoot(MCcurrentwidget));
+    
+    MCAutoStringRef t_modified_name;
+    if (!MCStringFormat(&t_modified_name, "On%@", p_message))
         return;
     
-    MCWidgetExecPostWithArguments(p_message, kMCEmptyProperList);
+    MCNewAutoNameRef t_message;
+    if (!MCNameCreate(*t_modified_name, &t_message))
+        return;
+    
+    // Note: At the moment 'post' isn't really a post in this case - it calls
+    //   the handler immediately.
+    MCWidgetRef t_old_target;
+    t_old_target = MCwidgeteventmanager -> SetTargetWidget(MCcurrentwidget);
+    MCWidgetPost(MCWidgetGetOwner(MCcurrentwidget), *t_message, p_arguments);
+    MCwidgeteventmanager -> SetTargetWidget(t_old_target);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -333,6 +321,14 @@ extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMyPaint(uinteger_t p_type, MCCanvasP
     MCCanvasSolidPaintMakeWithColor(kMCCanvasColorBlack, (MCCanvasSolidPaintRef&)r_paint);
 }
 
+extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMyPixelScale(MCCanvasFloat& r_pixel_scale)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    r_pixel_scale = MCWidgetGetHost(MCcurrentwidget)->getstack()->view_getbackingscale();
+}
+
 extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMousePosition(bool p_current, MCCanvasPointRef& r_point)
 {
     if (!MCWidgetEnsureCurrentWidget())
@@ -397,6 +393,79 @@ extern "C" MC_DLLEXPORT_DEF void MCWidgetGetClickCount(bool p_current, unsigned 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern "C" MC_DLLEXPORT_DEF void MCWidgetGetTouchId(MCValueRef& r_id)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    integer_t t_id;
+    if (!MCwidgeteventmanager->GetActiveTouch(t_id))
+    {
+        r_id = MCValueRetain(kMCNull);
+        return;
+    }
+    
+    MCNumberCreateWithInteger(t_id, (MCNumberRef&)r_id);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCWidgetGetTouchPosition(MCValueRef& r_point)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    integer_t t_id;
+    MCPoint t_position;
+    if (!MCwidgeteventmanager->GetActiveTouch(t_id) ||
+        !MCwidgeteventmanager->GetTouchPosition(t_id, t_position))
+    {
+        r_point = MCValueRetain(kMCNull);
+        return;
+    }
+
+    /* UNCHECKED */ MCCanvasPointCreateWithMCGPoint(MCWidgetMapPointFromGlobal(MCcurrentwidget, MCPointToMCGPoint(t_position)), (MCCanvasPointRef&)r_point);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCWidgetGetNumberOfTouches(uinteger_t& r_count)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    r_count = MCwidgeteventmanager->GetTouchCount();
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCWidgetGetPositionOfTouch(integer_t p_id, MCValueRef& r_point)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    MCPoint t_position;
+    if (!MCwidgeteventmanager->GetTouchPosition(p_id, t_position))
+    {
+        r_point = MCValueRetain(kMCNull);
+        return;
+    }
+    
+    /* UNCHECKED */ MCCanvasPointCreateWithMCGPoint(MCWidgetMapPointFromGlobal(MCcurrentwidget, MCPointToMCGPoint(t_position)), (MCCanvasPointRef&)r_point);
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCWidgetGetTouchIDs(MCValueRef& r_touch_ids)
+{
+    if (!MCWidgetEnsureCurrentWidget())
+        return;
+    
+    MCAutoProperListRef t_touch_ids;
+    if (!MCwidgeteventmanager->GetTouchIDs(&t_touch_ids) ||
+        MCProperListIsEmpty(*t_touch_ids))
+    {
+        r_touch_ids = MCValueRetain(kMCNull);
+        return;
+    }
+    
+    r_touch_ids = t_touch_ids.Take();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 typedef struct __MCPressedState* MCPressedStateRef;
 MCTypeInfoRef kMCPressedState;
 
@@ -410,6 +479,14 @@ extern "C" MC_DLLEXPORT_DEF void MCWidgetGetMouseButtonState(uinteger_t p_index,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+extern "C" MC_DLLEXPORT_DEF void MCWidgetEvalThisWidget(MCWidgetRef& r_widget)
+{
+	if (!MCWidgetEnsureCurrentWidget())
+		return;
+	
+	r_widget = MCValueRetain(MCcurrentwidget);
+}
 
 extern "C" MC_DLLEXPORT_DEF void MCWidgetEvalTheTarget(MCWidgetRef& r_widget)
 {

@@ -28,11 +28,64 @@ typedef struct
 }
 LT;
 
+typedef enum {
+    kCValueTypeReal,
+    kCValueTypeInteger,
+    kCValueTypeString,
+    kCValueTypeNull,
+    kCValueTypeEmpty,
+    kCValueTypeTrue,
+    kCValueTypeFalse,
+    kCValueTypeInfinity
+} CvalueType;
+
 struct Cvalue
 {
-	const char *token;
-	const char *svalue;
-	real8 nvalue;
+    /* Each constructor is labelled constexpr so that it should be
+     * evaluated at compile time. Overloading is used to infer the
+     * type to use, based on the second argument. */
+    
+    constexpr Cvalue(const char *p_token, integer_t p_integer)
+        : token(p_token),
+          type(kCValueTypeInteger),
+          integer(p_integer)
+    {
+    }
+    
+    constexpr Cvalue(const char *p_token, double p_real)
+        : token(p_token),
+          type(kCValueTypeReal),
+          real(p_real)
+    {
+    }
+    
+    constexpr Cvalue(const char *p_token, const char *p_string)
+        : token(p_token),
+          type(kCValueTypeString),
+          string(p_string)
+    {
+    }
+    
+    /* As CvalueType is an explicit enum type distinct from the other
+     * value types, we can use that to construct a Cvalue with explicit
+     * type. Note: As this is a constexpr constructor *all* fields must be
+     * initialized, we choose integer = 0 for the union in this case. */
+    
+    constexpr Cvalue(const char *p_token, CvalueType p_type)
+        : token(p_token),
+          type(p_type),
+          integer(0)
+    {
+    }
+    
+    const char *token;
+    CvalueType type;
+    union
+    {
+        double real;
+        integer_t integer;
+        const char *string;
+    };
 };
 
 class MCScriptPoint
@@ -67,7 +120,8 @@ class MCScriptPoint
 
 public:
 	MCScriptPoint(MCScriptPoint &sp);
-	MCScriptPoint(MCObject *, MCHandlerlist *, MCStringRef script);
+    MCScriptPoint(MCObject *, MCHandlerlist *, MCDataRef utf8_script);
+    MCScriptPoint(MCObject *, MCHandlerlist *, MCStringRef utf8_script);
     MCScriptPoint(MCExecContext &ctxt);
     MCScriptPoint(MCExecContext &ctxt, MCStringRef p_string);
 	MCScriptPoint(MCStringRef p_string);
@@ -136,6 +190,14 @@ public:
         
         return uindex_t(index);
     }
+    
+    bool is_eol()
+    {
+        Symbol_type t_dummy;
+        Parse_stat t_stat = next(t_dummy);
+        backup();
+        return t_stat == PS_EOL;
+    }
 
 	Parse_stat skip_space();
 	Parse_stat skip_eol();
@@ -144,7 +206,7 @@ public:
 	Parse_stat nexttoken();
 	void cleartoken(void);
 	Parse_stat lookup(Script_point, const LT *&);
-    bool lookupconstantvalue(const char*& r_value);
+    bool constantnameconvertstoconstantvalue();
 	Parse_stat lookupconstant(MCExpression **);
 	Parse_stat skip_token(Script_point, Token_type, uint2 n = 0);
 	MCExpression *insertfactor(MCExpression *nfact, MCExpression *&cfact,
@@ -186,6 +248,9 @@ public:
     codepoint_t getcodepointatindex(uindex_t index);
     
     void setcurptr(const unichar_t *ptr);
+    
+private:
+    bool lookupconstantintable(int& r_position);
 };
 #endif
 

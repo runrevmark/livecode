@@ -17,14 +17,11 @@ You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 mergeInto(LibraryManager.library, {
-
+	$LiveCodeLibURL__deps: ['$LiveCodeUtil'],
     $LiveCodeLibURL: {
-        requestMap: null,
-        requestCount: 1,
         libURLStack: null,
 
         init: function() {
-            this.requestMap = new Map();
             this.libURLStack = document.liveCode.findStackWithName('revliburl');
             if (typeof this.libURLStack.ulExtXMLHTTPCallback != 'function') {
                 return 'Unable to find callback handler.'
@@ -32,7 +29,7 @@ mergeInto(LibraryManager.library, {
         },
 
         isValidRequest: function(request) {
-            return this.requestMap.has(request);
+			return undefined != LiveCodeUtil.fetchObject(request);
         },
 
         requestCreate: function(url, method, async) {
@@ -41,13 +38,18 @@ mergeInto(LibraryManager.library, {
             // store any additional meta against the request that we need
             xhr.url = url;
             xhr.async = async;
-            xhr.responseBase64 = null;
+            xhr.responseBytes = null;
             xhr.requestHeaders = new Map();
 
             // if possible, get the raw data without any char set converions etc
             // as per the xhr spec, this is only possible for asynchronous requests
+            // for synchronous requests, we can override the mime type forceing
+            // the browser to return the URL in the x-user-defined charset which
+            // can be parsed as a stream of binary data
             if (async) {
-                xhr.responseType = 'blob';
+                xhr.responseType = 'arraybuffer';
+            } else {
+                xhr.overrideMimeType('text\/plain; charset=x-user-defined');
             }
 
             xhr.addEventListener('loadstart', this.requestCallbackLoadStart);
@@ -65,19 +67,16 @@ mergeInto(LibraryManager.library, {
             }
 
             // assign each request an id that will be used as a handle by liburl
-            xhr.key = this.requestCount++;
-            this.requestMap.set(xhr.key, xhr);
+            xhr.key = LiveCodeUtil.storeObject(xhr);
             return xhr.key;
         },
         requestDestroy: function(request) {
-            if (this.requestMap.has(request)) {
-                this.requestMap.delete(request);
-            }
+			LiveCodeUtil.releaseObject(request);
         },
 
         requestSend: function(request, body) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 try {
                     xhr.send(body);
 
@@ -97,23 +96,22 @@ mergeInto(LibraryManager.library, {
             }
         },
         requestCancel: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 xhr.abort();
                 this.requestDestroy(request);
             }
         },
 
         requestGetRequestHeaders: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
-
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 // each browser sends a different set of request headers
                 // the xhr API provides no way to access them
                 // the user agent is set consitently accross all browsers,
                 // so return that along with any headers we set
                 var headers = 'User-Agent:' + navigator.userAgent;
-                xhr.requestHeaders.foreach(function(headerName, headerValue, map) {
+                xhr.requestHeaders.forEach(function(headerName, headerValue, map) {
                     if (headers != '') {
                         headers += '\n';
                     }
@@ -123,43 +121,43 @@ mergeInto(LibraryManager.library, {
             }
         },
         requestGetResponseHeaders: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 return xhr.getAllResponseHeaders();
             }
         },
         requestGetResponse: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
-                if (xhr.responseBase64 != null) {
-                    return xhr.responseBase64;
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
+                if (xhr.responseBytes != null) {
+                    return xhr.responseBytes;
                 } else if (xhr.responseText != null) {
                     return xhr.responseText;
                 }
             }
         },
         requestGetURL: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 return xhr.url;
             }
         },
         requestGetStatus: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 return xhr.statusText;
             }
         },
         requestGetStatusCode: function(request) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 return xhr.status;
             }
         },
 
         requestSetTimeout: function(request, timeout) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 try {
                     // as part of the xhr spec, the timeout can't be set for
                     // synchronous requests when the current global object is "window"
@@ -174,8 +172,8 @@ mergeInto(LibraryManager.library, {
             }
         },
         requestSetHeader: function(request, name, value) {
-            if (this.requestMap.has(request)) {
-                var xhr = this.requestMap.get(request);
+			var xhr = LiveCodeUtil.fetchObject(request);
+            if (xhr) {
                 try {
                     xhr.setRequestHeader(name, value);
                     // the xhr API doesn't give access to the headers sent with
@@ -224,38 +222,27 @@ mergeInto(LibraryManager.library, {
                 type = 'error';
             }
 
-            // we want to return the raw data back to libURL
-            // however do as javascript assumes a DOMString and performs the
-            // appropriate char set conversions when returning the result
-            // thus we base64 encode on this side (and decode in libURL)
+			// To return the raw data back to libURL we use the
+			// ArrayBuffer response to construct a Uint8Array
+			// (which will be converted to MCDataRef).
             var xhr = this;
-            if (this.responseType == 'blob') {
-                // the FileReader API allows us to convert blobs to base64
-                // the API prefixes base64 data with "data:text/plain;base64,"
-                // make sure we chop this off
-                var reader = new FileReader();
-                reader.onloadend = function() {
-                    xhr.responseBase64 = reader.result.substring(
-                        'data:text/plain;base64,'.length - 1
-                    );
-                    LiveCodeLibURL.__sendCallback(xhr, event, type);
-                };
-                reader.readAsDataURL(this.response);
+            if (this.responseType == 'arraybuffer') {
+				xhr.responseBytes = new Uint8Array(xhr.response);
             } else {
-                // if we haven't got a blob response (i.e. async requests)
-                // we need to decode the DOMString and then base64encode
-                // encodeURIComponent converts any multibyte chars to
-                // percent escape sequences representing the UTF-8 encoding
-                // replace any percent encoding with the raw bytes before
-                // base64 encoding using btoa
-                xhr.responseBase64 = btoa(encodeURIComponent(xhr.responseText).replace(
-                    /%([0-9A-F]{2})/g,
-                    function(match, p1) {
-                        return String.fromCharCode('0x' + p1);
-                    })
-                );
-                LiveCodeLibURL.__sendCallback(xhr, event, type);
+                // if we've not got a binary blob back, then assume the data's
+                // charset is "x-user-defined" (as specified in the call to overrideMimeType)
+                // this apparently uses the unicode private area 0xF700-0xF7ff
+                // discarding the high-order byte from each codepoint allows us
+                // to access the data as if it were a binary stream
+                // more info here -> http://web.archive.org/web/20071103070418/http://mgran.blogspot.com/2006/08/downloading-binary-streams-with.html
+                var byteCount = xhr.responseText.length;
+                var bytes = new Uint8Array(byteCount);
+                for (var i = 0; i < byteCount; i++) {
+                    bytes[i] = xhr.responseText.charCodeAt(i) & 0xff;
+                }
+                xhr.responseBytes = bytes;
             }
+            LiveCodeLibURL.__sendCallback(xhr, event, type);
         },
         requestCallbackTimeout: function(event) {
             LiveCodeLibURL.__requestClearLoadEndCallback(this);

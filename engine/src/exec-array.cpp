@@ -36,36 +36,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, Keys, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, Extents, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Combine, 4)
-// SN-2014-09-01: [[ Bug 13297 ]] Combining by column deserves its own function as it is too
-// different from combining by row
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, CombineByRow, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, CombineByColumn, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, CombineAsSet, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Split, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SplitByRow, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SplitByColumn, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SplitAsSet, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Union, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, UnionRecursively, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Intersect, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, IntersectRecursively, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, Difference, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Arrays, SymmetricDifference, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, ArrayEncode, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, ArrayDecode, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, MatrixMultiply, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, TransposeMatrix, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, VectorDotProduct, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, IsAnArray, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, IsNotAnArray, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, IsAmongTheKeysOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Arrays, IsNotAmongTheKeysOf, 3)
-
-////////////////////////////////////////////////////////////////////////////////
-
 void MCArraysEvalKeys(MCExecContext& ctxt, MCArrayRef p_array, MCStringRef& r_string)
 {
 	if (MCArrayListKeys(p_array, '\n', r_string))
@@ -919,14 +889,13 @@ void MCArraysEvalArrayDecode(MCExecContext& ctxt, MCDataRef p_encoding, MCArrayR
     // AL-2014-05-15: [[ Bug 12203 ]] Check initial byte for version 7.0 encoded array.
     bool t_legacy;
     t_legacy = t_type < kMCEncodedValueTypeArray;
-    
-    MCArrayRef t_array;
-	t_array = nil;
-	if (t_success)
-		t_success = MCArrayCreateMutable(t_array);
 
+    MCArrayRef t_array = nil;
 	if (t_legacy)
     {
+        if (t_success)
+            t_success = MCArrayCreateMutable(t_array);
+        
         if (t_success)
             if (MCS_putback(t_type, t_stream_handle) != IO_NORMAL)
                 t_success = false;
@@ -948,6 +917,15 @@ void MCArraysEvalArrayDecode(MCExecContext& ctxt, MCDataRef p_encoding, MCArrayR
             if (MCArrayLoadFromStreamLegacy(t_array, *t_stream) != IO_NORMAL)
                 t_success = false;
         
+        if (t_success)
+        {
+            if (!MCArrayCopyAndRelease(t_array, t_array))
+            {
+                MCValueRelease(t_array);
+                t_success = false;
+            }
+        }
+        
         delete t_stream;
     }
     else
@@ -964,8 +942,6 @@ void MCArraysEvalArrayDecode(MCExecContext& ctxt, MCDataRef p_encoding, MCArrayR
 		r_array = t_array;
 		return;
 	}
-
-	MCValueRelease(t_array);
 
 	ctxt . Throw();
 }
@@ -1000,6 +976,9 @@ bool MCArraysSplitIndexes(MCNameRef p_key, integer_t*& r_indexes, uindex_t& r_co
 			return false;
 		
         MCAutoNumberRef t_number;
+#ifdef FIX_ANOMALY_21476_STRICT_EXTENTS
+        if (!MCNumberParseInteger(*t_substring, &t_number))
+#endif
         if (!MCNumberParse(*t_substring, &t_number))
         {
             if (!t_indexes . Push(0))
@@ -1008,7 +987,7 @@ bool MCArraysSplitIndexes(MCNameRef p_key, integer_t*& r_indexes, uindex_t& r_co
             r_all_integers = false;
             break;
         }
-
+        
         if (!t_indexes . Push(MCNumberFetchAsInteger(*t_number)))
 			return false;
 			
@@ -1416,53 +1395,32 @@ void MCArraysExecFilter(MCExecContext& ctxt, MCArrayRef p_source, bool p_without
 void MCArraysExecFilterWildcard(MCExecContext& ctxt, MCArrayRef p_source, MCStringRef p_pattern, bool p_without, bool p_match_keys, MCArrayRef &r_result)
 {
     // Create the pattern matcher
-    MCPatternMatcher *t_matcher;
-    t_matcher = new (nothrow) MCWildcardMatcher(p_pattern, p_source, ctxt . GetStringComparisonType());
+    MCWildcardMatcher t_matcher(p_pattern, p_source, ctxt . GetStringComparisonType());
     
-    MCArraysExecFilter(ctxt, p_source, p_without, t_matcher, p_match_keys, r_result);
-    
-    delete t_matcher;
+    MCArraysExecFilter(ctxt, p_source, p_without, &t_matcher, p_match_keys, r_result);
 }
 
 void MCArraysExecFilterRegex(MCExecContext& ctxt, MCArrayRef p_source, MCStringRef p_pattern, bool p_without, bool p_match_keys, MCArrayRef &r_result)
 {
     // Create the pattern matcher
-    MCPatternMatcher *t_matcher;
-    t_matcher = new (nothrow) MCRegexMatcher(p_pattern, p_source, ctxt . GetStringComparisonType());
+    MCRegexMatcher t_matcher(p_pattern, p_source, ctxt . GetStringComparisonType());
     
     MCAutoStringRef t_regex_error;
-    if (!t_matcher -> compile(&t_regex_error))
+    if (!t_matcher.compile(&t_regex_error))
     {
-        delete t_matcher;
         ctxt . LegacyThrow(EE_MATCH_BADPATTERN);
         return;
     }
     
-    MCArraysExecFilter(ctxt, p_source, p_without, t_matcher, p_match_keys, r_result);
-    
-    delete t_matcher;
+    MCArraysExecFilter(ctxt, p_source, p_without, &t_matcher, p_match_keys, r_result);
 }
 
-void MCArraysExecFilterWildcardIntoIt(MCExecContext& ctxt, MCArrayRef p_source, MCStringRef p_pattern, bool p_without, bool p_match_keys)
+void MCArraysExecFilterExpression(MCExecContext& ctxt, MCArrayRef p_source, MCExpression* p_expression, bool p_without, bool p_match_keys, MCArrayRef &r_result)
 {
-    MCAutoArrayRef t_result;
-    MCArraysExecFilterWildcard(ctxt, p_source, p_pattern, p_without, p_match_keys, &t_result);
+    // Create the pattern matcher
+    MCExpressionMatcher t_matcher(p_expression, p_source, ctxt . GetStringComparisonType());
     
-    if (*t_result != nil)
-        ctxt . SetItToValue(*t_result);
-    else
-        ctxt . SetItToEmpty();
-}
-
-void MCArraysExecFilterRegexIntoIt(MCExecContext& ctxt, MCArrayRef p_source, MCStringRef p_pattern, bool p_without, bool p_match_keys)
-{
-    MCAutoArrayRef t_result;
-    MCArraysExecFilterRegex(ctxt, p_source, p_pattern, p_without, p_match_keys, &t_result);
-    
-    if (*t_result != nil)
-        ctxt . SetItToValue(*t_result);
-    else
-        ctxt . SetItToEmpty();
+    MCArraysExecFilter(ctxt, p_source, p_without, &t_matcher, p_match_keys, r_result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

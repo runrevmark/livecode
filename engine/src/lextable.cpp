@@ -35,7 +35,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 // mandates that variables declared as "const" have internal linkage unless also
 // declared as "extern".
 extern const LT command_table[];
-extern const Cvalue constant_table[];
+extern const Cvalue *constant_table;
 extern const LT factor_table[];
 extern const LT * const table_pointers[];
 extern const uint2 table_sizes[];
@@ -184,58 +184,67 @@ const uint8_t unicode_type_table[256] =
     ST_ID,          ST_UNDEFINED,   ST_UNDEFINED,   ST_ID,          //      0xFC    0xFD    0xFE    0xFF
 };
 
-const Cvalue constant_table[] =
+/* The constant_table must be constexpr to force the compiler to generate
+ * it at compile time (the rule is that constexpr expressions may be evaluated
+ * at compile-time or runtime *unless* they are used as a subexpression of a
+ * constexpr in which case they must be evaluated at compile-time - MSVC
+ * needs constexpr here to force compile-time eval; other compilers are happy
+ * with just const - go figure!). */
+static constexpr const Cvalue constant_table_values[] =
 {
-    {"arrow", "29", 29.0},
-    {"backslash", "\\", BAD_NUMERIC},
-    {"busy", "6", 6.0},
-    {"clock", "14", 14.0},
-    {"colon", ":", BAD_NUMERIC},
-    {"comma", ",", BAD_NUMERIC},
-    {"cr", "\n", BAD_NUMERIC},
-    {"crlf", "\r\n", BAD_NUMERIC},
-    {"cross", "7", 7.0},
-    {"done", "done", BAD_NUMERIC},
-    {"down", "down", BAD_NUMERIC},
-    {"eight", "8", 8.0},
-    {"empty", "", BAD_NUMERIC},
-    {"end", "\004", BAD_NUMERIC},
-    {"endoffile", "\004", BAD_NUMERIC},
-    {"eof", "\004", BAD_NUMERIC},
-    {"false", "false", BAD_NUMERIC},
-    {"five", "5", 5.0},
-    {"formfeed", "\014", BAD_NUMERIC},
-    {"four", "4", 4.0},
-    {"hand", "28", 28.0},
-    {"help", "15", 15.0},
-    {"ibeam", "9", 9.0},
-    {"left", "left", BAD_NUMERIC},
-    {"lf", "\n", BAD_NUMERIC},
-    {"linefeed", "\n", BAD_NUMERIC},
-    {"nine", "9", 9.0},
-    {"none", "0", 0.0},
-    {"null", "", BAD_NUMERIC},
-    {"one", "1", 1.0},
-    {"pi", "3.14159265358979323846", 3.14159265358979323846},
-    {"plus", "13", 13.0},
-    {"quote", "\"", BAD_NUMERIC},
-    {"return", "\n", BAD_NUMERIC},
-    {"right", "right", BAD_NUMERIC},
-    {"scrollbarfactor", "65535", 65535.0},
-    {"seven", "7", 7.0},
-    {"six", "6", 6.0},
-    {"slash", "/", BAD_NUMERIC},
-    {"space", " ", BAD_NUMERIC},
-    {"tab", "\t", BAD_NUMERIC},
-    {"ten", "10", 10.0},
-    {"three", "3", 3.0},
-    {"true", "true", BAD_NUMERIC},
-    {"two", "2", 2.0},
-    {"up", "up", BAD_NUMERIC},
-    {"watch", "14", 14.0},
-    {"zero", "0", 0.0}
+    /* Initializer lists are used as (in C++11) they map to constructors. */
+    {"arrow", 29},
+    {"backslash", "\\"},
+    {"busy", 6},
+    {"clock", 14},
+    {"colon", ":"},
+    {"comma", ","},
+    {"cr", "\n"},
+    {"crlf", "\r\n"},
+    {"cross", 7},
+    {"done", "done"},
+    {"down", "down"},
+    {"eight", 8},
+    {"empty", kCValueTypeEmpty},
+    {"end", "\004"},
+    {"endoffile", "\004"},
+    {"eof", "\004"},
+    {"false", kCValueTypeFalse},
+    {"five", 5},
+    {"formfeed", "\014"},
+    {"four", 4},
+    {"hand", 28},
+    {"help", 15},
+    {"ibeam", 9},
+    {"infinity", kCValueTypeInfinity},
+    {"left", "left"},
+    {"lf", "\n"},
+    {"linefeed", "\n"},
+    {"nine", 9},
+    {"none", 0},
+    {"null", kCValueTypeNull},
+    {"one", 1},
+    {"pi", 3.14159265358979323846},
+    {"plus", 13},
+    {"quote", "\""},
+    {"return", "\n"},
+    {"right", "right"},
+    {"scrollbarfactor", 65535},
+    {"seven", 7},
+    {"six", 6},
+    {"slash", "/"},
+    {"space", " "},
+    {"tab", "\t"},
+    {"ten", 10},
+    {"three", 3},
+    {"true", kCValueTypeTrue},
+    {"two", 2},
+    {"up", "up"},
+    {"watch", 14},
+    {"zero", 0},
 };
-extern const uint4 constant_table_size = ELEMENTS(constant_table);
+const Cvalue *constant_table = constant_table_values;
+extern const uint4 constant_table_size = ELEMENTS(constant_table_values);
 
 const static LT accept_table[] =
     {
@@ -363,6 +372,7 @@ const LT command_table[] =
         {"load", TT_STATEMENT, S_LOAD},
         {"local", TT_STATEMENT, S_LOCAL},
         {"lock", TT_STATEMENT, S_LOCK},
+        {"log", TT_STATEMENT, S_LOG},
         {"mark", TT_STATEMENT, S_MARK},
         {"modal", TT_STATEMENT, S_MODAL},
         {"modeless", TT_STATEMENT, S_MODELESS},
@@ -603,6 +613,7 @@ const LT factor_table[] =
         {"atan2", TT_FUNCTION, F_ATAN2},
         {"audioclip", TT_CHUNK, CT_AUDIO_CLIP},
         {"audioclips", TT_CLASS, CT_AUDIO_CLIP},
+        {"audiopan", TT_PROPERTY, P_AUDIO_PAN},
         {"autoarm", TT_PROPERTY, P_AUTO_ARM},
         {"autohilight", TT_PROPERTY, P_AUTO_HILITE},
         {"autohilite", TT_PROPERTY, P_AUTO_HILITE},
@@ -1106,6 +1117,7 @@ const LT factor_table[] =
         {"items", TT_CLASS, CT_ITEM},
 		{"joinstyle", TT_PROPERTY, P_JOIN_STYLE},
         {"jpegquality", TT_PROPERTY, P_JPEG_QUALITY},
+        {"keyboardtype", TT_PROPERTY, P_KEYBOARD_TYPE},
         {"keys", TT_FUNCTION, F_KEYS},
         {"keysdown", TT_FUNCTION, F_KEYS_DOWN},
         {"kind", TT_PROPERTY, P_KIND},
@@ -1113,10 +1125,12 @@ const LT factor_table[] =
         {"labelwidth", TT_PROPERTY, P_LABEL_WIDTH},
         {"last", TT_CHUNK, CT_LAST},
         {"layer", TT_PROPERTY, P_LAYER},
+        {"layercliprect", TT_PROPERTY, P_LAYER_CLIP_RECT},
 		// MW-2011-08-25: [[ TileCache ]] The layerMode property token.
 		{"layermode", TT_PROPERTY, P_LAYER_MODE},
         {"layers", TT_CLASS, CT_LAYER},
         {"left", TT_PROPERTY, P_LEFT},
+		{"leftbalance", TT_PROPERTY, P_LEFT_BALANCE},
 		// MW-2011-01-25: [[ ParaStyles ]] The leftIndent paragraph property.
 		{"leftindent", TT_PROPERTY, P_LEFT_INDENT},
         {"leftmargin", TT_PROPERTY, P_LEFT_MARGIN},
@@ -1171,6 +1185,7 @@ const LT factor_table[] =
         {"lockupdates", TT_PROPERTY, P_LOCK_UPDATES},
         {"log10", TT_FUNCTION, F_LOG10},
         {"log2", TT_FUNCTION, F_LOG2},
+        {"logmessage", TT_PROPERTY, P_LOG_MESSAGE},
         {"long", TT_PROPERTY, P_LONG},
         {"longfilepath", TT_FUNCTION, F_LONG_FILE_PATH},
         {"longwindowtitles", TT_PROPERTY, P_LONG_WINDOW_TITLES},
@@ -1472,13 +1487,15 @@ const LT factor_table[] =
         {"result", TT_FUNCTION, F_RESULT},
         {"retainimage", TT_PROPERTY, P_RETAIN_IMAGE},
         {"retainpostscript", TT_PROPERTY, P_RETAIN_POSTSCRIPT},
-		{"revavailablehandlers", TT_PROPERTY, P_REV_AVAILABLE_HANDLERS},
+        {"returnkeytype", TT_PROPERTY, P_RETURN_KEY_TYPE},
+        {"revavailablehandlers", TT_PROPERTY, P_REV_AVAILABLE_HANDLERS},
 		{"revavailablevariables", TT_PROPERTY, P_REV_AVAILABLE_VARIABLES},
         {"revbehavioruses", TT_PROPERTY, P_REV_BEHAVIOR_USES},
 #ifdef MODE_DEVELOPMENT
 		{"revcrashreportsettings", TT_PROPERTY, P_REV_CRASH_REPORT_SETTINGS},
 #endif
-		{"revlicenseinfo", TT_PROPERTY, P_REV_LICENSE_INFO},
+        {"revlibrarymapping", TT_PROPERTY, P_REV_LIBRARY_MAPPING},
+        {"revlicenseinfo", TT_PROPERTY, P_REV_LICENSE_INFO},
         {"revlicenselimits",TT_PROPERTY,P_REV_LICENSE_LIMITS},
 #if defined(MODE_DEVELOPMENT)
 #ifdef FEATURE_PROPERTY_LISTENER
@@ -1494,6 +1511,7 @@ const LT factor_table[] =
 		{"revunplacedgroupids", TT_PROPERTY, P_UNPLACED_GROUP_IDS},
 #endif
         {"right", TT_PROPERTY, P_RIGHT},
+        {"rightbalance", TT_PROPERTY, P_RIGHT_BALANCE},
 		// MW-2011-01-25: [[ ParaStyles ]] The rightIndent paragraph property.
 		{"rightindent", TT_PROPERTY, P_RIGHT_INDENT},
         {"rightmargin", TT_PROPERTY, P_RIGHT_MARGIN},
@@ -1672,7 +1690,8 @@ const LT factor_table[] =
         {"syncrate", TT_PROPERTY, P_SYNC_RATE},
         {"syserror", TT_FUNCTION, F_SYS_ERROR},
         {"system", TT_PROPERTY, P_SYSTEM},
-        {"systemcolorselector", TT_PROPERTY, P_SYSTEM_CS},
+		{"systemappearance", TT_PROPERTY, P_SYSTEM_APPEARANCE},
+		{"systemcolorselector", TT_PROPERTY, P_SYSTEM_CS},
         {"systemfileselector", TT_PROPERTY, P_SYSTEM_FS},
 		// IM-2013-12-04: [[ PixelScale ]] The "systemPixelScale" token
 		{"systempixelscale", TT_PROPERTY, P_SYSTEM_PIXEL_SCALE},

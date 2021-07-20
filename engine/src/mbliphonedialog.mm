@@ -117,7 +117,7 @@ static void dopopupanswerdialog_prewait(void *p_context)
     NSString *t_prompt;
     t_prompt = MCStringConvertToAutoreleasedNSString(ctxt -> message == nil ? kMCEmptyString : ctxt -> message );
 
-    if (MCmajorosversion < 800)
+    if (MCmajorosversion < MCOSVersionMake(8,0,0))
     {
         ctxt -> delegate = [[com_runrev_livecode_MCModalDelegate alloc] init];
         ctxt -> alert_view = [[UIAlertView alloc] initWithTitle:t_title message:t_prompt delegate:ctxt -> delegate cancelButtonTitle:nil otherButtonTitles:nil];
@@ -183,7 +183,7 @@ static void dopopupanswerdialog_postwait(void *p_context)
 	popupanswerdialog_t *ctxt;
 	ctxt = (popupanswerdialog_t *)p_context;
 	
-    if (MCmajorosversion < 800)
+    if (MCmajorosversion < MCOSVersionMake(8,0,0))
     {
         int32_t t_result;
         ctxt -> result = [ctxt -> delegate index];
@@ -268,8 +268,7 @@ int32_t MCScreenDC::popupanswerdialog(MCStringRef p_buttons[], uint32_t p_button
 		
 		t_textField.alpha = 0.75;
 		t_textField.borderStyle = UITextBorderStyleBezel;
-		t_textField.backgroundColor = [UIColor whiteColor];
-        
+
 		m_textResult = t_textField;
 		
 		// set up the input mode, either password or not
@@ -427,13 +426,13 @@ static void dopopupaskdialog_prewait(void *p_context)
 	NSString *t_initial;
 	t_initial = MCStringConvertToAutoreleasedNSString((ctxt -> initial == nil ? kMCEmptyString : ctxt -> initial) );
     
-    if (MCmajorosversion < 800)
+    if (MCmajorosversion < MCOSVersionMake(8,0,0))
     {
         ctxt -> delegate = [[com_runrev_livecode_MCModalDelegate alloc] init];
         
         UITextField *t_text_field;
         UIAlertView *t_alert;
-        if (MCmajorosversion < 500)
+        if (MCmajorosversion < MCOSVersionMake(5,0,0))
         {
             ctxt-> alert = [[com_runrev_livecode_MCTextAlertView alloc] initWithTitle:t_title
                                                         message:t_message
@@ -496,9 +495,7 @@ static void dopopupaskdialog_prewait(void *p_context)
         [t_alert_controller addTextFieldWithConfigurationHandler: ^(UITextField *p_text_field)
          {
              [p_text_field setAlpha: 0.75];
-             //[p_text_field setBorderStyle: UITextBorderStyleBezel];
-             [p_text_field setBackgroundColor: [UIColor whiteColor]];
-             
+			
              if (ctxt -> type == AT_PASSWORD)
                  [p_text_field setSecureTextEntry: YES];
              else
@@ -532,7 +529,7 @@ static void dopopupaskdialog_prewait(void *p_context)
                            UITextField *t_text_field;
                            t_text_field = [[t_alert_controller textFields] firstObject];
                            
-                           /* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)[t_text_field text], ctxt -> result);
+                           /* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)[t_text_field text], ctxt -> result);
                        }];
         [t_alert_controller addAction: t_ok_action];
         
@@ -549,12 +546,12 @@ static void dopopupaskdialog_postwait(void *p_context)
     MCAutoStringRef t_message_text;
     CFStringRef t_result;
     t_result = nil;
-	if (MCmajorosversion < 500)
+	if (MCmajorosversion < MCOSVersionMake(5,0,0))
 	{
         t_result = [ctxt -> alert getText];
         
         if (t_result != nil)
-            MCStringCreateWithCFString(t_result, &t_message_text);
+            MCStringCreateWithCFStringRef(t_result, &t_message_text);
         
 		// MW-2012-10-24: [[ Bug 10491 ]] The delegate now holds the button index, not the alert view.
         if ([ctxt -> delegate index] == 0 || *t_message_text == nil)
@@ -564,14 +561,14 @@ static void dopopupaskdialog_postwait(void *p_context)
         
         [ctxt -> alert release];
 	}
-	else if (MCmajorosversion < 800)
+	else if (MCmajorosversion < MCOSVersionMake(8,0,0))
 	{
 #ifdef __IPHONE_5_0
         if (ctxt -> text_field != nil)
             t_result = (CFStringRef)[ctxt -> text_field text];
 
         if (t_result != nil)
-            MCStringCreateWithCFString(t_result, &t_message_text);
+            MCStringCreateWithCFStringRef(t_result, &t_message_text);
         
         if ([ctxt -> delegate index] == 0 || *t_message_text == nil)
             ctxt -> result = nil;

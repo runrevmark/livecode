@@ -41,9 +41,13 @@ bool MCHandlerCreate(MCTypeInfoRef p_typeinfo, const MCHandlerCallbacks *p_callb
     
     MCMemoryCopy(MCHandlerGetContext(self), p_context, p_callbacks -> size);
     
-    self -> typeinfo = MCValueRetain(p_typeinfo);
-    self -> function_ptr = nil;
-    self -> callbacks = p_callbacks;
+    self->typeinfo = MCValueRetain(p_typeinfo);
+	self->closure = nil;
+    self->function_ptr = nil;
+#ifdef __HAS_MULTIPLE_ABIS__
+	self->other_closures = nil;
+#endif
+    self->callbacks = p_callbacks;
     
     r_handler = self;
     
@@ -64,7 +68,7 @@ struct MCHandlerInvokeTrampolineContext
     MCHandlerRef self;
     MCValueRef *p_arguments;
     uindex_t p_argument_count;
-    MCValueRef r_value;
+    MCValueRef& r_value;
     bool return_value;
 };
 
@@ -83,25 +87,22 @@ bool MCHandlerExternalInvoke(MCHandlerRef self, MCValueRef *p_arguments, uindex_
     if (!MCAndroidIsOnEngineThread())
     {
         typedef void (*co_yield_callback_t)(void *);
-        extern void co_yield_to_android_and_call(co_yield_callback_t callback, void *context);
+        extern void co_yield_to_engine_and_call(co_yield_callback_t callback, void *context);
         MCHandlerInvokeTrampolineContext t_context = {self, p_arguments, p_argument_count, r_value, true};
-        co_yield_to_android_and_call(MCHandlerInvokeTrampoline, &t_context);
+        co_yield_to_engine_and_call(MCHandlerInvokeTrampoline, &t_context);
         return t_context.return_value;
     }
 #elif defined(TARGET_SUBPLATFORM_IPHONE) && !defined(CROSS_COMPILE_HOST)
-    extern bool MCIPhoneIsOnMainFiber(void);
-    if (!MCIPhoneIsOnMainFiber())
+    extern bool MCIPhoneIsOnScriptFiber(void);
+    if (!MCIPhoneIsOnScriptFiber())
     {
-        extern void MCIPhoneRunOnMainFiber(void (*)(void *), void *);
+        extern void MCIPhoneRunOnScriptFiber(void (*)(void *), void *);
         MCHandlerInvokeTrampolineContext t_context = {self, p_arguments, p_argument_count, r_value, true};
-        MCIPhoneRunOnMainFiber(MCHandlerInvokeTrampoline, &t_context);
+        MCIPhoneRunOnScriptFiber(MCHandlerInvokeTrampoline, &t_context);
         return t_context.return_value;
     }
 #endif
-    
-    __MCAssertIsHandler(self);
-    MCAssert(p_arguments != nil || p_argument_count == 0);
-    return self -> callbacks -> invoke(MCHandlerGetContext(self), p_arguments, p_argument_count, r_value);
+    return MCHandlerInvoke(self, p_arguments, p_argument_count, r_value);
 }
 
 MC_DLLEXPORT_DEF
@@ -304,34 +305,164 @@ cleanup:
         MCValueRelease(t_value_args[i]);
 }
 
+#if defined(__ANDROID__)
+
+/* For some reason the current version / config of libffi on newer versions of
+ * android fails to generate closure trampolines in memory with the exec bit
+ * set. To work-around this we set the exec bit of the memory page containing
+ * the function ptr directly. */
+
+#include <sys/mman.h>
+
+static bool ensure_block_is_executable(void *p_block, size_t p_size)
+{
+    /* Round the start of the block pointer down to the nearest page. */
+    byte_t *t_start_page = (byte_t *)(((uintptr_t)p_block) & ~4095);
+    
+    /* Round the end of the block pointer up to the nearest page. */
+    byte_t *t_finish_page = (byte_t *)((((uintptr_t)p_block + p_size) + 4095) & ~4095);
+    
+    /* Change the protection flags of the page range to read/write/exec. */
+    return mprotect(t_start_page,
+                    t_finish_page - t_start_page,
+                    PROT_READ|PROT_EXEC|PROT_WRITE) == 0;
+}
+
+#else
+
+/* Other platforms do not need any explicit action as libffi works correctly. */
+
+static bool ensure_block_is_executable(void *p_block, size_t p_size)
+{
+    return true;
+}
+
+#endif
+
 MC_DLLEXPORT_DEF
-bool MCHandlerGetFunctionPtr(MCHandlerRef self, void*& r_function_ptr)
+bool MCHandlerGetFunctionPtrWithAbi(MCHandlerRef self, MCHandlerAbiKind p_abi_kind, void*& r_function_ptr)
 {
 	__MCAssertIsHandler(self);
 
-    if (self -> function_ptr != nil)
-    {
-        r_function_ptr = self -> function_ptr;
-        return true;
-    }
-    
-    ffi_cif *t_cif;
-    if (!MCHandlerTypeInfoGetLayoutType(self -> typeinfo, (int)FFI_DEFAULT_ABI, (void*&)t_cif))
-        return false;
-    
-    self -> closure = ffi_closure_alloc(sizeof(ffi_closure), &self -> function_ptr);
-    if (self -> closure == nil)
-        return MCErrorThrowOutOfMemory();
-    
-    if (ffi_prep_closure_loc((ffi_closure *)self -> closure, t_cif, __exec_closure, self, self -> function_ptr) != FFI_OK)
-    {
-        ffi_closure_free(self -> closure);
-        self -> closure = nil;
-        return MCErrorThrowGeneric(MCSTR("unexpected libffi failure"));
-    }
-    
-    r_function_ptr = self -> function_ptr;
-    return true;
+	ffi_abi t_abi;
+#ifdef __HAS_MULTIPLE_ABIS__
+	switch (p_abi_kind)
+	{
+	case kMCHandlerAbiDefault:
+		t_abi = FFI_DEFAULT_ABI;
+		break;
+	case kMCHandlerAbiStdCall:
+		t_abi = FFI_STDCALL;
+		break;
+	case kMCHandlerAbiThisCall:
+		t_abi = FFI_THISCALL;
+		break;
+	case kMCHandlerAbiFastCall:
+		t_abi = FFI_FASTCALL;
+		break;
+	case kMCHandlerAbiCDecl:
+		t_abi = FFI_MS_CDECL;
+		break;
+	case kMCHandlerAbiPascal:
+		t_abi = FFI_PASCAL;
+		break;
+	case kMCHandlerAbiRegister:
+		t_abi = FFI_REGISTER;
+		break;
+	default:
+		return MCErrorThrowGeneric(MCSTR("invalid abi specified"));
+	};
+#else
+	t_abi = FFI_DEFAULT_ABI;
+#endif
+
+	/* If the ABI is default, and there is a function ptr in the main slot, then
+	 * return it. */
+	if (t_abi == FFI_DEFAULT_ABI &&
+			self->function_ptr != nil)
+	{
+		r_function_ptr = self->function_ptr;
+		return true;
+	}
+
+#ifdef __HAS_MULTIPLE_ABIS__
+	/* If there are auxiliary closures then search for one with a matching ABI
+	 * and return it, if found. */
+	if (self->other_closures != nil)
+	{
+		for (__MCHandlerClosureWithAbi *t_closure_with_abi = self->other_closures;
+				t_closure_with_abi != nil;
+				t_closure_with_abi = t_closure_with_abi->next)
+		{
+			if (t_closure_with_abi->abi == t_abi)
+			{
+				r_function_ptr = t_closure_with_abi->function_ptr;
+				return true;
+			}
+		}
+	}
+#endif
+
+	ffi_cif *t_cif;
+	if (!MCHandlerTypeInfoGetLayoutType(self->typeinfo, t_abi, (void*&)t_cif))
+		return false;
+
+	void *t_closure, *t_function_ptr;
+	t_closure = ffi_closure_alloc(sizeof(ffi_closure), &t_function_ptr);
+	if (t_closure == nil)
+		return MCErrorThrowOutOfMemory();
+
+	if (ffi_prep_closure_loc((ffi_closure *)t_closure, t_cif, __exec_closure, self, t_function_ptr) != FFI_OK)
+	{
+		ffi_closure_free(t_closure);
+		return MCErrorThrowGeneric(MCSTR("unexpected libffi failure"));
+	}
+
+	/* Change the protection flags of the page range to read/write/exec. */
+	if (!ensure_block_is_executable(t_closure,
+									sizeof(ffi_closure)))
+	{
+		ffi_closure_free(t_closure);
+		return MCErrorThrowGeneric(MCSTR("unable to generate executable closure trampoline"));
+	}
+
+	/* We now have a closure and function ptr, if it is of default ABI we store
+	 * it in the value struct. */
+	if (t_abi == FFI_DEFAULT_ABI)
+	{
+		self->closure = t_closure;
+		self->function_ptr = t_function_ptr;
+	}
+
+#ifdef __HAS_MULTIPLE_ABIS__
+	/* If the ABI is non-default then we must link it into the closures list. */
+	if (t_abi != FFI_DEFAULT_ABI)
+	{
+		__MCHandlerClosureWithAbi *t_closure_with_abi;
+		if (!MCMemoryNew(t_closure_with_abi))
+		{
+			ffi_closure_free(t_closure);
+			return MCErrorThrowOutOfMemory();
+		}
+
+		t_closure_with_abi->next = self->other_closures;
+		t_closure_with_abi->abi = t_abi;
+		t_closure_with_abi->closure = t_closure;
+		t_closure_with_abi->function_ptr = t_function_ptr;
+		self->other_closures = t_closure_with_abi;
+	}
+#endif
+
+	/* We've now stored the generated closure and function ptr so return the
+	 * requested one. */
+	r_function_ptr = t_function_ptr;
+	return true;
+}
+
+MC_DLLEXPORT_DEF
+bool MCHandlerGetFunctionPtr(MCHandlerRef self, void*& r_function_ptr)
+{
+	return MCHandlerGetFunctionPtrWithAbi(self, kMCHandlerAbiDefault, r_function_ptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -340,6 +471,17 @@ void __MCHandlerDestroy(__MCHandler *self)
 {
     if (self -> function_ptr != nil)
         ffi_closure_free(self -> closure);
+
+#ifdef __HAS_MULTIPLE_ABIS__
+	/* Free any closures created with the non-default ABI. */
+	while (self->other_closures != nil)
+	{
+		__MCHandlerClosureWithAbi *t_closure_with_abi = self->other_closures;
+		self->other_closures = self->other_closures->next;
+		ffi_closure_free(t_closure_with_abi->closure);
+		MCMemoryDelete(t_closure_with_abi);
+	}
+#endif
 }
 
 hash_t __MCHandlerHash(__MCHandler *self)

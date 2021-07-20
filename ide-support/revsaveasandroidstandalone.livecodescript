@@ -2,11 +2,24 @@
 ################################################################################
 
 local sJavaRoot
-constant kArchs = "armeabi"
 
 ################################################################################
 
 command revSaveAsMobileStandalone pStack, pApkFile, pTarget, pSettings
+   local tPath
+   put the cMobileSupport["android.sdk"] of stack "revPreferences" into tPath
+   
+   if tPath is empty then
+      throw revIDELocalise("In order to build Android standalones" & \ 
+            " you need to choose the location of your Android development SDK" & \
+            " in Preferences -> Mobile Support")
+   end if
+   if not revIDEDeployAndroidIsValidSDK(tPath) then
+      throw revIDELocalise("The chosen folder in Preferences -> Mobile Support" & \
+            " is not a valid Android SDK. Please ensure you have installed it correctly," & \
+            " and enabled support for") && revIDEDeployAndroidRequiredSDK()
+   end if
+   
    local tTargetType
    if pTarget contains "build" then
       put "android release" into tTargetType
@@ -76,7 +89,7 @@ private function updateMinimumAPI pVersionSet, pLimit
    
    answer "The minimum Android API is currently set to" && \
          pVersionSet && \
-         "but the" & tLimitType & " Android API available from LiveCode" && the version && \
+         "but the" && tLimitType & " Android API available from LiveCode" && the version && \
          "is" && pLimit & "." & LF & \
          "Do you want to update the minimum Android API to" && pLimit & "?" \
          with "No" or "Yes" \
@@ -89,12 +102,41 @@ private function badAndroidApiMessage
    return "Not a valid Android API"
 end badAndroidApiMessage
 
-constant kAndroidExternals = "revzip revxml dbsqlite dbmysql dbodbc dbpostgresql"
+private function __ArchABI pArch
+   switch pArch
+      case "armv6"
+         return "armeabi"
+      case "armv7"
+         return "armeabi-v7a"
+      case "arm64"
+         return "arm64-v8a"
+      case "x86"
+      case "x86_64"
+         return pArch
+   end switch
+end __ArchABI
+
+constant kAndroidExternals = "revzip revxml dbsqlite dbmysql dbodbc dbpostgresql revpdfprinter"
+
 private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettings
+   local tArchABIs, tArchs
+   repeat for each item tItem in revSBPlatformArchitectures("Android")
+      if pSettings["android",tItem] then
+         put true into tArchABIs[__ArchABI(tItem)]
+         put true into tArchs[tItem]
+      end if
+   end repeat
+   if the number of elements of tArchABIs is 0 then
+      put true into tArchABIs["armeabi-v7a"]
+      put true into tArchs["armv7"]
+   end if
+   combine tArchABIs by comma as set
+   combine tArchs by comma as set
+   
    dispatch "revIDEDeployAndroidInitialize" to stack "revDeployLibrary"
    
    -- If we're searching for inclusions, do it here 
-   local tConfirm
+   local tConfirm, tResult
    put true into tConfirm
    if pSettings["inclusions"] is "search" then 
       put false into tConfirm
@@ -106,7 +148,12 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
    end if
    
    -- Make sure all dependencies are included
-   revSBUpdateForDependencies "android", pSettings
+   revSBUpdateForDependencies "android", tArchs, , pSettings
+   revSBEnsurePerExtensionSettings "android", pSettings
+   put the result into tResult
+   if tResult is not empty then
+      throw tResult
+   end if
    
    -- Manually remove built-in implementations from detected script library inclusions
    revSBRemoveInclusions pStack, "android", tConfirm, pSettings
@@ -122,9 +169,8 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
    set the itemDelimiter to comma
    
    -- Fetch the various options we need to initially build the app-bundle
-   local tName, tFiles, tVersionName, tVersionCode, tExternals, tIcon, tSplash, tKey, tUnsigned, tStatusBarIcon
+   local tName, tVersionName, tVersionCode, tExternals, tDrivers, tIcon, tSplash, tKey, tUnsigned, tStatusBarIcon
    put pSettings["name"] into tName
-   put pSettings["files"] into tFiles
    put pSettings["android,icon"] into tIcon
    put pSettings["android,key"] into tKey
    
@@ -219,12 +265,15 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
                put "revdb" & return after tExternals
             end if
             put tExternal & return after tExternals
+         else if tExternal is among the words of "revpdfprinter" then
+            put tExternal & return after tDrivers
          else
             put tExternal & return after tExternals
          end if
       end if
    end repeat
    delete the last char of tExternals
+   delete the last char of tDrivers
    
    -- Compute the stackfiles list
    lock messages
@@ -242,7 +291,8 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
    
    try
       ------- Create the build folder
-      local tBuildFolder, tResBuildFolder, tDrawableResBuildFolder, tLayoutResBuildFolder, tClassesBuildFolder, tLibsBuildFolder, tArmLibsBuildFolder, tXMLResBuildFolder
+      local tBuildFolder, tResBuildFolder, tDrawableResBuildFolder, tLayoutResBuildFolder
+      local tLibsBuildFolder, tClassesBuildFolder, tXMLResBuildFolder
       put tempName() into tBuildFolder
       create folder tBuildFolder
       if the platform is "win32" then
@@ -250,23 +300,36 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       end if
       
       put tBuildFolder & slash & "classes_app" into tClassesBuildFolder
-      put tBuildFolder & slash & "libs" into tLibsBuildFolder
+      put tBuildFolder & slash & "lib" into tLibsBuildFolder
       
-      // MERG: TODO when support for other Archs is added this needs work
-      put tLibsBuildFolder & slash & kArchs into tArmLibsBuildFolder
-      put tBuildFolder & slash & "res" into tResBuildFolder
+      put tBuildFolder & slash & "res-build/res" into tResBuildFolder
       put tResBuildFolder & slash & "drawable" into tDrawableResBuildFolder
       put tResBuildFolder & slash & "layout" into tLayoutResBuildFolder
       put tResBuildFolder & slash & "xml" into tXMLResBuildFolder
       create folder tClassesBuildFolder
       create folder tLibsBuildFolder
-      create folder tArmLibsBuildFolder
-      create folder tResBuildFolder
-      create folder tDrawableResBuildFolder
-      create folder tLayoutResBuildFolder
-      create folder tXMLResBuildFolder
+      
+      local tArchLibsBuildFolders
+      repeat for each item tArch in tArchABIs
+         put tLibsBuildFolder & slash & tArch into tArchLibsBuildFolders[tArch]
+         create folder tArchLibsBuildFolders[tArch]
+         if there is not folder tArchLibsBuildFolders[tArch] then
+            throw "could not create build folders"
+         end if
+      end repeat
+      
+      revSBEnsureFolder tResBuildFolder
+      if there is no folder tDrawableResBuildFolder then
+         create folder tDrawableResBuildFolder
+      end if
+      if there is no folder tLayoutResBuildFolder then
+         create folder tLayoutResBuildFolder
+      end if
+      if there is no folder tXMLResBuildFolder then
+         create folder tXMLResBuildFolder
+      end if
       if there is no folder tBuildFolder or there is no folder tClassesBuildFolder or \
-            there is no folder tLibsBuildFolder or there is no folder tArmLibsBuildFolder or \
+            there is no folder tLibsBuildFolder or \
             there is no folder tResBuildFolder or there is no folder tDrawableResBuildFolder  or \
             there is no folder tLayoutResBuildFolder or there is no folder tXMLResBuildFolder then
          throw "could not create build folders"
@@ -277,8 +340,7 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       end if
       
       -------- Unpack all the files used by the externals
-      // MERG-2014-11-18: [[ TemplateManifest ]] Look for a template manifest provided by the developer in copy files
-      local tManifestFile
+      local tManifestFile, tManifest
       
       revStandaloneProgress "Integrating externals..."
       
@@ -288,32 +350,41 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       set the itemDelimiter to "."
       
       local tResolvedFileData
-      revSBResolveCopyFilesList tBaseFolder, "android", tFiles, tResolvedFileData
+      revSBUpdateSettingsForExtensions "android", pSettings
+      revSBResolveCopyFilesList tBaseFolder, "android", pSettings, tResolvedFileData
+      
+      addPlayServiceAARsToSettings pSettings
+      expandAARsAndComputeSettings tBuildFolder, pSettings
       
       repeat for each element tFile in tResolvedFileData
-         -- Look for manifest template
-         local tManifest
-         if tFile["name"] ends with "AndroidManifest.xml" then
-            put url ("binfile:" & tFile["resolved"]) into tManifest
-         end if
-         
-         -- Only look for lcext files.
-         if the last item of tFile["name"] is not "lcext" then
+         -- Add to list of manifests to merge
+         if tFile["name"] is "AndroidManifest.xml" then
+            appendToStringList tFile["resolved"], pSettings["androidManifests"]
             next repeat
          end if
          
-         -- Only process if the target exists
-         if there is no file tFile["resolved"] then
-            throw "could not find referenced external -" && tFile["resolved"]
-         end if
+         -- Only look for lcext files.
+         switch the last item of tFile["name"]
+            case "lcext"
+               if there is no file tFile["resolved"] then
+                  throw "could not find referenced external -" && tFile["resolved"]
+               end if
+               if addExternalFromFile(tFile["resolved"], tClassesBuildFolder, tArchLibsBuildFolders) then
+                  -- Add the external to the list to load
+                  put char 1 to -7 of tFile["name"] & return after tExternals
+               end if
+               break
+            case "lcextd"
+               if there is no folder tFile["resolved"] then
+                  throw "could not find referenced external -" && tFile["resolved"]
+               end if
+               if addExternalFromFolder(tFile["resolved"], tClassesBuildFolder, tArchLibsBuildFolders) then
+                  -- Add the external to the list to load
+                  put char 1 to -8 of tFile["name"] & return after tExternals
+               end if
+               break
+         end switch 
          
-         -- MERG-2013-09-05: [[ Bug 11152 ]] Only list the external if it was successfully
-         --   extracted.
-         -- Now attempt to process the external
-         if addExternalFromFile(tFile["resolved"], tClassesBuildFolder, tLibsBuildFolder) then
-            -- Add the external to the list to load
-            put char 1 to -7 of tFile["name"] & return after tExternals
-         end if
       end repeat
       delete the last char of tExternals
       set the itemDelimiter to comma
@@ -332,7 +403,9 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       if the result is not empty then
          throw "Cannot find the template Manifest"
       end if
-      replace "${LABEL}" with pSettings["android,label"] in tManifest
+      local tEscapedLabel
+      put escapeLabel(pSettings["android,label"]) into tEscapedLabel
+      replace "${LABEL}" with textEncode(tEscapedLabel, "utf-8") in tManifest
       replace "${NAME}" with ".mblandroid" in tManifest
       replace "${IDENTIFIER}" with pSettings["android,identifier"] in tManifest
       replace "${VERSION_NAME}" with pSettings["android,version name"] in tManifest
@@ -357,7 +430,8 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       replace "${ORIENTATION}" with tInitialOrientation in tManifest
       
       replace "${MIN_SDK_VERSION}" with pSettings["android,minimum version"] in tManifest
-     
+      replace "${TARGET_SDK_VERSION}" with targetSDKVersion() in tManifest
+      
       local tUsesFeature, tUsesPermission, tFeatures, tPermissions, tAd
       repeat for each key tFeature in pSettings["android,device capabilities"]
          put "  <uses-feature android:name="&quote&"android."&tFeature&quote&" android:required="&quote&"${REQUIRED}"&quote&" />" into tUsesFeature
@@ -495,14 +569,17 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       end if
       replace "${PUSH_PERMISSIONS}" with tPushPermissions in tManifest
       replace "${PUSH_RECEIVER}" with tPushReceiver in tManifest
-      
-      -- SN-2014-02-07: Add the email attachments provider in the manifest
+      // Add the file provider to the manifest
       local tProvider
       put "<provider " & return into tProvider
       put "      android:name=" & quote & pSettings["android,identifier"] & ".AppProvider" & quote & return after tProvider
-      put "      android:authorities=" & quote & pSettings["android,identifier"] & ".attachmentprovider" & quote & return after tProvider
-      put "      android:exported=" & quote & "true" & quote & return after tProvider
+      put "      android:authorities=" & quote & pSettings["android,identifier"] & ".fileprovider" & quote & return after tProvider
+      put "      android:exported=" & quote & "false" & quote & return after tProvider
       put "      android:grantUriPermissions=" & quote & "true" & quote & " >" & return after tProvider
+      // Add meta-data tag
+      put "      <meta-data" & return after tProvider
+      put "            android:name=" & quote & "android.support.FILE_PROVIDER_PATHS" & quote & return after tProvider
+      put "            android:resource=" & quote & "@xml/file_provider_paths" & quote & " />" & return after tProvider
       put "    </provider>" & return after tProvider
       
       replace "${PROVIDER}" with tProvider in tManifest
@@ -510,10 +587,7 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       // SN-2015-09-24: [[ Bug 15875 ]] Add the screenSize configChanges value for API > 12
       //  Otherwise the app restarts on orientation change.
       local tConfigChangesProp
-      put "keyboardHidden|orientation" into tConfigChangesProp
-      if pSettings["android,minimum version"] > 12 then
-         put "|screenSize" after tConfigChangesProp
-      end if
+      put "keyboardHidden|orientation|uiMode|screenSize" into tConfigChangesProp
       replace "${CONFIG_CHANGES}" with tConfigChangesProp in tManifest
       
       // SN-2015-09-30: [[ Bug 10267 ]] Hardware Acceleration option added
@@ -525,8 +599,26 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       end if
       replace "${HARDWARE_ACCELERATED}" with tHardwareAccelerated in tManifest
       
-      #put tManifest into url ("binfile:c:/scratch/manifestdump.xml")
+      // Allow http connections
+      local tAllowHttpConnections, tHasInternetPermission
+      if the keys of pSettings["android,application permissions"] contains "Internet" then
+         put "true" into tHasInternetPermission
+      end if
+      if pSettings["android,allow http"] and tHasInternetPermission then
+         put "android:usesCleartextTraffic=" & quote & "true" & quote into tAllowHttpConnections
+      else
+         put empty into tAllowHttpConnections
+      end if
+      replace "${ALLOW_HTTP_CONNECTIONS}" with tAllowHttpConnections in tManifest
+      
       put tManifest into url ("binfile:" & tManifestFile)
+      
+      local tAdditional
+      repeat for each line tManifest in pSettings["androidManifests"]
+         appendToList tManifest, tAdditional
+      end repeat
+      put androidCreateAppManifest(tManifestFile, tAdditional) \
+            into url ("binfile:" & tManifestFile)
       if the result is not empty then
          throw "could not create manifest"
       end if
@@ -647,96 +739,36 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
          put tBuildFolder & slash & "classes_app/" & tCompiledClassFilePath & "/PushReceiver.class" & return after tBuiltClassFiles
       end if
       
-      -- SN-2014-02-07: Generate email attachment provider
-      local tAttachmentClass, tAttachmentClassFile      
-      put tBuildFolder & slash & "classes_app/AppProvider.java" into tAttachmentClassFile
+      // Generate app content provider class
+      local tProviderClass, tProviderClassFile
+      put tBuildFolder & slash & "classes_app/AppProvider.java" into tProviderClassFile
       
-      put "package" && pSettings["android,identifier"] & ";" & return into tAttachmentClass
-      put "import android.content.*;" & return after tAttachmentClass
-      put "import android.net.Uri;" & return after tAttachmentClass
-      put "import android.app.*;" & return after tAttachmentClass
-      put "import android.database.*;" & return after tAttachmentClass
-      put "import java.io.*;" & return after tAttachmentClass
-      put "import android.util.Log;" & return after tAttachmentClass
-      put "import android.os.ParcelFileDescriptor;" & return after tAttachmentClass
-      put "import com.runrev.android.AttachmentProvider;" & return after tAttachmentClass
-      put "public class AppProvider extends ContentProvider {" & return after tAttachmentClass
-      put "public static final String URI = " & quote & "content://" & pSettings["android,identifier"] & ".attachmentprovider" & quote & ";" & return after tAttachmentClass
-      put "public static final String AUTHORITY = " & quote & pSettings["android,identifier"] & ".attachmentprovider" & quote & ";" & return after tAttachmentClass
-      put "private com.runrev.android.AttachmentProvider m_attachments;" & return after tAttachmentClass
-      put "@Override" & return & "public boolean onCreate() { m_attachments = new AttachmentProvider(getContext()); return true; }" & return after tAttachmentClass
-      put "@Override" & return & "public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException { Log.i(" & quote & "revandroid" & quote & ", uri.toString()); return m_attachments.doOpenFile(uri); }" & return after tAttachmentClass
-      put "@Override" & return & "public Cursor query (Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) { Log.i(" & quote & "revandroid" & quote & ", " & quote & "query: " & quote & " + uri.toString()); return m_attachments.doQuery(uri, projection, selection, selectionArgs, sortOrder); }" & return after tAttachmentClass
-      put "@Override" & return & "public Uri insert (Uri uri, ContentValues p_values) { return m_attachments.doInsert(uri, p_values); }" & return after tAttachmentClass
-      put "@Override" & return & "public int update (Uri uri, ContentValues values, String selection, String[] selectionArgs) { return 0; }" & return after tAttachmentClass
-      put "@Override" & return & "public int delete (Uri uri, String selection, String[] selectionArgs) { return m_attachments.doDelete(uri, selection, selectionArgs); }" & return after tAttachmentClass
-      put "@Override" & return & "public String getType (Uri uri){ return m_attachments.doGetType(uri); }" & return after tAttachmentClass      
-      put "}" & return after tAttachmentClass
-      put tAttachmentClass into url ("binfile:" & tAttachmentClassFile)
+      put "package" && pSettings["android,identifier"] & ";" & return into tProviderClass
+      put "import com.runrev.android.*;" & return after tProviderClass
+      put "public class AppProvider extends com.runrev.android.AppProvider {}" & return after tProviderClass
+      
+      put tProviderClass into url ("binfile:" & tProviderClassFile)
       if the result is not empty then
-         throw "could not create email attachment provider"
+         throw "could not create app content provider"
       end if
-      put tAttachmentClassFile & return after tBuiltClassFiles
+      put tProviderClassFile & return after tBuiltClassFiles
       
-      executeShellCommand pathToJavac(), "-target 1.5 -source 1.5 -Xlint:none -d", tClassesBuildFolder, "-cp", tClassPath, tAttachmentClassFile
+      executeShellCommand pathToJavac(), "-target 1.5 -source 1.5 -Xlint:none -d", tClassesBuildFolder, "-cp", tClassPath, tProviderClassFile
       if the result is not empty then
-         throw "could not compile email attachment provider" & return & the result
+         throw "could not compile app content provider" & return & the result
       end if
       put tBuildFolder & slash & "classes_app/" & tCompiledClassFilePath & "/AppProvider.class" & return after tBuiltClassFiles
       
-      local tClassesFile
-      put tBuildFolder & slash & "classes.dex" into tClassesFile
-      executeShellCommand pathToDex(), "--dex", "--output=" & quote & tClassesFile & quote, tClassesBuildFolder, tLiveCodeClassesFile
-      if the result is not empty then
-         throw "could not encode class bundle"
-      end if
-      
-      ------- Compile the Standalone
-      revStandaloneProgress "Building executable..."
-      
-      local tDeploy
-      -- Update the deploy params with script library and extension inclusions
-      revSBUpdateDeployParams pStack, "android", pSettings, tDeploy
-      
-      -- Engine to use
-      put mapFilePath(revMobileRuntimeFolder(pTarget) & slash & "Standalone") into tDeploy["engine"]
-      // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occurred
-      if there is no file tDeploy["engine"] then
-         throw "Could not find standalone engine"
-      end if
-      -- Stackfile to use
-      put the effective filename of stack pStack into tDeploy["stackfile"]
-      
-      -- Externals to reference (on Android we include drivers in this list)
-      put "revsecurity:./librevsecurity" into tDeploy["library"]
-      repeat for each line tEntry in tExternals
-         if not (tEntry begins with "db") then
-            put tEntry & return after tDeploy["externals"]
-         end if
-         put return & tEntry & ":" & "./lib" & tEntry after tDeploy["library"]
+      set the itemdel to slash
+      local tJarCount
+      repeat for each line tJarFile in pSettings["jarFiles"]
+         -- use numeric jar file names as they might have the same
+         -- source name
+         add 1 to tJarCount
+         local tTargetFile
+         put tLibsBuildFolder & slash & tJarCount & ".jar" into tTargetFile
+         put url ("binfile:" & tJarFile) into url ("binfile:" & tTargetFile)
       end repeat
-      delete the last char of tDeploy["externals"]
-      
-      -- Output file to create
-      put tArmLibsBuildFolder & slash & "librevandroid.so" into tDeploy["output"]
-      
-      -- Splash to use (if non-commercial)
-      if line 3 of the revLicenseInfo is among the words of "Educational Personal" then
-         -- MW-2011-03-17: Make sure absolute paths work correctly
-         if pSettings["android,splash"] is not empty and pathIsRelative(pSettings["android,splash"]) then
-            put tBaseFolder & slash & pSettings["android,splash"] into tDeploy["splash"]
-         else
-            put pSettings["android,splash"] into tDeploy["splash"]
-         end if
-      end if
-      
-      _internal deploy android tDeploy
-      if the result is not empty then
-         throw the result
-      end if
-      
-      -------- Assembling Assets
-      revStandaloneProgress "Assembling assets..."
       
       -- MW-2012-07-05: Record all asset files that are copied into /tmp
       local tAssetFiles
@@ -764,6 +796,15 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       end if
       put tXMLResBuildFolder & slash & "nfc_tech_filter.xml" & return after tAssetFiles
       
+      
+      local tFileProviderPaths
+      put mapFilePath(revMobileRuntimeFolder(pTarget) & slash & "file_provider_paths.xml") into tFileProviderPaths
+      put url ("binfile:" & tFileProviderPaths) into url ("binfile:" & tXMLResBuildFolder & slash & "file_provider_paths.xml")
+      if the result is not empty then
+         throw "could not copy file provider paths file '" & tFileProviderPaths & "'"
+      end if
+      put tXMLResBuildFolder & slash & "file_provider_paths.xml" & return after tAssetFiles
+      
       if there is a file tIcon then
          put url ("binfile:" & tIcon) into url ("binfile:" & tDrawableResBuildFolder & slash & "icon.png")
          if the result is not empty then
@@ -780,22 +821,141 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
          put tDrawableResBuildFolder & slash & "notify_icon.png" & return after tAssetFiles
       end if
       
-      -- MW-2012-07-04: On Linux, 'aapt' can complain about libz version info
-      --   so we delete that line from the result before checking for an error.
-      if there is a folder (tBuildFolder & slash & "res") then
-         executeShellCommand pathToAapt(), "package", "-f", "-M", tManifestFile, "-I", pathToRootClasses(),"-F", tAssetArchive, "-S", (tBuildFolder & slash & "res")
+      local tResourceClasses
+      generateResourceClasses tBuildFolder, tResBuildFolder, \
+            tManifestFile, pSettings, tResourceClasses
+      if the result is not empty then
+         throw "could not build R.java" & return & the result
+      end if
+      if tResourceClasses is not empty then
+         local tParams
+         put "-target 1.5 -source 1.5 -Xlint:none -d" into tParams
+         split tParams by space
+         appendToList tClassesBuildFolder, tParams
+         appendToList "-cp", tParams
+         appendToList tClassPath, tParams
+         repeat for each line tRClass in tResourceClasses
+            appendToList tRClass, tParams
+         end repeat
+         executeShellCommandWithParams pathToJavac(), tParams
+         if the result is not empty then
+            throw "could not compile resource class" & return & the result
+         end if
+         -- Add to list of files to delete
+      end if
+      
+      local tClassesFile
+      put tBuildFolder & slash & "classes.dex" into tClassesFile
+      executeShellCommand pathToDex(), "--dex", "--output=" & quote & tClassesFile & quote, tClassesBuildFolder, tLiveCodeClassesFile, tLibsBuildFolder
+      if the result is not empty then
+         throw "could not encode class bundle"
+      end if
+      
+      ------- Compile the Standalone
+      revStandaloneProgress "Building executable..."
+      
+      put tExternals into pSettings["externals"]
+      
+      if pSettings["android,library"] is empty then
+         put "revsecurity:./librevsecurity" into pSettings["android,library"]
       else
-         executeShellCommand pathToAapt(), "package", "-f", "-M", tManifestFile, "-I", pathToRootClasses(),"-F", tAssetArchive
+         put return & "revsecurity:./librevsecurity" after pSettings["android,library"]
       end if
-      get the result
-      if line 1 of it contains "no version information available" then
-         delete line 1 of it
+      repeat for each line tEntry in tExternals
+         put return & tEntry & ":" & "./lib" & tEntry after pSettings["android,library"]
+      end repeat
+      repeat for each line tEntry in tDrivers
+         put return & tEntry & ":" & "./lib" & tEntry after pSettings["android,library"]
+      end repeat
+      
+      set the itemDelimiter to comma
+      repeat for each item tArch in tArchs
+         local tArchCodeResources
+         filter pSettings["extension_code_resources"] \
+               with ("*code/" & tArch & "-android*") into tArchCodeResources
+         
+         repeat for each line tLib in tArchCodeResources
+            local tSourceFile, tSourceName
+            set the itemdelimiter to slash
+            put item -1 of tLib into tSourceFile
+            set the itemDelimiter to "."
+            put item 1 to -2 of tSourceFile into tSourceName
+            set the itemDelimiter to comma
+            
+            if not(tSourceFile begins with "lib") then
+               put "lib" before tSourceFile
+            end if
+            
+            put url ("binfile:" & tLib) into \
+                  url ("binfile:" & tArchLibsBuildFolders[__ArchABI(tArch)] & slash & tSourceFile)
+            
+            if (tSourceName & ":./" & tSourceFile) is not among the lines of pSettings["android,library"] then
+               put return & tSourceName & ":./" & tSourceFile after pSettings["android,library"]
+            end if
+         end repeat
+      end repeat
+      
+      local tDeploy
+      -- Update the deploy params with script library and extension inclusions
+      revSBUpdateDeployParams pStack, "android", pSettings, tDeploy
+      
+      -- Stackfile to use
+      put the effective filename of stack pStack into tDeploy["stackfile"]
+      
+      -- Splash to use (if non-commercial)
+      if line 3 of the revLicenseInfo is among the words of "Educational Personal" then
+         -- MW-2011-03-17: Make sure absolute paths work correctly
+         if pSettings["android,splash"] is not empty and pathIsRelative(pSettings["android,splash"]) then
+            put tBaseFolder & slash & pSettings["android,splash"] into tDeploy["splash"]
+         else
+            put pSettings["android,splash"] into tDeploy["splash"]
+         end if
       end if
-      // SN-2014-10-27: [[ Bug 13800 ]] libpng 1.6+ raises a warning for the PNG files having embedded sRGB profile
-      if line 1 of it contains "iCCP: Not recognizing known sRGB profile that has been edited" then
-         delete line 1 of it
+
+      repeat for each key tArch in tArchLibsBuildFolders
+         -- Engine to use
+         put mapFilePath(revMobileRuntimeFolder(pTarget) & slash & tArch & slash & "Standalone") into tDeploy["engine"]
+         // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occurred
+         if there is no file tDeploy["engine"] then
+            throw "Could not find standalone engine"
+         end if
+         
+         -- Output file to create
+         put tArchLibsBuildFolders[tArch] & slash & "librevandroid.so" into tDeploy["output"]
+         
+         _internal deploy android tDeploy
+         if the result is not empty then
+            throw the result
+         end if
+      end repeat
+      
+      -------- Assembling Assets
+      revStandaloneProgress "Assembling assets..."
+      
+      -- Make sure we include the res folders for each aar when packaging
+      local tAarResFolderOpts
+      put empty into tAarResFolderOpts
+      repeat with x = 1 to the number of lines in pSettings["aarFiles"]
+         local tAarResFolder
+         put tBuildFolder & slash & x & "/res" into tAarResFolder
+         if there is a folder tAarResFolder then
+            put "-S" && quote & tAarResFolder & quote & space after tAarResFolderOpts
+         end if
+      end repeat      
+      
+      local tAaptResult
+      if there is a folder tResBuildFolder then
+         executeShellCommand pathToAapt(), "package", "-f", "-M", tManifestFile, \
+               "-I", pathToRootClasses(),"-F", tAssetArchive, "-S", tResBuildFolder, \
+               tAarResFolderOpts, "--auto-add-overlay"
+      else
+         executeShellCommand pathToAapt(), "package", "-f", "-M", tManifestFile, \
+               "-I", pathToRootClasses(),"-F", tAssetArchive, \
+               tAarResFolderOpts, "--auto-add-overlay"
       end if
-      if it is not empty then
+      put the result into tAaptResult
+      processAaptResult tAaptResult
+      if tAaptResult is not empty then
          throw "could not generate package manifest"
       end if
       
@@ -820,30 +980,47 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
          delete file tUnalignedApkFile
       end if
       
-      -- MM-2014-01-29: [[ OpenSSL ]] Include the revsecurity library.
-      if pSettings["android,include revsecurity"] then
-         put url ("binfile:" & mapFilePath(revMobileRuntimeFolder(pTarget) & slash & "revsecurity")) into url ("binfile:" & tArmLibsBuildFolder & slash & "librevsecurity.so")
+      repeat for each key tArch in tArchLibsBuildFolders
+         -- MM-2014-01-29: [[ OpenSSL ]] Include the revsecurity library.
+         if pSettings["android,include revsecurity"] then
+            put url ("binfile:" & mapFilePath(revMobileRuntimeFolder(pTarget) & slash & tArch & slash & "revsecurity")) \
+                  into url ("binfile:" & tArchLibsBuildFolders[tArch] & slash & "librevsecurity.so")
+            
+            // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occurred
+            if the result is not empty then
+               throw "Could not find revsecurity library"
+            end if
+         end if
          
-         // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occurred
-         if the result is not empty then
-            throw "Could not find revsecurity library"
-         end if
-      end if
-      
-      -- Copy across the externals into the libs folder
-      repeat for each line tEntry in tExternals
-         -- Only copy across an external from the Runtime folder if we haven't
-         -- already copied from a lcext.
-         if there is a file (tArmLibsBuildFolder & slash & "lib" & tEntry & ".so") then
-            next repeat
-         end if
-         put url ("binfile:" & mapFilePath(revMobileRuntimeFolder(pTarget) & slash & tEntry)) into url ("binfile:" & tArmLibsBuildFolder & slash & "lib" & tEntry & ".so")
-         // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occurred
-         if the result is not empty then
-            throw "Could not find " & tEntry && "library"
-         end if
+         -- Copy across the externals into the libs folder
+         repeat for each line tEntry in tExternals
+            -- Only copy across an external from the Runtime folder if we haven't
+            -- already copied from a lcext.
+            if there is a file (tArchLibsBuildFolders[tArch] & slash & "lib" & tEntry & ".so") then
+               next repeat
+            end if
+            put url ("binfile:" & mapFilePath(revMobileRuntimeFolder(pTarget) & slash & tArch & slash & tEntry)) \
+                  into url ("binfile:" & tArchLibsBuildFolders[tArch] & slash & "lib" & tEntry & ".so")
+            // SN-2015-01-22: [[ Bug 13213 ]] Throw an error in case an error occurred
+            if the result is not empty then
+               throw "Could not find " & tEntry && "library"
+            end if
+         end repeat
+         
+         -- Copy across any other driver libraries into the libs folder
+         repeat for each line tEntry in tDrivers
+            -- Only copy across the library if it's not already there
+            if there is a file (tArchLibsBuildFolders[tArch] & slash & "lib" & tEntry & ".so") then
+               next repeat
+            end if
+            put url ("binfile:" & mapFilePath(revMobileRuntimeFolder(pTarget) & slash & tArch & slash & tEntry)) \
+                  into url ("binfile:" & tArchLibsBuildFolders[tArch] & slash & "lib" & tEntry & ".so")
+            if the result is not empty then
+               throw "Could not find " & tEntry && "library"
+            end if
+         end repeat
       end repeat
-      
+
       -- Work out whether to produce an unsigned apk
       local tUnsignedParam
       if (pTarget contains "build") and tUnsigned then
@@ -858,10 +1035,12 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
       if the result contains "Debug Certificate Expired" then
          throw "debug certificate has expired, please refresh"
       end if
-      if not (the result contains "=> lib/armeabi/librevandroid.so") then
-         throw "apk preparation failed"
-      end if
-      
+      repeat for each key tArch in tArchLibsBuildFolders
+         if not (the result contains "=> lib/" & tArch & "/librevandroid.so") then
+            throw "apk preparation failed"
+         end if
+      end repeat
+
       ------- Signing the Package
       if pTarget contains "build" and tKey is not empty then
          revStandaloneProgress "Signing package..."
@@ -919,18 +1098,25 @@ private command revSaveAsMobileStandaloneMain pStack, pApkFile, pTarget, pSettin
    if there is a file tUnalignedApkFile then delete file tUnalignedApkFile
    if there is a file tAssetArchive then delete file tAssetArchive
    if there is a file tLiveCodeClassesFile then delete file tLiveCodeClassesFile
-   if there is a file (tArmLibsBuildFolder & slash & "librevandroid.so") then delete file  (tArmLibsBuildFolder & slash & "librevandroid.so")
-   if there is a file (tArmLibsBuildFolder & slash & "librevsecurity.so") then delete file  (tArmLibsBuildFolder & slash & "librevsecurity.so")
-   repeat for each line tEntry in tExternals
-      if there is a file (tArmLibsBuildFolder & slash & "lib" & tEntry & ".so") then delete file (tArmLibsBuildFolder & slash & "lib" & tEntry & ".so")
+   
+   repeat for each element tFolder in tArchLibsBuildFolders
+      repeat for each line tFile in files(tFolder)
+         delete file (tFolder & slash & tFile)
+      end repeat
+      if there is a folder tFolder then delete folder tFolder
    end repeat
-   if there is a folder tArmLibsBuildFolder then delete folder tArmLibsBuildFolder
+   
+   set the itemDelimiter to slash
+   repeat for each line tJarFile in pSettings["jarFiles"]
+      if there is a file (tLibsBuildFolder & slash & item -1 of tJarFile) then 
+         delete file (tLibsBuildFolder & slash & item -1 of tJarFile)
+      end if
+   end repeat
    if there is a folder tLibsBuildFolder then delete folder tLibsBuildFolder
    if there is a file tClassesFile then delete file tClassesFile
    repeat for each line tClassFile in tBuiltClassFiles
       if there is a file tClassFile then delete file tClassFile
    end repeat
-   set the itemDelimiter to slash
    repeat while there is a folder (tBuildFolder & slash & "classes_app" & slash & tCompiledClassFilePath)
       delete folder (tBuildFolder & slash & "classes_app" & slash & tCompiledClassFilePath)
       if the result is not empty then
@@ -956,6 +1142,149 @@ end revSaveAsMobileStandaloneMain
 
 ################################################################################
 
+private function escapeLabel pLabel
+   replace "&" with "&amp;" in pLabel
+   replace "@" with "\@" in pLabel
+   replace "?" with "\?" in pLabel
+   replace "<" with "&lt;" in pLabel
+   replace ">" with "&gt;" in pLabel
+   replace "'" with "\'" in pLabel
+   replace quote with "\" & quote in pLabel
+   return pLabel
+end escapeLabel
+   
+private command processAaptResult @xResult   
+   -- MW-2012-07-04: On Linux, 'aapt' can complain about libz version info
+   --   so we delete that line from the result before checking for an error.
+   if line 1 of xResult contains "no version information available" then
+      delete line 1 of xResult
+   end if
+   // SN-2014-10-27: [[ Bug 13800 ]] libpng 1.6+ raises a warning for the PNG files having embedded sRGB profile
+   if line 1 of xResult contains "iCCP: Not recognizing known sRGB profile that has been edited" then
+      delete line 1 of xResult
+   end if
+end processAaptResult
+
+private command generateResourceClasses pBuildFolder, pResBuildFolder, \
+   pManifest, @xSettings, @rGenerated
+   if xSettings["aarFiles"] is empty then
+      return empty
+   end if
+   
+   local tOutputFolder, tAaptResult, tManifest
+   put pBuildFolder & slash & "gen" into tOutputFolder
+   revSBEnsureFolder tOutputFolder
+   -- at the moment we just generate resource classes for each included aar
+   repeat with x = 1 to the number of lines in xSettings["aarFiles"]
+      put pBuildFolder & "/" & x & "/AndroidManifest.xml" into tManifest
+      executeShellCommand pathToAapt(), "package", "-f", "-M", tManifest, \
+            "-I", pathToRootClasses(), "-S", pBuildFolder & slash & x & "/res", "-J", \
+            tOutputFolder & "/", "-m"
+      put the result into tAaptResult
+      processAaptResult tAaptResult
+      if tAaptResult is not empty then
+         return tAaptResult
+      end if
+   end repeat
+   local tGenerated
+   put revSBEnumerateFolder(tOutputFolder) into tGenerated
+   filter tGenerated with "*/R.java"
+   if tGenerated is not empty then
+      repeat for each line tLine in tGenerated
+         if rGenerated is empty then
+            put tOutputFolder & slash &tLine into rGenerated
+         else
+            put return & tOutputFolder & slash & tLine after rGenerated
+         end if
+      end repeat
+   end if
+   return empty
+end generateResourceClasses
+
+private command appendToStringList pValue, @xList
+   if xList is empty then
+      put pValue into xList
+   else
+      put return & pValue after xList
+   end if
+end appendToStringList
+
+private command addPlayServiceAARsToSettings  @xSettingsA
+   local tPlayServicesPath
+   put pathToPlayServices() into tPlayServicesPath
+   
+   repeat for each line tPlayService in xSettingsA["android,play dependencies"]
+      local tPlayVersion
+      set the itemDel to "-"
+      put the last item of tPlayService into tPlayVersion
+      delete the last item of tPlayService
+      set the itemDel to comma
+      
+      local tPlayServiceAARPath
+      put tPlayServicesPath & slash & \
+            "play-services-" & tPlayService & slash & \
+            tPlayVersion & slash & \
+            "play-services-" & tPlayService & "-" & tPlayVersion & ".aar" \
+            into tPlayServiceAARPath
+      if there is not a file tPlayServiceAARPath then
+         throw "unable to locate play service dependency" && tPlayService && "version" && tPlayVersion
+      end if
+      
+      appendToStringList tPlayServiceAARPath, xSettingsA["aarFiles"]
+   end repeat
+end addPlayServiceAARsToSettings
+
+private command expandAARsAndComputeSettings tBuildFolder, @xSettingsA
+   local tCount, tDefaultFolder
+   put the folder into tDefaultFolder
+   repeat for each line tAAR in xSettingsA["aarFiles"]
+      local tExtractFolder, tExtractCmd, tExtractedFiles
+      add 1 to tCount
+      put tBuildFolder & slash & tCount \
+            into tExtractFolder
+      revSBEnsureFolder tExtractFolder
+      set the folder to tExtractFolder
+      executeShellCommand pathToJar(), "xf", tAAR
+      updateSettingsForExtractedAAR tExtractFolder, xSettingsA
+   end repeat
+   set the folder to tDefaultFolder
+end expandAARsAndComputeSettings
+   
+constant kSupportedAARFiles = "AndroidManifest.xml,classes.jar,R.txt"   
+constant kSupportedAARFolders = "res"
+private command updateSettingsForExtractedAAR pFolder, @xSettingsA
+   local tExtractedItem
+   repeat for each item tItem in kSupportedAARFiles
+      put pFolder & slash & tItem into tExtractedItem
+      if there is not a file tExtractedItem then
+         next repeat
+      end if
+      switch tItem
+         case "AndroidManifest.xml"
+            appendToStringList tExtractedItem, xSettingsA["androidManifests"]
+            break
+         case "classes.jar"
+            appendToStringList tExtractedItem, xSettingsA["jarFiles"]
+            break
+         case "R.txt"
+            -- Don't need to do anything with this
+            break
+      end switch
+   end repeat
+   repeat for each item tItem in kSupportedAARFolders
+      put pFolder & slash & tItem into tExtractedItem
+      if there is not a folder tExtractedItem then
+         next repeat
+      end if     
+      switch tItem
+         case "res"
+            -- don't need to do anything with this- our call to aapt
+            -- deals with including the res files in the APK
+            break
+      end switch
+   end repeat
+end updateSettingsForExtractedAAR
+
 private command addAssetsToArchive pFileData, pBaseFolder, pArchive
    local tDeviceConfig, tConfigFile, tCustomConfigFile, tFonts
    
@@ -969,7 +1298,7 @@ private command addAssetsToArchive pFileData, pBaseFolder, pArchive
          if tConfigFile is not empty and tFile["name"] ends with "lc_device_config.txt" then
             // need to merge config files
             put tFile["resolved"] into tCustomConfigFile
-         else if tFile["name"] ends with ".ttf" or tFile["name"] ends with ".ttc" then
+         else if revSBFileIsFontFile(tFile["name"]) then
             -- MM-2012-03-07: [[ Custom fonts ]] If any fonts are found, add to the list so that they are handled correctly
             put tFile["resolved"] & return after tFonts
          else if tFile["name"] ends with ".lcext" or tFile["name"] ends with ".dylib" then
@@ -980,7 +1309,9 @@ private command addAssetsToArchive pFileData, pBaseFolder, pArchive
             revZipAddUncompressedItemWithFile pArchive, "assets/" & tFile["name"], tFile["resolved"]
          end if
       else if there is a folder tFile["resolved"] then
-         addAssetsFromFolderToArchive tFile["resolved"], "assets" & slash & tFile["name"], pArchive, tFonts
+         if not (tFile["resolved"] ends with ".lcextd") then
+            addAssetsFromFolderToArchive tFile["resolved"], "assets" & slash & tFile["name"], pArchive, tFonts
+         end if
       else
          throw "could not find referenced asset to include -" && tFile["resolved"]
       end if
@@ -1013,6 +1344,10 @@ private command addAssetsFromFolderToArchive pFolder, pBaseName, pArchive, @pFon
    if the last item of pFolder is ".svn" then
       exit addAssetsFromFolderToArchive
    end if
+
+   if char -1 of pFolder is slash then
+      delete char -1 of pFolder
+   end if
    
    local tOldFolder
    put the folder into tOldFolder
@@ -1022,7 +1357,7 @@ private command addAssetsFromFolderToArchive pFolder, pBaseName, pArchive, @pFon
    end if
    
    repeat for each line tFile in the files
-      if tFile ends with ".ttf" or tFile ends with ".ttc" then
+      if revSBFileIsFontFile(tFile) then
          -- MM-2012-03-07: [[ Custom fonts ]] If any fonts are found, add to the list so that they are handled correctly
          put the folder & slash & tFile & return after pFonts
       else if tFile ends with ".lcext" or tFile ends with ".dylib" then
@@ -1060,7 +1395,7 @@ end fileIsZipArchive
 
 -- MERG-2013-09-05: [[ Bug 11152 ]]  Change to function - returns true if external was successfully
 --   extracted.
-private function addExternalFromFile pExternal, pClassesFolder, pLibsFolder
+private function addExternalFromFile pExternal, pClassesFolder, pArchLibsFolders
    -- If the file is not a zip archive then there is nothing to do.
    if not fileIsZipArchive(pExternal) then
       exit addExternalFromFile
@@ -1099,14 +1434,16 @@ private function addExternalFromFile pExternal, pClassesFolder, pLibsFolder
          end if
       end repeat
       
-      repeat for each word tArch in kArchs
-         filter tZipItems with "*" & tArch & "*" into tZipItemsFiltered
-         put pLibsFolder & slash & tArch & slash & "lib" & tExternalName & ".so" into tLibFileA[tArch]
+      repeat for each key tArch in pArchLibsFolders
+         local tPattern
+         put "^Android/(?:External-" & tArch & "|lib.+" & tArch & "\.so)$" into tPattern
+         filter tZipItems with regex pattern tPattern into tZipItemsFiltered
+         put pArchLibsFolders[tArch] & slash & "lib" & tExternalName & ".so" into tLibFileA[tArch]
          
          repeat for each line tZipItem in tZipItemsFiltered
             if tZipItem ends with ".so" then
                revZipExtractItemToFile pExternal, tZipItem, \
-                     pLibsFolder & slash & tArch & slash & the last item of tZipItem 
+                     pArchLibsFolders[tArch] & slash & the last item of tZipItem 
             else 
                # will be External-<Arch> file
                revZipExtractItemToFile pExternal, tZipItem, tLibFileA[tArch]
@@ -1118,7 +1455,7 @@ private function addExternalFromFile pExternal, pClassesFolder, pLibsFolder
    end if
    
    if there is a file tClassesFile then
-      repeat for each word tArch in kArchs
+      repeat for each key tArch in pArchLibsFolders
          if there is no file tLibFileA[tArch] then
             throw "android external contains classes but no library for " & tArch
          end if
@@ -1127,6 +1464,63 @@ private function addExternalFromFile pExternal, pClassesFolder, pLibsFolder
    
    return tLibFileA is an array
 end addExternalFromFile
+
+private function addExternalFromFolder pExternal, pClassesFolder, pArchLibsFolders
+   -- Get the name of the external.
+   local tExternalName
+   set the itemDelimiter to slash
+   get the last item of pExternal
+   set the itemDelimiter to "."
+   put the first item of it into tExternalName
+   set the itemDelimiter to slash
+   
+   -- Compute the class / lib names.
+   local tClassesFile, tLibFileA
+   put pClassesFolder & slash & "lib" & tExternalName & ".jar" into tClassesFile
+   
+   local tItems
+   put files(pExternal & "/Android") into tItems
+   
+   local tItemsFiltered
+   filter tItems with regex pattern ".*(\.jar|Classes)$" into tItemsFiltered
+   repeat for each line tItem in tItemsFiltered
+      if tItem ends with ".jar" then
+         revSBCopyFile pExternal & "/Android/" & tItem, \
+               pClassesFolder & slash & the last item of tItem 
+      else 
+         # will be Classes file
+         revSBCopyFile pExternal & "/Android/" & tItem, \
+               tClassesFile
+      end if
+   end repeat
+   
+   repeat for each key tArch in pArchLibsFolders
+      local tPattern
+      put "^(?:External-" & tArch & "|lib.+" & tArch & "\.so)$" into tPattern
+      filter tItems with regex pattern tPattern into tItemsFiltered
+      put pArchLibsFolders[tArch] & slash & "lib" & tExternalName & ".so" into tLibFileA[tArch]
+      repeat for each line tItem in tItemsFiltered
+         if tItem ends with ".so" then
+            revSBCopyFile pExternal & "/Android/" & tItem, \
+                  pClassesFolder & slash & the last item of tItem 
+         else 
+            # will be External-<Arch> file
+            revSBCopyFile pExternal & "/Android/" & tItem, \
+                  tLibFileA[tArch]
+         end if
+      end repeat
+   end repeat
+   
+   if there is a file tClassesFile then
+      repeat for each key tArch in pArchLibsFolders
+         if there is no file tLibFileA[tArch] then
+            throw "android external contains classes but no library for " & tArch
+         end if
+      end repeat
+   end if
+   
+   return tLibFileA is an array
+end addExternalFromFolder
 
 ################################################################################
 
@@ -1166,20 +1560,51 @@ private command executeAdbCommand pCommand
    return it
 end executeAdbCommand
 
-private command executeShellCommand
-   local tShell
-   repeat with i = 2 to the paramCount
-      if param(i) contains space and not (param(i) begins with "-") then
-         put quote & param(i) & quote & space after tShell
+private command appendToList pValue, @xList
+   get the number of elements in xList
+   put pValue into xList[it + 1]
+end appendToList
+
+private command prependToList pValue, @xList
+   insertIntoList pValue, xList, 1
+end prependToList
+
+private command insertIntoList pValue, @xList, pAt
+   local tNewList
+   repeat with x = the number of elements in xList down to 1
+      if x >= pAt then
+         put xList[x] into tNewList[x+1]
       else
-         put param(i) & space after tShell
+         put xList[x] into tNewList[x]
       end if
    end repeat
+   put pValue into tNewList[pAt]
+   put tNewList into xList
+end insertIntoList
    
-   get doShellCommand(param(1), tShell)
+private command executeShellCommand
+   local tArray
+   repeat with i = 2 to the paramCount
+      appendToList param(i), tArray
+   end repeat
+   
+   executeShellCommandWithParams param(1), tArray
+   return the result
+end executeShellCommand
+
+private command executeShellCommandWithParams pCommand, pParamArray
+   local tShell
+   repeat for each element tParam in pParamArray
+      if tParam contains space and not (tParam begins with "-") then
+         put quote & tParam & quote into tParam
+      end if   
+      put tParam & space after tShell
+   end repeat
+   
+   get doShellCommand(pCommand, tShell)
    
    return it
-end executeShellCommand
+end executeShellCommandWithParams
 
 private function doShellCommand pCommand, pArguments
    --makeBuildLogEntry "Executing command:" && pCommand && pArguments
@@ -1213,75 +1638,82 @@ end doShellCommand
 
 ################################################################################
 
+constant kDeployLibrary = "revDeployLibraryAndroid"
+private function targetSDKVersion
+   dispatch function "deployTargetSdkVersion" to stack kDeployLibrary
+   return the result
+end targetSDKVersion
+
 private function pathToRootClasses pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToRootClasses" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToRootClasses" to stack kDeployLibrary with pRoot
    return the result
 end pathToRootClasses
 
 private function pathToSDKClasses pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToSDKClasses" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToSDKClasses" to stack kDeployLibrary with pRoot
    return the result
 end pathToSDKClasses
 
 private function pathToCommonClasses pRoot
-   dispatch function "pathToCommonClasses" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToCommonClasses" to stack kDeployLibrary with pRoot
    return the result
 end pathToCommonClasses
 
 private function pathToAapt pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToAapt" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToAapt" to stack kDeployLibrary with pRoot
    return the result
 end pathToAapt
 
 private function pathToAdb pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToAdb" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToAdb" to stack kDeployLibrary with pRoot
    return the result
 end pathToAdb
 
 private function pathToZipAlign pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToZipAlign" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToZipAlign" to stack kDeployLibrary with pRoot
    return the result
 end pathToZipAlign
 
 // SN-2015-07-02: [[ GypifiedAndroid ]] Get the right folder for android binaries
-private function pathToRepoAndroidBinaries
+private function pathToRepoAndroidBinaries pArch
    local tBuild
    if revEnvironmentBinariesPath() contains "/Debug" then
       put "Debug" into tBuild
    else
       put "Release" into tBuild
    end if
-   return revEnvironmentRepositoryPath() & "/build-android-armv6/livecode/out/" & tBuild
+   return revEnvironmentRepositoryPath() & "/build-android-" & pArch & "/livecode/out/" & tBuild
 end pathToRepoAndroidBinaries
 
 private function pathToDex pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToDex" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToDex" to stack kDeployLibrary with pRoot
    return the result
 end pathToDex
 
 private function pathToJavaC pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToJavaC" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToJavaC" to stack kDeployLibrary with pRoot
    return the result
 end pathToJavaC
 
 private function pathToJava pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToJava" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToJava" to stack kDeployLibrary with pRoot
    return the result
 end pathToJava
 
 private function pathToJarSigner pRoot
-   // SN-2014-10-16: [[ ScriptifiedStack ]] Stack name updated
-   dispatch function "pathToJarSigner" to stack "revDeployLibraryAndroid" with pRoot
+   dispatch function "pathToJarSigner" to stack kDeployLibrary with pRoot
    return the result
 end pathToJarSigner
+
+private function pathToJar pRoot
+   dispatch function "pathToJar" to stack kDeployLibrary with pRoot
+   return the result
+end pathToJar
+
+private function pathToPlayServices pRoot
+   dispatch function "pathToPlayServices" to stack kDeployLibrary with pRoot
+   return the result
+end pathToPlayServices
 
 ################################################################################
 
@@ -1316,8 +1748,23 @@ function mapFilePath pPath
    
    local tPath
    local tBinariesFolder, tComponent, tSuffix
-   set the itemDelimiter to slash
-   put pathToRepoAndroidBinaries() into tBinariesFolder
+   local tArch, tFoundArch
+   repeat for each item tItem in revSBPlatformArchitectures("Android")
+      if pPath contains ("/" & __ArchABI(tItem) & "/") then
+         put tItem into tArch
+      end if
+
+      if tFoundArch is empty and \
+            there is a folder pathToRepoAndroidBinaries(tItem) then
+         put tItem into tFoundArch
+      end if
+   end repeat
+
+   if tArch is empty then
+      put tFoundArch into tArch
+   end if
+
+   put pathToRepoAndroidBinaries(tArch) into tBinariesFolder
    
    // SN-2015-07-02: [[ GypifiedAndroid ]] Throw an error if there is
    //  not the expected build folder
@@ -1325,6 +1772,7 @@ function mapFilePath pPath
       throw "Error: Android binaries folder" && tBinariesFolder && "could not be found"
    end if
    
+   set the itemDelimiter to slash
    put the last item of pPath into tComponent
    
    if the editionType is "community" then
@@ -1342,6 +1790,9 @@ function mapFilePath pPath
          break
       case "nfc_tech_filter.xml"
          put merge("[[tBinariesFolder]]/nfc_tech_filter.xml") into tPath
+         break
+      case "file_provider_paths.xml"
+         put merge("[[tBinariesFolder]]/file_provider_paths.xml") into tPath
          break
       case "livecode_inputcontrol.xml"
          put merge("[[tBinariesFolder]]/livecode_inputcontrol.xml") into tPath
@@ -1382,3 +1833,351 @@ function mapFilePath pPath
 end mapFilePath
 
 ################################################################################
+
+function androidCreateAppManifest pMainManifest, pAdditionalManifestsA
+   local tMainArrayA, tAdditionalArraysA
+   put androidManifestToArray(pMainManifest) into tMainArrayA
+   repeat for each element tManifest in pAdditionalManifestsA
+      appendToList androidManifestToArray(tManifest), tAdditionalArraysA
+   end repeat
+   
+   MergeManifestArrays tMainArrayA, tAdditionalArraysA
+   return ConvertArrayToXML(tMainArrayA, "utf-8")
+end androidCreateAppManifest
+
+command MergeManifestArrays @xManifestArrayA, pAdditionalsA
+   -- Warning: at the moment we only support merging of
+   -- features, permissions, and application metadata
+   repeat for each element tAdditionalA in pAdditionalsA
+      -- everything we're interested in comes under the 
+      -- manifest root node.
+      MergeManifestArray xManifestArrayA[1]["@children"], tAdditionalA[1]["@children"]
+   end repeat
+end MergeManifestArrays
+
+private function FindIndex pArray, pName
+   repeat for each key tIndex in pArray
+      if pArray[tIndex]["@name"] is pName then
+         return tIndex
+      end if
+   end repeat
+   throw "no index found for" && pName
+end FindIndex
+
+private function FindEndOfBlockIndex pArray
+   local tIndex
+   repeat for each key tIndex in pArray
+      if pArray[tIndex]["@children"] is not empty then
+         exit repeat
+      end if
+   end repeat
+   return tIndex
+end FindEndOfBlockIndex
+
+command MergeManifestArray @xManifestArrayA, pAdditionalsA
+   -- Find the index of the end of this block and insert new items
+   -- before it
+   local tEndOfBlock
+   put FindEndOfBlockIndex(xManifestArrayA) into tEndOfBlock
+   repeat for each key tIndex in pAdditionalsA
+      local tData
+      put pAdditionalsA[tIndex] into tData
+      switch tData["@name"] 
+         case "application"
+            -- Find the index of the application sub-array
+            local tAppIndex
+            put FindIndex(xManifestArrayA, "application") into tAppIndex
+            MergeManifestArray xManifestArrayA[tAppIndex]["@children"], \
+                  tData["@children"]
+            break
+         case "uses-sdk"
+            -- ensure the maximum min sdk is used
+            -- Find the index of the uses-sdk element
+            local tUsesSDKIndex
+            put FindIndex(xManifestArrayA, "uses-sdk") into tUsesSDKIndex
+            local tExisting, tNew
+            put xManifestArrayA[tUsesSDKIndex]["@attributes"]["android:minSDKVersion"] \
+                  into tExisting
+            put tData["@attributes"]["android:minSDKVersion"] into tNew
+            put max(tExisting, tNew) into \
+                  xManifestArrayA[tUsesSDKIndex]["@attributes"]["android:minSDKVersion"]
+            break
+         case "activity"
+            local tActivityIndex
+            put FindIndex(xManifestArrayA, "activity") into tActivityIndex
+            local tExistingA, tNewA
+            put xManifestArrayA[tActivityIndex]["@attributes"] \
+                  into tExistingA
+            put tData["@attributes"] into tNewA
+            repeat for each line tKey in the keys of tNewA
+               // do not merge the "theme", "name" and "exported" attributes
+               if tKey is "android:theme" or tKey is "android:name" or tKey is "android:exported" then
+                  next repeat
+               end if
+               put tNewA[tKey] into tExistingA[tKey]
+            end repeat
+            put tExistingA into xManifestArrayA[tActivityIndex]["@attributes"]
+            if tData["@children"] is an array then
+               MergeManifestArray xManifestArrayA[tActivityIndex]["@children"], \
+                     tData["@children"]
+            end if
+            break
+         default
+            insertIntoList tData, xManifestArrayA, tEndOfBlock
+            add 1 to tEndOfBlock
+            break
+      end switch
+   end repeat
+end MergeManifestArray
+
+function androidManifestToArray pManifestFile
+   local tXML
+   put url("binfile:" & pManifestFile) into tXML
+   return ConvertXMLToArray(tXML, "utf-8", true, "")
+end androidManifestToArray
+
+/*
+Handlers for converting XML text to LiveCode arrays and vice versa. 
+Based on an implementation by Trevor DeVore of Blue Mango Learning Systems.
+*/
+
+/**
+Converts an XML tree into a LiveCode multi-dimensional array.
+
+Parameters:
+pXML: The xml to convert.
+pStoreEncodedAs: 
+Encoding to use. Must be a value that can be passed to textEncode. Default is "utf-8".
+*/
+function ConvertXMLToArray pXML, pStoreEncodedAs
+   local theArray,theResult,theRootNode,theTreeID
+   local theXMLEncoding, tVersion
+   
+   ## Create an XML tree from XML text
+   put revCreateXMLTreeWithNamespaces(pXML, true, true, false) into theTreeID
+   
+   if theTreeID is an integer then
+      ## Determine the encoding of the XML, default to UTF-8
+      put matchText(pXML, "<?xml (.)encoding=" & quote & "([^" & quote & "])", tVersion, theXMLEncoding) into theResult
+      if theXMLEncoding is empty then put "utf-8" into theXMLEncoding
+      
+      ## Now convert to array. 
+      ## The 1st dimension has one key which is the name of the root node.
+      put revXMLRootNode(theTreeID) into theRootNode
+      if theRootNode is not empty and not(theRootNode begins with "xmlerr,") then
+         put ConvertXMLNodeToArray(theTreeID, theRootNode, theXMLEncoding, pStoreEncodedAs) \
+               into theArray[1]
+         put theRootNode into theArray[1]["@name"]
+      end if
+      
+      revDeleteXMLTree theTreeID
+   end if
+   
+   return theArray
+end ConvertXMLToArray
+
+
+/**
+Converts a revXML created XML Tree to an array.
+Parameters:
+pXMLTree: The xml tree id.
+pStoreEncodedAs: See docs for ConvertXMLToArray.
+
+Description:
+See docs for ConvertXMLToArray.
+*/
+function ConvertXMLTreeToArray pXMLTree, pStoreEncodedAs
+   return ConvertXMLToArray(revXMLText(pXMLTree), pStoreEncodedAs)
+end ConvertXMLTreeToArray
+
+
+/**
+Converts a multi-dimensional array to an XML tree.
+Parameters:
+pArray: The array to convert.
+pArrayEncoding: Encoding used in the array. Must be a value that can be passed to textDecode.
+pStoreEncodedAs: Encoding to use. Must be a value that can be passed to textEncode. Default is "utf-8".
+
+Description:
+The array should be keyed numerically, in order of appearance of nodes.
+pArray[1] is assumend to be the root node in the XML tree.
+each node is an array with three possible keys, 
+- @name (required): The name of the node
+- @attributes: The attributes of the node, stored as an array of 
+  name/value pairs
+- @children: A numerically keyed array of child nodes
+- @value: The text value of the node
+Returns: Text of the XML represented by the array, or error message.
+*/
+function ConvertArrayToXML pArray, pArrayEncoding, pStoreEncodedAs
+   local theError,theRootNode,theXML,theXMLTree
+   
+   ## if pArrayEncoding is empty then current platform encoding is assumed
+   if pStoreEncodedAs is empty then put "UTF-8" into pStoreEncodedAs
+   
+   ## Create XML for root node. Note that we take extra steps in order to support
+   ## converting an array that only represents part of a tree rather than the entire tree.
+   ## In this case there may be multiple nodes at the root level.
+   put pArray[1]["@name"] into theRootNode 
+   put "<" & theRootNode & "/>" into theXML
+   
+   local tEncoding
+   ## Create XML needed to create tree
+   put format("<?xml version=\"1.0\" encoding=\"%s\"?>", \
+         pStoreEncodedAs) into tEncoding
+   put tEncoding before theXML
+   put revCreateXMLTreeWithNamespaces(theXML, true, true, false) into theXMLTree
+   
+   if theXMLTree is an integer then
+      ## Loop over all nodes at root level
+      ## Create tree using helper function
+      local tName
+      repeat for each element tNode in pArray
+         put tNode["@name"] into tName
+         replace space with "-" in tName
+         ConvertArrayDimensionToXML tNode, theXMLTree, slash & tName, \
+               tName, pArrayEncoding, pStoreEncodedAs
+         put the result into theError
+         
+         if theError is not empty then exit repeat
+      end repeat
+      
+      if theError is not empty then
+         ## something went wrong, clean bad tree
+         revDeleteXMLTree theXMLTree
+      end if
+   else
+      put theXMLTree into theError
+   end if
+   
+   if theError is not empty then
+      return theError for error
+   else
+      return tEncoding & return & \
+            revXMLText(theXMLTree, theRootNode, true) \
+            for value
+   end if
+end ConvertArrayToXML
+ 
+private command ConvertArrayDimensionToXML pArray, pTreeID, pNode, pName, pArrayEncoding, pStoreEncodedAs
+   local theError,theKey,theKeys,tName
+   put pName into tName
+   repeat for each key tKey in pArray
+      if tKey is "@name" then next repeat
+      ## Look for attributes. These will be added as attributes to pNode.
+      if tKey is "@attributes" or tKey is "@attr" then
+         repeat for each key theKey in pArray[tKey]
+            local theAttr
+            put theKey into theAttr
+            replace space with "-" in theAttr
+            
+            revSetXMLAttribute pTreeID, pNode, theAttr, \
+                  EncodeString(pArray[tKey][theKey], \
+                  pArrayEncoding, pStoreEncodedAs)
+            if the result begins with "xmlerr," then 
+               put the result && "(setting attribute" && theKey && "for node" && pNode & ")" into theError
+            end if
+            
+            if theError is not empty then exit repeat
+         end repeat
+         
+      else if tKey is "@value" then
+         ## This XML tree is using complex structure. Node is the value of the parent node
+         revPutIntoXMLNode pTreeID, pNode, EncodeString(pArray[tKey], pArrayEncoding, pStoreEncodedAs)
+         if the result begins with "xmlerr," then
+            put the result && "(adding child node" && tName && "to node" && pNode & ")" into theError
+         end if
+         
+      else if tKey is "@children" then
+         local tCounts
+         repeat for each element tChildNode in pArray[tKey]
+            add 1 to tCounts[tChildNode["@name"]]
+            ## Node has children. Add node to XML tree then call self recursivly to create children nodes. 
+            revAddXMLNode pTreeID, pNode, tChildNode["@name"], empty
+            if the result begins with "xmlerr," then
+               put the result && "(adding node" && tName & ")" into theError
+            end if
+            
+            if theError is empty then
+               ConvertArrayDimensionToXML tChildNode, pTreeID, \
+                     pNode & slash & tChildNode["@name"] & "[" & tCounts[tChildNode["@name"]] & "]", \
+                     tChildNode["@name"], pArrayEncoding, pStoreEncodedAs
+               put the result into theError
+            end if
+         end repeat
+      else
+         ## Node has no children but possibly a value. Create node and add value (which may be empty).
+         revAddXMLNode pTreeID, pNode, tKey, \
+               EncodeString(pArray[tKey], pArrayEncoding, pStoreEncodedAs)
+         if the result begins with "xmlerr," then
+            put the result && "(adding child node" && tKey && "to node" && pNode & ")" into theError
+         end if
+      end if
+      if theError is not empty then exit repeat
+   end repeat
+   
+   return theError
+end ConvertArrayDimensionToXML
+ 
+private function ConvertXMLNodeToArray pTreeID, pNode, pXMLTreeEncoding, pStoreEncodedAs
+   local theArrayA,theAttributes,theChildNode,theKey
+   
+   ## Look for attributes of the node. Store as array in "@attributes" key
+   put revXMLAttributes(pTreeID, pNode, tab, cr) into theAttributes
+   if theAttributes is not empty then
+      put EncodeString(theAttributes, pXMLTreeEncoding, pStoreEncodedAs) into theAttributes
+      split theAttributes by cr and tab -- create array
+      put theAttributes into theArrayA["@attributes"]
+   end if
+   
+   ## Look for children nodes. 
+   set the itemDelimiter to slash
+   put revXMLFirstChild(pTreeID, pNode) into theChildNode
+   if theChildNode is empty or theChildNode begins with "xmlerr," then
+      local theValue
+      put EncodeString(revXMLNodeContents(pTreeID, pNode), pXMLTreeEncoding, pStoreEncodedAs) into theValue
+      if word 1 to -1 of theValue is empty and the keys of theArrayA is not empty then
+         ## Empty node that has attributes
+         return theArrayA
+         ## Force value into @value
+         put theValue into theArrayA["@value"]
+         return theArrayA
+      end if
+   else
+      ## Child nodes were found. Recursively call self and store result in array.
+      set the wholeMatches to true
+      local tIndex
+      repeat while theChildNode is not empty and not (theChildNode begins with "xmlerr,")
+         add 1 to tIndex
+         put the last item of theChildNode into theKey
+         set the itemdelimiter to "["
+         if the number of items in theKey > 1 then
+            put item 1 to -2 of theKey into theKey
+         end if    
+         set the itemdelimiter to slash
+         put ConvertXMLNodeToArray(pTreeID, theChildNode, pXMLTreeEncoding, pStoreEncodedAs) into theArrayA["@children"][tIndex]
+         put theKey into theArrayA["@children"][tIndex]["@name"]
+         put revXMLNextSibling(pTreeID, theChildNode) into theChildNode
+      end repeat
+      
+      return theArrayA
+   end if
+end ConvertXMLNodeToArray
+ 
+private function EncodeString pString, pInEncoding, pOutEncoding
+   if pInEncoding is pOutEncoding then
+      return pString
+   end if
+   
+   if pInEncoding is not empty then
+      -- if pOutEncoding is empty then pString will be converted to the current platform encoding
+      put textDecode(pString, pInEncoding) into pString
+   end if
+   
+   if pOutEncoding is not empty then
+      -- if pInEncoding is empty then pString is assumed to be in the current platform encoding
+      put textEncode(pString, pOutEncoding) into pString
+   end if
+   
+   return pString
+end EncodeString

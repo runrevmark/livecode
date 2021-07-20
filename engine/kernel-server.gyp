@@ -34,6 +34,8 @@
 			'target_name': 'kernel-server',
 			'type': 'static_library',
 			
+			'toolsets': ['host', 'target'],
+
 			'includes':
 			[
 				'kernel-mode-template.gypi',
@@ -47,17 +49,21 @@
 			
 			'dependencies':
 			[
-				'../libexternal/libexternal.gyp:libExternal',
+				'../libfoundation/libfoundation.gyp:libFoundation',
+				'../libgraphics/libgraphics.gyp:libGraphics',
+				'../libscript/libscript.gyp:libScript',
+				'../libscript/libscript.gyp:stdscript',
 				
 				'../prebuilt/libcurl.gyp:libcurl',
 				'../prebuilt/libopenssl.gyp:libopenssl',
-				
-				'../thirdparty/libgif/libgif.gyp:libgif',
-				'../thirdparty/libjpeg/libjpeg.gyp:libjpeg',
-				'../thirdparty/libpcre/libpcre.gyp:libpcre',
-				'../thirdparty/libpng/libpng.gyp:libpng',
-				'../thirdparty/libz/libz.gyp:libz',
-				
+
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_pcre',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_jpeg',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_gif',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_png',
+		
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_z',
+		
 				'engine-common.gyp:quicktime_stubs',
 				
 				'lcb-modules.gyp:engine_lcb_modules',
@@ -86,11 +92,11 @@
 				[
 					'OS == "linux"',
 					{
-						'include_dirs':
+						'dependencies':
 						[
-							'../thirdparty/headers/linux/include/cairo',
+							'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_cairo',
 						],
-						
+
 						'defines':
                         [
 	                        'PANGO_ENABLE_BACKEND',

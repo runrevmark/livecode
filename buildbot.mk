@@ -98,7 +98,7 @@ buildtool_command = $(LIVECODE) -ui $(BUILDTOOL_STACK) \
 # Settings for upload
 RSYNC ?= rsync
 SHA1SUM ?= sha1sum
-UPLOAD_SERVER ?= meg.on-rev.com
+UPLOAD_SERVER ?= molly.livecode.com
 UPLOAD_PATH = staging/$(BUILD_LONG_VERSION)/$(GIT_VERSION)
 UPLOAD_MAX_RETRIES = 50
 
@@ -121,7 +121,7 @@ dist-docs-guide:
 		--stage guide --warn-as-error
 
 ifeq ($(BUILD_EDITION),commercial)
-dist-server: dist-server-commercial
+dist-server: dist-server-communityplus dist-server-indy dist-server-business
 endif
 
 dist-server: dist-server-community
@@ -130,10 +130,18 @@ dist-server-community:
 	$(buildtool_command) --platform mac --platform win --platform linux \
 	    --stage server --edition community --warn-as-error
 
-dist-server-commercial:
+dist-server-communityplus:
 	$(buildtool_command) --platform mac --platform win --platform linux \
-	    --stage server --edition commercial --warn-as-error
+	    --stage server --edition communityplus --warn-as-error
 
+dist-server-indy:
+	$(buildtool_command) --platform mac --platform win --platform linux \
+	    --stage server --edition indy --warn-as-error
+
+dist-server-business:
+	$(buildtool_command) --platform mac --platform win --platform linux \
+		--stage server --edition business --warn-as-error
+		
 ifeq ($(BUILD_EDITION),commercial)
 dist-tools: dist-tools-commercial
 distmac-disk: distmac-disk-communityplus distmac-disk-indy distmac-disk-business
@@ -183,11 +191,13 @@ distmac-bundle-business:
 dist-upload-files.txt sha1sum.txt:
 	set -e; \
 	find . -maxdepth 1 -name 'LiveCode*-*-Mac.dmg' \
-	                -o -name 'LiveCode*Installer-*-Windows.exe' \
+	                -o -name 'LiveCode*Installer-*-Windows-x86.exe' \
+	                -o -name 'LiveCode*Installer-*-Windows-x86_64.exe' \
 	                -o -name 'LiveCode*Installer-*-Linux.*' \
 	                -o -name 'LiveCode*Server-*-Linux*.zip' \
 	                -o -name 'LiveCode*Server-*-Mac.zip' \
-	                -o -name 'LiveCode*Server-*-Windows.zip' \
+	                -o -name 'LiveCode*Server-*-Windows-x86.zip' \
+	                -o -name 'LiveCode*Server-*-Windows-x86_64.zip' \
 	                -o -name 'LiveCode*Docs-*.zip' \
 	                -o -name '*-bin.tar.xz' \
 	                -o -name '*-bin.tar.bz2' \

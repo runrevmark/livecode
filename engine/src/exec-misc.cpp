@@ -40,62 +40,6 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_GET_METHOD(Misc, DeviceToken, 0)
-MC_EXEC_DEFINE_GET_METHOD(Misc, LaunchUrl, 0)
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, LaunchData, 0);
-
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, Beep, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, Vibrate, 1)
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, DeviceResolution, 1)
-MC_EXEC_DEFINE_SET_METHOD(Misc, UseDeviceResolution, 1)
-MC_EXEC_DEFINE_GET_METHOD(Misc, DeviceScale, 1)
-MC_EXEC_DEFINE_GET_METHOD(Misc, PixelDensity, 1)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, ShowStatusBar, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, HideStatusBar, 0)
-MC_EXEC_DEFINE_SET_METHOD(Misc, StatusBarStyle, 1)
-
-MC_EXEC_DEFINE_SET_METHOD(Misc, KeyboardType, 1)
-MC_EXEC_DEFINE_SET_METHOD(Misc, KeyboardReturnKey, 1);
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, PreferredLanguages, 1)
-MC_EXEC_DEFINE_GET_METHOD(Misc, CurrentLocale, 1)
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, SystemIdentifier, 1)
-MC_EXEC_DEFINE_GET_METHOD(Misc, ApplicationIdentifier, 1)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, ClearTouches, 0)
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, ReachabilityTarget, 1)
-MC_EXEC_DEFINE_SET_METHOD(Misc, ReachabilityTarget, 1)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, ExportImageToAlbum, 2)
-
-MC_EXEC_DEFINE_SET_METHOD(Misc, RedrawInterval, 1)
-MC_EXEC_DEFINE_SET_METHOD(Misc, AnimateAutorotation, 1)
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, DoNotBackupFile, 2)
-MC_EXEC_DEFINE_SET_METHOD(Misc, DoNotBackupFile, 2)
-MC_EXEC_DEFINE_GET_METHOD(Misc, FileDateProtection, 2)
-MC_EXEC_DEFINE_SET_METHOD(Misc, FileDateProtection, 2)
-
-MC_EXEC_DEFINE_GET_METHOD(Misc, BuildInfo, 2)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, LibUrlDownloadToFile, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, LibUrlSetSSLVerification, 1)
-
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, EnableRemoteControl, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Misc, DisableRemoteControl, 0)
-MC_EXEC_DEFINE_GET_METHOD(Misc, RemoteControlEnabled, 1)
-MC_EXEC_DEFINE_SET_METHOD(Misc, RemoteControlDisplayProperties, 1)
-
-// SN-2014-12-11: [[ Merge-6.7.2-rc-4 ]]
-MC_EXEC_DEFINE_GET_METHOD(Misc, IsVoiceOverRunning, 1)
-
-////////////////////////////////////////////////////////////////////////////////
-
 static MCExecEnumTypeElementInfo _kMCMiscStatusBarStyleElementInfo[] =
 {
     { "default", kMCMiscStatusBarStyleDefault, false},
@@ -113,57 +57,19 @@ static MCExecEnumTypeInfo _kMCMiscStatusBarStyleTypeInfo =
 
 MCExecEnumTypeInfo* kMCMiscStatusBarStyleTypeInfo = &_kMCMiscStatusBarStyleTypeInfo;
 
-static MCExecEnumTypeElementInfo _kMCMiscKeyboardTypeElementInfo[] =
-{
-    { "default", kMCMiscKeyboardTypeDefault, false},
-    { "alphabet", kMCMiscKeyboardTypeAlphabet, false},
-    { "numeric", kMCMiscKeyboardTypeNumeric, false},
-    { "decimal", kMCMiscKeyboardTypeDecimal, false},
-    { "number", kMCMiscKeyboardTypeNumber, false},
-    { "phone", kMCMiscKeyboardTypePhone, false},
-    { "email", kMCMiscKeyboardTypeEmail, false},
-    { "url", kMCMiscKeyboardTypeUrl, false},
-    { "contact", kMCMiscKeyboardTypeContact, false}
-};
-
-static MCExecEnumTypeInfo _kMCMiscKeyboardTypeTypeInfo =
-{
-    "Misc.KeyboardType",
-    sizeof(_kMCMiscKeyboardTypeElementInfo) / sizeof(MCExecEnumTypeElementInfo),
-    _kMCMiscKeyboardTypeElementInfo
-};
-
-MCExecEnumTypeInfo* kMCMiscKeyboardTypeTypeInfo = &_kMCMiscKeyboardTypeTypeInfo;
-
-static MCExecEnumTypeElementInfo _kMCMiscKeyboardReturnKeyElementInfo[] =
-{
-    { "default", kMCMiscKeyboardReturnKeyDefault, false},
-    { "go", kMCMiscKeyboardReturnKeyGo, false},
-    { "google", kMCMiscKeyboardReturnKeyGoogle, false},
-    { "join", kMCMiscKeyboardReturnKeyJoin, false},
-    { "next", kMCMiscKeyboardReturnKeyNext, false},
-    { "route", kMCMiscKeyboardReturnKeyRoute, false},
-    { "search", kMCMiscKeyboardReturnKeySearch, false},
-    { "send", kMCMiscKeyboardReturnKeySend, false},
-    { "yahoo", kMCMiscKeyboardReturnKeyYahoo, false},
-    { "done", kMCMiscKeyboardReturnKeyDone, false},
-    { "emergency call", kMCMiscKeyboardReturnKeyEmergencyCall, false}
-};
-
-static MCExecEnumTypeInfo _kMCMiscKeyboardReturnKeyTypeInfo =
-{
-    "Misc.KeyboardReturnKey",
-    sizeof(_kMCMiscKeyboardReturnKeyElementInfo) / sizeof(MCExecEnumTypeElementInfo),
-    _kMCMiscKeyboardReturnKeyElementInfo
-};
-
-MCExecEnumTypeInfo* kMCMiscKeyboardReturnKeyTypeInfo = &_kMCMiscKeyboardReturnKeyTypeInfo;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void MCMiscGetDeviceToken(MCExecContext& ctxt, MCStringRef& r_token)
 {
     if(MCSystemGetDeviceToken(r_token))
+        return;
+    
+    ctxt.Throw();
+}
+
+void MCMiscGetTrackingAuthorizationStatus(MCExecContext& ctxt, MCStringRef& r_status)
+{
+    if(MCSystemGetTrackingAuthorizationStatus(r_status))
         return;
     
     ctxt.Throw();
@@ -206,6 +112,14 @@ void MCMiscExecVibrate(MCExecContext& ctxt, int32_t* p_number_of_times)
         t_number_of_times = *p_number_of_times;
     
     if (MCSystemVibrate(t_number_of_times))
+        return;
+    
+    ctxt.Throw();
+}
+
+void MCMiscGetDeviceModel(MCExecContext& ctxt, MCStringRef& r_model)
+{
+    if(MCSystemGetDeviceModel(r_model))
         return;
     
     ctxt.Throw();
@@ -280,8 +194,26 @@ void MCMiscSetKeyboardReturnKey(MCExecContext& ctxt, intenum_t p_keyboard_return
 {
     if (MCSystemSetKeyboardReturnKey(p_keyboard_return_key))
         return;
+
+    ctxt.Throw();
+}
+
+static intenum_t s_current_keyboard_display = 0;
+
+void MCMiscExecSetKeyboardDisplay(MCExecContext& ctxt, intenum_t p_mode)
+{
+    if (MCSystemSetKeyboardDisplay(p_mode))
+    {
+        s_current_keyboard_display = p_mode;
+        return;
+    }
     
     ctxt.Throw();
+}
+
+void MCMiscExecGetKeyboardDisplay(MCExecContext& ctxt, intenum_t& r_mode)
+{
+    r_mode = s_current_keyboard_display;
 }
 
 void MCMiscGetPreferredLanguages(MCExecContext& ctxt, MCStringRef& r_languages)
@@ -536,6 +468,31 @@ void MCMiscGetDoNotBackupFile(MCExecContext& ctxt, MCStringRef p_path, bool& r_n
     
     ctxt.Throw();
 }
+
+void MCMiscExecRequestPermission(MCExecContext& ctxt, MCStringRef p_permission, bool& r_granted)
+{
+    if (MCSystemRequestPermission(p_permission, r_granted))
+        return;
+    
+    ctxt.Throw();
+}
+
+void MCMiscExecPermissionExists(MCExecContext& ctxt, MCStringRef p_permission, bool& r_exists)
+{
+    if (MCSystemPermissionExists(p_permission, r_exists))
+        return;
+    
+    ctxt.Throw();
+}
+
+void MCMiscExecHasPermission(MCExecContext& ctxt, MCStringRef p_permission, bool& r_permission_granted)
+{
+    if (MCSystemHasPermission(p_permission, r_permission_granted))
+        return;
+    
+    ctxt.Throw();
+}
+
 
 void MCMiscSetDoNotBackupFile(MCExecContext& ctxt, MCStringRef p_path, bool p_no_backup)
 {

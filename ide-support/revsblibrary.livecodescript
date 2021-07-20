@@ -4,7 +4,7 @@
 #?author
 # Marcus van Houdt
 
-on revLoadLibrary
+on extensionInitialize
    if the target is me then
       insert the script of me into back
       
@@ -12,13 +12,13 @@ on revLoadLibrary
       __InitialiseInclusionDependencies
       __InitialiseBuiltInInclusions
    end if
-end revLoadLibrary
+end extensionInitialize
 
-on revUnloadLibrary
+on extensionFinalize
    if the target is me then
       remove the script of me from back
    end if
-end revUnloadLibrary
+end extensionFinalize
 
 local sScriptLibraries
 
@@ -55,14 +55,14 @@ on revSBCopyFolder pSource, pTarget, pCallback, pCallbackTarget
 end revSBCopyFolder
 
 # Slightly unfortunate naming, perhaps, but what do I call it folderToFolder?!
-on revSBCopyFolderToDestination pSourceFolder, pDestinationFolder, pCallback, pCallbackTarget
+on revSBCopyFolderToDestination pSourceFolder, pDestinationFolder, pCallback, pCallbackTarget, pSettings
    if there is no folder pDestinationFolder then
       return "destination folder not found"
    end if
    set the itemDelimiter to "/"
    local tTargetFolder
    put pDestinationFolder & "/" & item -1 of pSourceFolder into tTargetFolder
-   __revSBCopyFolder pSourceFolder, tTargetFolder, pCallback, pCallbackTarget
+   __revSBCopyFolder pSourceFolder, tTargetFolder, pCallback, pCallbackTarget, pSettings
    return the result
 end revSBCopyFolderToDestination
 
@@ -212,7 +212,7 @@ end revSBWriteFile
 # - bsd symlinks (TO DO)
 #?author
 # Marcus van Houdt
-private command __revSBCopyFolder pSource, pTarget, pCallback, pCallbackTarget
+private command __revSBCopyFolder pSource, pTarget, pCallback, pCallbackTarget, pSettings
    local tResourceList
    local tResult
    
@@ -249,12 +249,16 @@ private command __revSBCopyFolder pSource, pTarget, pCallback, pCallbackTarget
          add 1 to tNumberCopied
          if char -1 of tResource is "/" then
             -- create the folder, stat the source
-            create folder (pTarget & "/" & char 1 to -2 of tResource)
-            if the result is not empty then
-               put "cannot create subfolder ", the result , tResource into tResult
-               exit repeat
+            local tSubFolder
+            put pTarget & "/" & char 1 to -2 of tResource into tSubFolder
+            if there is not a folder tSubFolder then
+               create folder tSubFolder
+               if the result is not empty then
+                  put "cannot create subfolder ", the result , tResource into tResult
+                  exit repeat
+               end if
             end if
-            if the platform is "macos" then -- stat it and set some flags
+            if the platform is "macos" or the platform is "Linux" then -- stat it and set some flags
                local tUser, tGroup
                set the itemDelimiter to "/"
                set the defaultFolder to pSource & "/" & item 1 to -2 of tResource
@@ -271,7 +275,7 @@ private command __revSBCopyFolder pSource, pTarget, pCallback, pCallbackTarget
          else if tResource is not empty then
             local tFileCallback
             put pCallback && tNumberCopied, tTotalNumber & comma into tFileCallback
-            __revSBCopyFile pSource & "/" & tResource, pTarget & "/" & tResource, tFileCallback, pCallbackTarget
+            __revSBCopyFile pSource & "/" & tResource, pTarget & "/" & tResource, tFileCallback, pCallbackTarget, pSettings
             if the result is not empty then
                put the result into tResult
                exit repeat
@@ -293,6 +297,10 @@ private command __revSBCopyFolder pSource, pTarget, pCallback, pCallbackTarget
    
    set the defaultFolder to tOldFolder
    
+   if tResult is not empty then
+      revStandaloneAddWarning tResult & ":" && quote & pSource & quote
+   end if
+   
    return tResult
 end __revSBCopyFolder
 
@@ -301,13 +309,16 @@ end __revSBCopyFolder
 # Sends a callback with the number of bytes currently copied and the number left to copy..
 #?author
 # Marcus van Houdt
-private command __revSBCopyFile pSourceFile, pTargetFile, pCallback, pCallbackTarget
+private command __revSBCopyFile pSourceFile, pTargetFile, pCallback, pCallbackTarget, pSettings
    -- Stat the source file
    local tOldFolder, tSize, tPermissions, tUser, tGroup, tFileType
    local tResult
    
+   local tSourceFileIsLink
    if tResult is empty then
-      if there is no file pSourceFile then
+      if __readlink(pSourceFile) is not empty then
+         put true into tSourceFileIsLink
+      else if there is no file pSourceFile then
          put "cannot find source file" into tResult
       end if
    end if
@@ -344,51 +355,63 @@ private command __revSBCopyFile pSourceFile, pTargetFile, pCallback, pCallbackTa
       end if
    end if
    
-   if tResult is empty then
-      open file pTargetFile for binary write
-      if the result is not empty then
-         put "cannot create target file" into tResult
-      end if
-   end if
-   
-   if tResult is empty then
-      open file pSourceFile for binary read
-      if the result is not empty then
-         put "cannot read from source file", the result into tResult
-      end if
-   end if
-   
-   local tAmountCopied
-   if tResult is empty then
-      if pCallbackTarget is not empty and there is a pCallbackTarget then
-         send pCallback && 0, tSize to pCallbackTarget
-      end if
-      repeat forever
-         read from file pSourceFile for 1048576
-         if the result is not empty and the result is not "eof" then
-            put "cannot read from source file", the result into tResult
-            exit repeat
+   if tSourceFileIsLink then
+      if tResult is empty then
+         # __readlink only works for MacOS and Linux so no need for a switch here
+         get shell("cp -a" && quote & pSourceFile & quote && \
+               quote & pTargetfile & quote)
+         if it is not empty then
+            put "cannot copy symbolic link" into tResult
          end if
-         if it is empty then
-            exit repeat
-         end if
-         write it to file pTargetFile
+         # Copying a symbolic link takes no time, so do not send a callback.
+      end if
+   else # regular file
+      if tResult is empty then
+         open file pTargetFile for binary write
          if the result is not empty then
-            put "cannot write to target file" into tResult
-            exit repeat
+            put "cannot create target file" into tResult
          end if
-         add the number of chars of it to tAmountCopied
+      end if
+      
+      if tResult is empty then
+         open file pSourceFile for binary read
+         if the result is not empty then
+            put "cannot read from source file", the result into tResult
+         end if
+      end if
+      
+      local tAmountCopied
+      if tResult is empty then
          if pCallbackTarget is not empty and there is a pCallbackTarget then
-            send pCallback && tAmountCopied, tSize to pCallbackTarget
+            send pCallback && 0, tSize to pCallbackTarget
          end if
-      end repeat
-   end if
-   
-   if pTargetFile is among the lines of the openFiles then
-      close file pTargetFile
-   end if
-   if pSourceFile is among the lines of the openFiles then
-      close file pSourceFile
+         repeat forever
+            read from file pSourceFile for 1048576
+            if the result is not empty and the result is not "eof" then
+               put "cannot read from source file", the result into tResult
+               exit repeat
+            end if
+            if it is empty then
+               exit repeat
+            end if
+            write it to file pTargetFile
+            if the result is not empty then
+               put "cannot write to target file" into tResult
+               exit repeat
+            end if
+            add the number of chars of it to tAmountCopied
+            if pCallbackTarget is not empty and there is a pCallbackTarget then
+               send pCallback && tAmountCopied, tSize to pCallbackTarget
+            end if
+         end repeat
+      end if
+      
+      if pTargetFile is among the lines of the openFiles then
+         close file pTargetFile
+      end if
+      if pSourceFile is among the lines of the openFiles then
+         close file pSourceFile
+      end if
    end if
    
    # OK-2007-11-30 : Modified to work for Linux too
@@ -401,6 +424,12 @@ private command __revSBCopyFile pSourceFile, pTargetFile, pCallback, pCallbackTa
       end if
    end if
    
+   -- Remove unneeded slices from the MacOS externals
+   set the itemDel to slash
+   if pSettings["externals"] contains item -1 of pTargetFile then
+      revSBRemoveUnneededSlicesFromMacCode pTargetFile, pSettings
+   end if
+   
    if tOldFolder is not empty then
       set the defaultFolder to tOldFolder
    end if
@@ -408,8 +437,14 @@ private command __revSBCopyFile pSourceFile, pTargetFile, pCallback, pCallbackTa
       set the fileType to tOldFileType
    end if
    
+   /* WORKAROUND: BUG 22255 
+    *
+    * Multiple shell calls in a tight loop can cause a deadlock on macOS */
+   wait 0 with messages
+   
    return tResult
 end __revSBCopyFile
+
 
 #?semantics
 # Creates a folder and all parents as required.
@@ -419,6 +454,25 @@ on revSBEnsureFolder pFolder
    __revSBEnsureFolder pFolder
    return the result
 end revSBEnsureFolder
+
+command revSBRemoveUnneededSlicesFromMacCode pTargetFile, pSettings
+   if the platform is "macos" and pSettings is not empty then
+      local tRemove
+      if pSettings["MacOSX x86-64"] is true and pSettings["MacOSX x86-32"] is not true then
+         put "i386" into tRemove
+      else if pSettings["MacOSX x86-32"] is true and pSettings["MacOSX x86-64"] is not true then
+         put "x86_64" into tRemove
+      end if
+      
+      if tRemove is not empty then
+         replace " " with "\ " in pTargetFile
+         local tShell
+         put "lipo " & pTargetFile & " -remove " & tRemove & " -output " & pTargetFile into tShell
+         get shell(tShell)
+      end if
+   end if
+   
+end revSBRemoveUnneededSlicesFromMacCode
 
 private command __revSBEnsureFolder pFolder
    set the itemDel to "/"
@@ -660,7 +714,7 @@ function revFolderNameMakeLegal pName
 end revFolderNameMakeLegal
 
 // List of all desktop target platforms + architecture
-constant kDesktopTargets = "Windows,MacOSX x86-32,MacOSX x86-64,Linux,Linux x64,Linux armv6-hf"
+constant kDesktopTargets = "Windows,Windows x86-64,MacOSX x86-64,Linux,Linux x64,Linux armv6-hf"
 function revSBDesktopTargets
    return kDesktopTargets
 end revSBDesktopTargets
@@ -675,16 +729,18 @@ function revSBTargetToPlatform pTarget
       return "MacOSX"
    else if pTarget begins with "Linux" then
       return "Linux"
+   else if pTarget begins with "Windows" then
+      return "Windows"
    else
       return pTarget
    end if
 end revSBTargetToPlatform
 
 -- item 1 of the architectures should be the default architecture
-constant kWindowsArchitectures = "x86-32"
+constant kWindowsArchitectures = "x86-32,x86-64"
 constant kMacOSXArchitectures = "x86-32,x86-64"
 constant kLinuxArchitectures =  "x86-32,x86-64,armv6-hf"
-constant kAndroidArchitectures =  "armv6"
+constant kAndroidArchitectures =  "armv7,arm64,x86,x86_64"
 constant kiOSArchitectures =  "armv7,arm64"
 constant kEmscriptenArchitectures =  "js"
 
@@ -712,7 +768,7 @@ private function __ArchitectureSynonyms pArchitecture
       case "x86-32"
          return pArchitecture,"x86,i386"
       case "x86-64"
-         return pArchitecture,"x64"
+         return pArchitecture,"x64,x86_64"
    end switch
    
    return pArchitecture
@@ -965,9 +1021,14 @@ function revEngineCheck pEngine
          case "MacOSX PowerPC-32"
          case "MacOSX x86-32"
          case "MacOSX x86-64"
-            return there is a directory (tPath & "/Mac OS X/x86-32/Standalone.app")
+            return there is a directory (tPath & "/Mac OS X/x86-64/Standalone.app")
          case "Windows"
             if there is a file (tPath & "/Windows/x86-32/Standalone") then
+               return true
+            end if
+            break
+         case "Windows x86-64"
+            if there is a file (tPath & "/Windows/x86-64/Standalone") then
                return true
             end if
             break
@@ -1166,6 +1227,10 @@ end revSBExternalsMapping
 function revSBDatabaseDriversMapping
    return "mysql MySQL,odbc ODBC,postgresql PostgreSQL,sqlite SQLite,oracle Oracle"
 end revSBDatabaseDriversMapping
+
+function revSBFileIsFontFile pFile
+   return (pFile ends with ".ttf" or pFile ends with ".ttc" or pFile ends with ".otf")
+end revSBFileIsFontFile
 
 -- MW-2013-06-13: [[ CloneAndRun ]] If we aren't installed, then generate the externals
 --   list by hand.
@@ -1465,10 +1530,14 @@ function revSBLcextFileIsMobileExternal pFile, pPlatform
 end revSBLcextFileIsMobileExternal
 
 private function __FilterExternalsForMobile pList, pPlatform
-   filter pList with "*.lcext"
+   local tLcext
+   filter pList with "*.lcext" into tLcext
+   
+   local tLcextd
+   filter pList with "*.lcextd/" into tLcextd
    
    local tList, tError
-   repeat for each line tLine in pList
+   repeat for each line tLine in tLcext
       -- look inside the lcext zip to see if the platform is supported (in any architecture)
       if revSBLcextFileIsMobileExternal(tLine, pPlatform) then
          if tList is empty then
@@ -1478,6 +1547,18 @@ private function __FilterExternalsForMobile pList, pPlatform
          end if
       end if
    end repeat
+   
+   repeat for each line tLine in tLcextd
+      if there is a folder (tLine & pPlatform) then
+         delete the last char of tLine
+         if tList is empty then
+            put tLine into tList
+         else
+            put return & tLine after tList
+         end if
+      end if
+   end repeat
+   
    return tList
 end __FilterExternalsForMobile
 
@@ -1608,6 +1689,43 @@ function revSBAllMobilePlatforms
          kAndroidPlatform
 end revSBAllMobilePlatforms
 
+function revSBNormalizePlatforms pOS, pPlatforms
+   local tPlatformList
+   if pOS is empty then
+      if pPlatforms contains "mobile" then
+         put revSBAllMobilePlatforms() & comma after tPlatformList
+      end if
+      if pPlatforms contains "desktop" or pPlatforms contains "server" then
+         put revSBAllDesktopPlatforms() & comma after tPlatformList
+      end if
+   else
+      if pOS contains "mac" then
+         put kMacPlatform & comma after tPlatformList
+      end if
+      if pOS contains "win" then
+         put kWindowsPlatform & comma after tPlatformList
+      end if
+      if pOS contains "linux" then
+         put kLinuxPlatform & comma after tPlatformList
+      end if
+      if pOS contains "ios" then
+         put kiOSPlatform & comma after tPlatformList
+      end if
+      if pOS contains "android" then
+         put kAndroidPlatform & comma after tPlatformList
+      end if
+      if pOS contains "html5" then
+         put kEmscriptenPlatform & comma after tPlatformList
+      end if
+   end if
+   if tPlatformList is empty then
+      put revSBAllPlatforms() into tPlatformList
+   else
+      delete char -1 of tPlatformList
+   end if
+   return tPlatformList
+end revSBNormalizePlatforms
+
 private command addToList pElement, @xArray
    put pElement into xArray[the number of elements in xArray + 1]
 end addToList
@@ -1625,9 +1743,15 @@ private function revSBAvailableExtensions pType
    local tExtensions, tInclusions
    put revIDEExtensions(pType, "installed") into tExtensions
    repeat for each key tID in tExtensions
-      local tExtension
-      -- LCB extensions are available on all platforms
-      put revSBAllPlatforms() into tExtension["platforms"]
+      local tExtension, tOS, tPlatforms
+      put tExtensions[tID]["os"] into tOS
+      put tExtensions[tID]["platforms"] into tPlatforms
+      if tOS is empty and tPlatforms is empty then
+         -- LCB extensions are available on all platforms by default
+         put revSBAllPlatforms() into tExtension["platforms"]
+      else
+         put revSBNormalizePlatforms(tOS, tPlatforms) into tExtension["platforms"]
+      end if
       put pType into tExtension["type"]
       put tExtensions[tID]["title"] into tExtension["title"]
       put tID into tExtension["id"]
@@ -1684,7 +1808,7 @@ private function revSBAvailableResources
       put "resource" into tInclusion["type"]
       put revSBAllDesktopPlatforms() into tInclusion["platforms"]
       if tTitle is "PDF Printer" then
-         put comma & kiOSPlatform after tInclusion["platforms"]
+         put comma & kiOSPlatform & comma & kAndroidPlatform after tInclusion["platforms"]
       end if
       addToList tInclusion, tInclusions
    end repeat
@@ -1840,34 +1964,6 @@ command revSBUpdateInclusions pInclusions, pExclusions, pStackName
    end repeat
 end revSBUpdateInclusions
 
-command revSBInclusionIconFromType pType, pID, @rIconName, @rIconPath
-   switch pType
-      case "widget"
-         put revIDEExtensionProperty(pID, "svgIcon") into rIconPath
-         put "wrench" into rIconName
-         break
-      case "library"
-         put "book" into rIconName
-         break
-      case "external"
-         put "external link" into rIconName
-         break
-      case "inclusion"
-      case "resource"
-         put "puzzle piece" into rIconName
-         break
-      case "database driver"
-         put "database" into rIconName
-         break
-      case "script library"
-         put "file text alt" into rIconName
-         break
-      default
-         put "circle" into rIconName
-         break
-   end switch
-end revSBInclusionIconFromType
-
 function revSBInclusionToMobileKey pName, pType, pPlatform
    local tToInclude
    switch pName
@@ -1983,9 +2079,12 @@ private command __ResolveIncludedExternal pTarget, @xFiles, @rHasResources
    put tHasResources into rHasResources
 end __ResolveIncludedExternal
 
-command revSBResolveCopyFilesList pBaseFolder, pTarget, pFiles, @rFileData
+command revSBResolveCopyFilesList pBaseFolder, pTarget, pSettings, @rFileData
+   local tComputedFileData
+   put pSettings["files_computed"] into tComputedFileData
+   
    set the itemDelimiter to slash
-   repeat for each line tFile in pFiles
+   repeat for each line tFile in pSettings["files"]
       local tResolvedFile, tHasResources
       __ResolveIncludedExternal pTarget, tFile, tHasResources
       
@@ -2016,9 +2115,10 @@ command revSBResolveCopyFilesList pBaseFolder, pTarget, pFiles, @rFileData
          end if
          put tResolvedFile into tDataA["resolved"]
          
-         addToList tDataA, rFileData
+         addToList tDataA, tComputedFileData
       end repeat
    end repeat
+   put tComputedFileData into rFileData
 end revSBResolveCopyFilesList
 
 private command addToStringList pAppend, pValue, @xList
@@ -2043,26 +2143,149 @@ private command prependToStringList pValue, @xList
    addToStringList false, pValue, xList
 end prependToStringList
 
+private command __LoadStackOnStartup pStackName, @xAuxStackFiles, @xStartupScript, @xGeneratedStartupScript
+   appendToStringList the effective filename of stack pStackName, xAuxStackFiles
+   appendToStringList "revInternal__LoadLibrary" && quote & pStackName & quote, xStartupScript
+   
+   -- allow libraries to generate some additional startup script
+   dispatch "extensionStartupScript" to stack pStackName
+   if it is "handled" then
+      appendToStringList the result, xGeneratedStartupScript
+   end if
+end __LoadStackOnStartup
+
+private command __AddModuleSources pExtension, pInstallFolder, pTargetFolder, @xSettingsA
+   if not revEnvironmentEditionProperty("open_source_required") then
+      exit __AddModuleSources
+   end if
+   -- Include main source file, if present
+   local tSourceFileData, tSourceFile
+   put revIDEExtensionProperty(pExtension, "source_file") \
+         into tSourceFile
+   if there is a file tSourceFile then
+      put pInstallFolder & slash & tSourceFile into tSourceFileData["resolved"]
+      put pTargetFolder & slash & tSourceFile into tSourceFileData["name"]
+      addToList tSourceFileData, xSettingsA["files_computed"]
+   end if
+   
+   -- Include support source files in standalone, if present
+   local tSupportFiles
+   put revIDEExtensionProperty(pExtension, "support_files") \
+         into tSupportFiles
+   repeat for each line tLine in tSupportFiles
+      local tSupportFileData
+      put pInstallFolder & slash & tLine into tSupportFileData["resolved"]
+      put pTargetFolder & slash & tLine into tSupportFileData["name"]
+      addToList tSupportFileData, xSettingsA["files_computed"]
+   end repeat
+end __AddModuleSources
+
+command revSBUpdateSettingsForExtensions pTarget, @xSettingsA
+   local tLoadIndex, tDependencyOrder
+   put revIDEExtensionsOrderByDependency(xSettingsA["extensions"]) \
+         into tDependencyOrder
+   
+   repeat for each line tExtension in tDependencyOrder
+      add 1 to tLoadIndex
+      
+      local tTargetResourceFolder
+      put "extension" & tLoadIndex into tTargetResourceFolder
+      
+      local tExtensionData
+      put tExtension into tExtensionData["id"]
+      
+      local tInstallFolder
+      put revIDEExtensionProperty(tExtension, "install_path") \
+            into tInstallFolder
+      
+      __AddModuleSources tExtension, tInstallFolder, tTargetResourceFolder, \
+            xSettingsA
+      
+      local tResourcesFolder
+      put revIDEExtensionProperty(tExtension, "install_path") & \
+            slash & "resources" into tResourcesFolder
+      if there is a folder tResourcesFolder then
+         local tContents
+         put __EnumerateFolder(tResourcesFolder, "", true) into tContents
+         repeat for each line tLine in tContents
+            local tFileData
+            put tResourcesFolder & slash & tLine into tFileData["resolved"]
+
+            -- __EnumerateFolder list folders and we only want to add files
+            if there is a folder tFileData["resolved"] then
+               next repeat
+            end if
+
+            put tTargetResourceFolder & slash & tLine into tFileData["name"]
+            addToList tFileData, xSettingsA["files_computed"]
+         end repeat
+         
+         # Add resource mappings to the deploy params
+         local tPlatform
+         put revSBTargetToPlatform(pTarget) into tPlatform
+         
+         revSBAddLibraryMapping tPlatform, tExtension & slash & "resources", \
+               tTargetResourceFolder, xSettingsA
+      end if
+      put tExtensionData into xSettingsA["extensions_computed"][tLoadIndex]
+   end repeat
+end revSBUpdateSettingsForExtensions
+
+constant kMappingSeparator = ":"
+command revSBAddLibraryMapping pPlatform, pName, pLocation, @xSettingsA
+   local tMapping
+   put pName & kMappingSeparator & "./" & pLocation into tMapping
+   appendToStringList tMapping, xSettingsA[pPlatform & ",library"]
+end revSBAddLibraryMapping
+
 command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, @xDeployParams
-   local tModules, tAuxiliaryStackfiles, tStartupScript, tGeneratedStartupScript
+   local tModules, tAuxiliaryStackfiles, tStartupScript
+   local tGeneratedStartupScript, tExternals, tLibraryMapping
+   
+   # AL-2015-02-04: [[ Standalone Resources ]] Add (universal) external names to the deploy parameters
+   put pStandaloneSettings["externals"] into tExternals
+   
+   revSBAddInclusion "Common", "scriptLibraries", pStandaloneSettings
+   
+   if pStandaloneSettings["includeProfiles"] is not empty then 
+      revSBAddInclusion "Profiles", "scriptLibraries", pStandaloneSettings
+   end if
    
    -- auxiliary_stackfiles key might not be empty
    put pStandaloneSettings["auxiliary_stackfiles"] into tAuxiliaryStackfiles
    
-   appendToStringList "revInternal_SetJAVA_HOME", tStartupScript
+   if pTarget is not "emscripten" then
+      appendToStringList "revInternal_SetJAVA_HOME", tStartupScript
+   end if
+   
+   if pStandaloneSettings["jarFiles"] is not empty then
+      appendToStringList "revInternal_SetCLASSPATH", tStartupScript
+   end if
    
    # AL-2015-04-12: [[ Standalone Extensions ]] Add chosen extensions to the standalone inclusions
    # AL-2015-07-21: [[ Standalone Extensions ]] Automatically include dependecies, and load in order
-   repeat for each line tExtension in revIDEExtensionsOrderByDependency(pStandaloneSettings["extensions"])
-      local tExtensionFile
-      put revIDEExtensionModuleFile(tExtension) into tExtensionFile
-      appendToStringList tExtensionFile, tModules
+   local tValidExtensionsA
+   repeat for each element tExtensionDataA in pStandaloneSettings["extensions_computed"]
+      local tExtensionFileDataA
+      put revIDEExtensionFileData(tExtensionDataA["id"]) into tExtensionFileDataA
+      if tExtensionFileDataA["type"] is "lcb" then
+         appendToStringList tExtensionFileDataA["file"], tModules
+      else if tExtensionFileDataA["type"] is "lcs" then
+         __LoadStackOnStartup tExtensionDataA["id"], tAuxiliaryStackFiles, tStartupScript, tGeneratedStartupScript
+      else
+         revStandaloneAddWarning "Extension" && tExtensionDataA["id"] && "not found"
+      end if
    end repeat
+   
+   # Add resource mappings to the deploy params
+   local tPlatform
+   put revSBTargetToPlatform(pTarget) into tPlatform
+   put pStandaloneSettings[tPlatform & ",library"] into tLibraryMapping
    
    local tLibraryStack, tIncludeDataGrid
    repeat for each line tLibrary in pStandaloneSettings["scriptLibraries"]
       -- Special-case data grid at the moment, as it is not initialised 
-      -- using revLoadLibrary
+      -- using extensionInitialize
       if tLibrary is "DataGrid" then
          put true into tIncludeDataGrid
          next repeat
@@ -2070,14 +2293,7 @@ command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, @xDeployPa
       # AL-2015-03-05: [[ Bug 14813 ]] Transform script library display name to stack name at deploy time
       put revSBStackNameFromScriptLibraryName(tLibrary) into tLibraryStack
       if there is a stack tLibraryStack then
-         appendToStringList the effective filename of stack tLibraryStack, tAuxiliaryStackfiles
-         appendToStringList "revInternal__LoadLibrary" && quote & tLibraryStack & quote, tStartupScript
-         
-         -- allow libraries to generate some additional startup script
-         dispatch "revLibraryStartupScript" to stack tLibraryStack
-         if it is "handled" then
-            appendToStringList the result, tGeneratedStartupScript
-         end if
+         __LoadStackOnStartup tLibraryStack, tAuxiliaryStackFiles, tStartupScript, tGeneratedStartupScript
       end if
    end repeat
    
@@ -2096,14 +2312,7 @@ command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, @xDeployPa
          -- only include currently loaded libraries
          repeat for each key tLibrary in tLoadedLibraries
             if there is a stack tLibrary and the filename of stack tLibrary begins with tExtPath then
-               appendToStringList the effective filename of stack tLibrary, tAuxiliaryStackfiles
-               appendToStringList "revInternal__LoadLibrary" && quote & tLibrary & quote, tStartupScript
-               
-               -- allow libraries to generate some additional startup script
-               dispatch "revLibraryStartupScript" to stack tLibrary
-               if it is "handled" then
-                  appendToStringList the result, tGeneratedStartupScript
-               end if
+               __LoadStackOnStartup tLibrary, tAuxiliaryStackFiles, tStartupScript, tGeneratedStartupScript
             end if
          end repeat
       end if
@@ -2123,19 +2332,25 @@ command revSBUpdateDeployParams pStack, pTarget, pStandaloneSettings, @xDeployPa
    
    -- If the datagrid is used, then include the library as an aux stack
    if tIncludeDataGrid or "data grid templates" is in the subStacks of stack pStack and there is a stack "revDataGridLibrary" then
-      local tStackFiles
-      put the stackFiles of stack "revDataGridLibrary" into tStackFiles
-      split tStackFiles by return and comma
-      repeat for each key tStack in tStackFiles
-         appendToStringList the effective filename of  stack tStack, tAuxiliaryStackFiles
-      end repeat
-      appendToStringList the effective filename of stack "revDataGridLibrary", tAuxiliaryStackFiles
+      revSBAddDataGridToAuxiliaryStackFiles tAuxiliaryStackFiles
    end if
    
    put tAuxiliaryStackFiles into xDeployParams["auxiliary_stackfiles"]
    put tStartupScript into xDeployParams["startup_script"]
    put tModules into xDeployParams["modules"]
+   put tExternals into xDeployParams["externals"]
+   put tLibraryMapping into xDeployParams["library"]
 end revSBUpdateDeployParams
+
+command revSBAddDataGridToAuxiliaryStackFiles @xAuxiliaryStackFiles
+   local tStackFiles
+   put the stackFiles of stack "revDataGridLibrary" into tStackFiles
+   split tStackFiles by return and comma
+   repeat for each key tStack in tStackFiles
+      appendToStringList the effective filename of stack tStack, xAuxiliaryStackFiles
+   end repeat
+   appendToStringList the effective filename of stack "revDataGridLibrary", xAuxiliaryStackFiles
+end revSBAddDataGridToAuxiliaryStackFiles
 
 local sBuiltInInclusions
 
@@ -2258,20 +2473,20 @@ private command __InitialiseInclusionDependencies
    revSBAddDependencyForInclusion "scriptLibraries", "XMLRPC", "scriptLibraries", "XML"
 end __InitialiseInclusionDependencies
 
-command revSBAddDependencyForInclusion pInclusionType, pInclusion, pDependenyType, pDependeny, pPlatforms
+command revSBAddDependencyForInclusion pInclusionType, pInclusion, pDependencyType, pDependency, pPlatforms
    if pPlatforms is empty then
       put revSBAllPlatforms() into pPlatforms
    end if
    repeat for each item tPlatform in pPlatforms
-      put true into sDependencies[pInclusionType][pInclusion][pDependenyType][pDependeny][tPlatform]
+      put true into sDependencies[pInclusionType][pInclusion][pDependencyType][pDependency][tPlatform]
    end repeat
 end revSBAddDependencyForInclusion
 
-command revSBRemoveDependencyForInclusion pInclusion, pInclusionType, pDependeny, pDependenyType
-   delete variable sDependencies[pInclusionType][pInclusion][pDependenyType][pDependeny]
+command revSBRemoveDependencyForInclusion pInclusionType, pInclusion, pDependencyType, pDependency
+   delete variable sDependencies[pInclusionType][pInclusion][pDependencyType][pDependency]
 end revSBRemoveDependencyForInclusion
 
-command revSBUpdateForDependencies pPlatform, @xSettings
+command revSBUpdateForDependencies pPlatform, pArchs, pSDK, @xSettings
    local tDependencies
    repeat for each key tDependentKey in sDependencies
       repeat for each key tDependent in sDependencies[tDependentKey]
@@ -2290,20 +2505,208 @@ command revSBUpdateForDependencies pPlatform, @xSettings
    
    -- Update the settings with any additional extension dependencies
    repeat for each line tExtension in xSettings["extensions"]
-      local tPermissions, tFeatures
-      put revIDEExtensionProperty(tExtension, "android.permissions") into tPermissions
-      put revIDEExtensionProperty(tExtension, "android.features") into tFeatures
-      repeat for each item tPermission in tPermissions
+      local tAndroidMetadataA
+      put revIDEExtensionProperty(tExtension, "android") into tAndroidMetadataA
+      repeat for each item tPermission in tAndroidMetadataA["permissions"]
          put true into xSettings["android,application permissions"][tPermission]
       end repeat
-      repeat for each item tFeature in tFeatures
-         local tIsRequired, tRequiredMetadata
-         put "android." & tFeature & ".required" into tRequiredMetadata
-         put revIDEExtensionProperty(tExtension, tRequiredMetadata) into tIsRequired
-         put tIsRequired into xSettings["android,device capabilities"][tFeature]
+      repeat for each item tFeature in tAndroidMetadataA["features"]
+         local tRequiredMetadata
+         put tFeature & ".required" into tRequiredMetadata
+         split tRequiredMetadata by "."
+         put tAndroidMetadataA[tRequiredMetadata] into \
+               xSettings["android,device capabilities"][tFeature]
       end repeat
+      
+      local tPlayVersion
+      put tAndroidMetadataA["play"]["version"]into tPlayVersion
+      repeat for each item tPlayDep in tAndroidMetadataA["play"]["deps"]
+         appendToStringList tPlayDep & "-" & tPlayVersion, xSettings["android,play dependencies"]
+      end repeat
+      
+      revSBUpdateExtensionCodeInclusions tExtension, pPlatform, pArchs, pSDK, xSettings
+      revSBUpdatePerExtensionSettings tExtension, pPlatform, xSettings
    end repeat
 end revSBUpdateForDependencies
+
+-- Merge any settings under cRevStandaloneSettings[<ext id>]
+command revSBUpdatePerExtensionSettings pExtension, pPlatform, @xSettings
+   repeat for each key tKey in xSettings[pExtension]
+      if xSettings[tKey] is not empty then
+         put return & xSettings[pExtension][tKey] after xSettings[tKey]
+      else
+         put xSettings[pExtension][tKey] into xSettings[tKey]
+      end if
+   end repeat
+end revSBUpdatePerExtensionSettings
+
+command revSBEnsurePerExtensionSettings pPlatform, pSettings
+   local tMissingA
+   repeat for each line tExtension in pSettings["extensions"]
+      local tInfoA, tRequiredForPlatform
+      put revIDEExtensionStandaloneSettingsInfo(tExtension) into tInfoA
+      repeat for each key tKey in tInfoA
+         set the itemdelimiter to ","
+         put (pPlatform is among the items of tInfoA[tKey]["required"]) \
+               into tRequiredForPlatform
+         
+         if not tRequiredForPlatform then
+            next repeat
+         end if
+         
+         set the itemdelimiter to ";"
+         repeat for each item tItem in tKey
+            if pSettings[tExtension][tItem] is empty then
+               addToList tInfoA[tKey]["label"], tMissingA[tExtension]
+               exit repeat
+            end if
+         end repeat
+      end repeat
+   end repeat
+   
+   local tMissing
+   repeat for each key tKey in tMissingA
+      appendToStringList "Missing standalone settings for" && tKey & ":", tMissing
+      repeat for each element tElement in tMissingA[tKey]
+         appendToStringList tab & tElement, tMissing
+      end repeat
+   end repeat
+   
+   if tMissing is not empty then
+      appendToStringList "Please set on standalone inclusions pane", tMissing
+   end if
+   return tMissing
+end revSBEnsurePerExtensionSettings
+
+command revSBUpdateExtensionCodeInclusions pExtension, pPlatform, pArchs, pSDK, @xSettings
+   local tExtCodeFolder, tCodeFolders
+   put revIDEExtensionProperty(pExtension, "install_path") & \
+         slash & "code" into tExtCodeFolder
+   
+   put folders(tExtCodeFolder) into tCodeFolders
+   filter tCodeFolders without ".*"
+   
+   repeat for each line tCodeFolder in tCodeFolders
+      __UpdateSettingsFromCodeFolder tExtCodeFolder, tCodeFolder, pPlatform, pArchs, pSDK, xSettings
+   end repeat
+   
+   if not revEnvironmentIsInstalled() and \
+         tExtCodeFolder begins with revEnvironmentExtensionsPath() then
+      -- include builds for other platforms
+      local tPlatforms
+      if pPlatform is "android" then
+         repeat for each item tItem in pArchs
+            appendToStringList pPlatform && tItem, tPlatforms
+         end repeat
+      else
+         put pPlatform into tPlatforms
+      end if
+      
+      repeat for each line tPlatform in tPlatforms
+         local tNonNativeExtCodeFolder
+         put revEnvironmentNonNativeBinariesPath(tPlatform, pSDK) & \
+               "/packaged_extensions/" & pExtension & "/code" into tNonNativeExtCodeFolder
+         if tNonNativeExtCodeFolder is not tExtCodeFolder and \
+               there is a folder tNonNativeExtCodeFolder then
+            put folders(tNonNativeExtCodeFolder) into tCodeFolders
+            filter tCodeFolders without ".*"
+            
+            repeat for each line tCodeFolder in tCodeFolders
+               __UpdateSettingsFromCodeFolder tNonNativeExtCodeFolder, tCodeFolder, pPlatform, pArchs, pSDK, xSettings
+            end repeat
+         end if
+      end repeat
+   end if
+end revSBUpdateExtensionCodeInclusions
+
+private command __UpdateSettingsFromCodeFolder pPath, pCodeFolderName, pPlatform, pArchs, pSDK, @xSettings
+   local tFiles, tFolderPath
+   put pPath & slash & pCodeFolderName into tFolderPath
+   put files(tFolderPath) into tFiles
+   filter tFiles without ".*"
+   switch pCodeFolderName
+      case "jvm-android"
+         local tAndroidJarFiles, tAndroidAarFiles
+         put tFiles into tAndroidJarFiles
+         filter tAndroidJarFiles with "*.jar"
+         put tFiles into tAndroidAarFiles
+         filter tAndroidAarFiles with "*.aar"
+         if pPlatform is "android" then
+            repeat for each line tLine in tAndroidJarFiles
+               appendToStringList tFolderPath & slash & tLine, xSettings["jarFiles"]
+            end repeat
+            repeat for each line tLine in tAndroidAarFiles
+               appendToStringList tFolderPath & slash & tLine, xSettings["aarFiles"]
+            end repeat
+            if there is a file (tFolderPath & slash & "AndroidManifest.xml") then
+               appendToStringList tFolderPath & slash & "AndroidManifest.xml", xSettings["androidManifests"]
+            end if
+         end if
+         break
+      case "jvm"
+         repeat for each line tLine in tFiles
+            appendToStringList tFolderPath & slash & tLine, xSettings["jarFiles"]
+         end repeat
+         break
+      default
+         replace comma with return in pArchs
+         replace "-" with "_" in pArchs
+         replace "i386" with "x86" in pArchs
+         replace "x64" with "x86_64" in pArchs
+         
+         if pPlatform is "MacOSX" then
+            put "mac" into pPlatform
+         else if pPlatform is "Windows" then
+            put "win32" into pPlatform
+         end if
+         
+         if pPlatform is among the items of "mac,ios" then
+            if the last char of pArchs is not return then
+               put return after pArchs
+            end if
+            put "universal" after pArchs
+         end if
+         
+         -- on iOS we first look for an exact SDK match for device and simulator
+         -- then fallback to a universal binary covering both device and simulator
+         -- then fallback to a universal binary compiled against an unknown SDK
+         set the itemDelimiter to "-"
+         if pPlatform is "ios" and item 3 of pCodeFolderName is not pSDK then
+            repeat for each word  tOS in "iphoneos iphonesimulator"
+               if pSDK begins with tOS then
+                  delete char 1 to length(tOS) of pSDK
+               end if
+            end repeat
+            if item 3 of pCodeFolderName is not empty and  \
+                  item 3 of pCodeFolderName is not "sdk" & pSDK then
+               break
+            end if
+         end if
+         
+         if item 2 of pCodeFolderName is pPlatform and \
+               item 1 of pCodeFolderName is among the lines of pArchs then
+            repeat for each line tLine in tFiles
+               if tLine is empty then
+                  next repeat
+               end if
+               appendToStringList tFolderPath & slash & tLine, xSettings["extension_code_resources"]
+            end repeat
+            
+            if pPlatform is among the words of "mac ios" then
+               local tFolders
+               put folders(tFolderPath) into tFolders
+               filter tFolders without ".*"
+               repeat for each line tLine in tFolders
+                  if tLine is empty then
+                     next repeat
+                  end if
+                  appendToStringList tFolderPath & slash & tLine, xSettings["extension_code_resources"]
+               end repeat
+            end if
+         end if
+         break
+   end switch
+end __UpdateSettingsFromCodeFolder
 
 command revSBSanitiseExternalsList pTarget, @xExternals
    local tAvailableExternals, tFixedExternals, tValidExternals, tPlatform
@@ -2452,41 +2855,50 @@ private command revSmartChecking pStackFilesList, @xSettings
       
    end if
    
-   local tWidgetKinds
-   put xSettings["extensions"] into tWidgetKinds
-   split tWidgetKinds by return as set
+   local tExtensionIDs
+   put xSettings["extensions"] into tExtensionIDs
+   split tExtensionIDs by return as set
    
    repeat for each line tStackFile in pStackFilesList
       put the short name of stack tStackFile & return & the substacks of stack tStackFile into tStacksList
       repeat for each line tStack in tStacksList
          if tNewSettings["inclusions"] is "search" then
             # OK-2009-09-07 : Value of password and passkey properties changed, the above test no longer works
-            if the password of stack tStack then
+            if __ScriptIsLocked(tStack) then
                revStandaloneAddWarning "Could not auto-detect inclusions or security categories because stack is password protected"
                exit revSmartChecking
             end if
          end if
          
-         revCheckObject the long name of stack tStack, tUserLibs, tNewSettings, tWidgetKinds
+         revCheckObject the long name of stack tStack, tUserLibs, tNewSettings, tExtensionIDs
          put the number of cards of stack tStack into tCardNum
          repeat with tCard=1 to tCardNum
-            revCheckObject the long id of cd tCard of stack tStack, tUserLibs, tNewSettings, tWidgetKinds
+            revCheckObject the long id of cd tCard of stack tStack, tUserLibs, tNewSettings, tExtensionIDs
             put the number of controls of cd tCard of stack tStack into tControlNum
             repeat with tControl = 1 to tControlNum
-               revCheckObject the long id of control tControl of cd tCard of stack tStack, tUserLibs, tNewSettings, tWidgetKinds
+               revCheckObject the long id of control tControl of cd tCard of stack tStack, tUserLibs, tNewSettings, tExtensionIDs
             end repeat
          end repeat
          repeat for each line tBg in the backgroundIDs of stack tStack
-            revCheckObject the long id of bg id tBg of stack tStack, tUserLibs, tNewSettings, tWidgetKinds
+            revCheckObject the long id of bg id tBg of stack tStack, tUserLibs, tNewSettings, tExtensionIDs
          end repeat
       end repeat
    end repeat
    
-   put the keys of tWidgetKinds into tNewSettings["extensions"]
+   put the keys of tExtensionIDs into tNewSettings["extensions"]
    -- Update the output settings
    put tNewSettings into xSettings
    unlock messages
 end revSmartChecking
+
+private function __ScriptIsLocked pStack
+   try
+      get the script of stack pStack
+   catch tError
+      return true
+   end try
+   return false
+end __ScriptIsLocked
 
 private command revCheckObject pObject,pUserLibraries, @xSettings, @xWidgetKinds
    
@@ -2638,10 +3050,13 @@ function revSBEnginePath pPlatform
             // SN-2015-07-09: [[ StandaloneDeployment ]] Gypified Standalone-<edition>.app building does not
             //  allow to create broken applications, so that the executable file in it bears the edition.
             put the upper of char 1 of tEdition into char 1 of tEdition
-            return tRuntimePath & "/Mac OS X/x86-32/Standalone.app/Contents/MacOS/Standalone-" & tEdition
+            return tRuntimePath & "/Mac OS X/x86-64/Standalone.app/Contents/MacOS/Standalone-" & tEdition
             break
          case "Windows"
             return tRuntimePath & "/Windows/x86-32/Standalone"
+            break
+         case "Windows x86-64"
+            return tRuntimePath & "/Windows/x86-64/Standalone"
             break
          case "Linux"
             return tRuntimePath & "/Linux/x86-32/Standalone"
@@ -2681,7 +3096,7 @@ function revSBEnginePath pPlatform
             return tBinariesPath & slash & "standalone-" & tEdition & ".exe"
             break
          case "Linux"
-            return tBinariesPath & slash & "standalone-" & tEdition
+            return tBinariesPath & slash & "standalone-" & toLower(tEdition)
             break
          default
             return empty
@@ -2736,6 +3151,10 @@ local sDeployInclusions
 command revSBAddDeployInclusion pInclusion, pKey
    put empty into sDeployInclusions[pKey][pInclusion]
 end revSBAddDeployInclusion
+
+command revSBRemoveDeployInclusion pInclusion, pKey
+   delete variable sDeployInclusions[pKey][pInclusion]
+end revSBRemoveDeployInclusion
 
 -- Standalone settings are always set on the mainstack
 function revSBGetSettings pStack, pDeploy

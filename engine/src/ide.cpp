@@ -46,12 +46,11 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "parentscript.h"
 #include "osspec.h"
 #include "card.h"
+#include "keywords.h"
 
 #include "exec-interface.h"
 
 #include "globals.h"
-
-#include "syntax.h"
 
 // script flush <field chunk>
 // script configure classes tExpr
@@ -536,8 +535,8 @@ void MCIdeScriptConfigure::exec_ctxt(MCExecContext &ctxt)
                 MCNewAutoNameRef t_attr_key;
                 MCAutoStringRef t_attr_value;
 
-                MCStringFormat(t_attr_key_string, "%s attributes", s_script_keywords[t_keyword]);
-                MCNameCreate(t_attr_key_string, &t_attr_key);
+                /* UNCHECKED */ MCStringFormat(t_attr_key_string, "%s attributes", s_script_keywords[t_keyword]);
+                /* UNCHECKED */ MCNameCreateAndRelease(t_attr_key_string, &t_attr_key);
 
                 if (ctxt . CopyOptElementAsString(*t_settings, *t_attr_key, false, &t_attr_value))
                 {
@@ -2360,62 +2359,6 @@ void MCIdeSyntaxRecognize::exec_ctxt(MCExecContext &ctxt)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-MCIdeSyntaxCompile::MCIdeSyntaxCompile(void)
-	: m_target(NULL)
-{
-}
-
-MCIdeSyntaxCompile::~MCIdeSyntaxCompile(void)
-{
-	delete m_target;
-}
-
-Parse_stat MCIdeSyntaxCompile::parse(MCScriptPoint& sp)
-{
-	initpoint(sp);
-	
-	Parse_stat t_stat;
-	t_stat = PS_NORMAL;
-	
-	if (t_stat == PS_NORMAL)
-	{
-		m_target = new (nothrow) MCChunk(False);
-		t_stat = m_target -> parse(sp, False);
-	}
-	
-	return t_stat;
-}
-
-void MCIdeSyntaxCompile::exec_ctxt(MCExecContext &ctxt)
-{
-    MCObject *optr;
-    uint4 parid;
-    if (!m_target->getobj(ctxt, optr, parid, True))
-    {
-        ctxt . LegacyThrow(EE_EDIT_BADTARGET);
-        return;
-    }
-
-    MCHandlerlist *t_hlist;
-    t_hlist = new (nothrow) MCHandlerlist;
-    if (t_hlist -> parse(optr, optr -> _getscript()) == PS_NORMAL)
-    {
-        MCSyntaxFactoryRef t_factory;
-        MCSyntaxFactoryCreate(t_factory);
-        t_hlist -> compile(t_factory);
-
-        MCAutoStringRef t_log;
-        MCSyntaxFactoryCopyLog(t_factory, &t_log);
-
-        MCSyntaxFactoryDestroy(t_factory);
-
-        ctxt . SetItToValue(*t_log);
-    }
-    delete t_hlist;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 // filter controls of stack <stack> where <prop> <op> <pattern>
 
 struct MCIdeFilterControlsVisitor: public MCObjectVisitor
@@ -2684,3 +2627,4 @@ void MCIdeFilterControls::exec_ctxt(MCExecContext &ctxt)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+

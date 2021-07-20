@@ -24,6 +24,7 @@ case $(uname -m) in
 esac
 
 if [ -z "${XCODEBUILD}" ] ; then
+	export XCODEBUILD="/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild"
 	XCODE_DEVELOPER="/Applications/Xcode.app/Contents/Developer"
 else
 	# XCODEBUILD points to $XCODE_APP/Contents/Developer/usr/bin/xcodebuild
@@ -33,7 +34,12 @@ fi
 # Which platform are we actually targeting?
 case "${PLATFORM}" in
 	mac)
-		export UNIVERSAL_ARCHS="i386 x86_64"
+		export UNIVERSAL_ARCHS="x86_64"
+		;;
+	linux)
+		export ARCHS="i386 x86_64"
+		export CC_BASE="${CUSTOM_CC:-gcc}"
+		export CXX_BASE="${CUSTOM_CXX:-g++}"
 		;;
 	ios)
 		source "${BASEDIR}/scripts/ios.inc"
@@ -109,28 +115,33 @@ function setCCForTarget {
 			else
 				CC_FLAGS_X86_NORELAX=
 			fi
-			echo "*DEBUG* CC_FLAGS: ${CC_FLAGS_X86_NORELAX}"
+			
+			CC_FLAGS="-fPIC ${CC_FLAGS_X86_NORELAX}"
+			
+			echo "*DEBUG* CC_FLAGS: ${CC_FLAGS}"
 			
 			if [ "${ARCH}" == "x86_64" ] ; then
-				CC="${CC_BASE} -m64 ${CC_FLAGS_X86_NORELAX}"
-				CXX="${CXX_BASE} -m64 ${CC_FLAGS_X86_NORELAX}"
-			else
-				CC="${CC_BASE} -m32 ${CC_FLAGS_X86_NORELAX}"
-				CXX="${CXX_BASE} -m32 ${CC_FLAGS_X86_NORELAX}"
+				CC="${CC_BASE} -m64 ${CC_FLAGS}"
+				CXX="${CXX_BASE} -m64 ${CC_FLAGS}"
+			elif [ "$1" == "x86" ] ; then
+				CC="${CC_BASE} -m32 ${CC_FLAGS}"
+				CXX="${CXX_BASE} -m32 ${CC_FLAGS}"
 			fi
 			;;
 		android)
-			if [ "${ARCH}" == "armv6" ] ; then
-				CC="${ANDROID_CC} ${ANDROID_CFLAGS}"
-				CXX="${ANDROID_CXX} ${ANDROID_CXXFLAGS}"
-				EXTRA_LDFLAGS=
-			else
-				CC="${ANDROID_CC} -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 ${ANDROID_CFLAGS}"
-				CXX="${ANDROID_CXX} -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 ${ANDROID_CXXFLAGS}"
-				EXTRA_LDFLAGS="-march=armv7-a -Wl,--fix-cortex-a8"
+			configureAndroidToolchain ${ARCH}
+			# if not defined, derive CROSS_ROOT from ANDROID_TOOLCHAIN_BASE
+			if [ -z "${CROSS_SYSROOT}" ] ; then
+				export CROSS_SYSROOT="${ANDROID_TOOLCHAIN_BASE}/sysroot"
 			fi
-			LINK="${ANDROID_LINK} ${EXTRA_LDFLAGS} ${ANDROID_LDFLAGS}"
+
+			CC="${ANDROID_CC}"
+			CFLAGS="${ANDROID_CFLAGS} ${EXTRA_CFLAGS}"
+			CXX="${ANDROID_CXX}"
+			CXXFLAGS="${ANDROID_CXXFLAGS} ${EXTRA_CXXFLAGS}"
+			LINK="${ANDROID_LINK}"
 			LD="${LINK}"
+			LDFLAGS="${ANDROID_LDFLAGS}"
 			AR="${ANDROID_AR}"
 			OBJCOPY="${ANDROID_OBJCOPY}"
 			RANLIB="${ANDROID_RANLIB}"
@@ -154,8 +165,8 @@ function setCCForTarget {
 				CCPATH="${XCODE}/usr/bin"
 			fi
 			
-			CC="${CCPATH}/gcc -arch ${ARCH} ${ARCH_FLAGS} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=6.1"
-			CXX="${CCPATH}/g++ -arch ${ARCH} ${ARCH_FLAGS} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=6.1"
+			CC="${CCPATH}/gcc -arch ${ARCH} ${ARCH_FLAGS} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=7.0"
+			CXX="${CCPATH}/g++ -arch ${ARCH} ${ARCH_FLAGS} -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -miphoneos-version-min=7.0"
 			LDFLAGS="-L${CROSS_TOP}/SDKs/${CROSS_SDK}/usr/lib -isysroot ${CROSS_TOP}/SDKs/${CROSS_SDK} -Wl,-dead_strip"
 			;;
 		emscripten)

@@ -1,7 +1,7 @@
 ﻿script "BuilderUtilities"
 
-constant kMergExtVersion = "2017-9-25"
-constant kTSNetVersion = "1.3.2"
+constant kMergExtVersion = "2021-6-16"
+constant kTSNetVersion = "1.4.5"
 
 local sEngineDir
 local sWorkDir
@@ -133,7 +133,13 @@ function builderPlatform
          end if
          throw "Unknown Linux architecture:" && the processor
       case "win32"
-         return "windows"
+         if the processor is "x86" then
+            return "win-x86"
+         end if
+         if the processor is "x86_64" then
+            return "win-x86_64"
+         end if
+         throw "Unknown Windows architecture:" && the processor
       case "macos"
          return "macosx"
       case "iphone"
@@ -153,8 +159,10 @@ command builderFetchEngine pVersion, pPlatform
    end if
    if sEngineDir is not empty then
       switch pPlatform
-         case "windows"
+         case "win-x86"
             return sEngineDir & slash & "win-x86-bin"
+         case "win-x86_64"
+            return sEngineDir & slash & "win-x86_64-bin"
          case "linux-x86"
             return sEngineDir & slash & "linux-x86-bin"
          case "linux-x86_64"
@@ -165,8 +173,14 @@ command builderFetchEngine pVersion, pPlatform
             return sEngineDir & slash & "mac-bin"
          case "ios"
             return sEngineDir & slash & "ios-bin"
-         case "android"
-            return sEngineDir & slash & "android-armv6-bin"
+         case "android-armeabi-v7a"
+            return sEngineDir & slash & "android-armv7-bin"
+         case "android-arm64-v8a"
+            return sEngineDir & slash & "android-arm64-bin"
+         case "android-x86"
+            return sEngineDir & slash & "android-x86-bin"
+         case "android-x86_64"
+            return sEngineDir & slash & "android-x86_64-bin"
          case "emscripten"
             return sEngineDir & slash & "emscripten-bin"
          default
@@ -177,7 +191,8 @@ command builderFetchEngine pVersion, pPlatform
    end if
    local tPlatform
    switch pPlatform
-      case "windows"
+      case "win-x86"
+      case "win-x86_64"
          get "windows/release"
          break
       case "linux-x86"
@@ -191,7 +206,10 @@ command builderFetchEngine pVersion, pPlatform
       case "ios"
          get "ios"
          break
-      case "android"
+      case "android-armeabi-v7a"
+      case "android-arm64-v8a"
+      case "android-x86"
+      case "android-x86_64"
          get "android/release"
          break
    end switch
@@ -309,9 +327,16 @@ function builderIDEDocsFolder
    return builderIDEFolder() & slash & "Documentation"
 end builderIDEDocsFolder
 
-# Location for api js file in > LC8
-function builderAPIFolder pEdition
-   return builderIDEDocsFolder() & slash & "html_viewer/resources/data/api"
+# Location for api js files in > LC8
+function builderAPIFolder pEdition, pWhich
+   local tFolder
+   put builderIDEDocsFolder() & "/html_viewer/resources/data/api" \
+         into tFolder
+   if pWhich is not empty then
+      put "_" & pWhich after tFolder
+   end if
+
+   return tFolder
 end builderAPIFolder
 
 # Location for guide js file in > LC8
@@ -437,7 +462,8 @@ function builderInstallerEngine pPlatform
    put the result into tEngineFolder
    
    switch pPlatform
-      case "windows"
+      case "win-x86"
+      case "win-x86_64"
          return tEngineFolder & slash & "installer.exe"
       case "linux-x86"
          return tEngineFolder & slash & "installer"
@@ -596,7 +622,7 @@ command builderEnsureZip pZipfile, pURL
       builderEnsureFolderForFile pZipfile
       
       builderLog "message", "Downloading zip file:" && pZipfile
-      get shell(merge("curl -o '[[pZipfile]]' '[[pUrl]]'"))
+      get shell(merge("curl -k -o '[[pZipfile]]' '[[pUrl]]'"))
       if the result is not zero then
          builderLog "error", "Failed to download zip file:" && it
          throw "failure"
@@ -699,7 +725,7 @@ An commma delimited list
 
 **/
 function builderComponentCategories
-   return "engine,IDE,extension"
+   return "engine,IDE,builder,extension"
 end builderComponentCategories
 
 /**

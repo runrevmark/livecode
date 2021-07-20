@@ -39,6 +39,7 @@
 #include "system.h"
 
 #include "foundation.h"
+#include "foundation-system.h"
 
 #if defined(_IOS_MOBILE) || defined(_ANDROID_MOBILE)
 #include "mblcontrol.h"
@@ -53,7 +54,6 @@
 
 extern bool MCSystemLaunchUrl(MCStringRef p_document);
 extern char *MCSystemGetVersion(void);
-extern MCNameRef MCSystemGetProcessor(void);
 extern char *MCSystemGetAddress(void);
 extern uint32_t MCSystemPerformTextConversion(const char *string, uint32_t string_length, char *buffer, uint32_t buffer_length, uint1 from_charset, uint1 to_charset);
 
@@ -233,18 +233,6 @@ void MCS_common_init(void)
     MCsystem -> SetErrno(errno);
 	
 	MCinfinity = HUGE_VAL;
-
-	// MW-2013-10-08: [[ Bug 11259 ]] We use our own tables on linux since
-	//   we use a fixed locale which isn't available on all systems.
-#if !defined(_LINUX_SERVER) && !defined(_LINUX_DESKTOP) && !defined(_WINDOWS_DESKTOP) && !defined(_WINDOWS_SERVER) && !defined(__EMSCRIPTEN__)
-	MCuppercasingtable = new (nothrow) uint1[256];
-	for(uint4 i = 0; i < 256; ++i)
-		MCuppercasingtable[i] = (uint1)toupper((uint1)i);
-	
-	MClowercasingtable = new (nothrow) uint1[256];
-	for(uint4 i = 0; i < 256; ++i)
-		MClowercasingtable[i] = (uint1)tolower((uint1)i);
-#endif
     
 #if defined(_IOS_MOBILE) || defined(_ANDROID_MOBILE)
     MCHookRegister(kMCHookGlobalHandlers, &s_global_handlers_desc);
@@ -567,9 +555,9 @@ bool MCS_getsystemversion(MCStringRef& r_string)
 	return MCsystem->GetVersion(r_string);
 }
 
-MCNameRef MCS_getprocessor(void)
+bool MCS_getprocessor(MCStringRef& r_string)
 {
-	return MCsystem -> GetProcessor();
+    return MCSInfoGetArchitecture(r_string);
 }
 
 bool MCS_getmachine(MCStringRef& r_string)
@@ -692,7 +680,7 @@ Boolean MCS_createalias(MCStringRef p_target, MCStringRef p_alias)
     if (!MCS_pathtonative(*t_target_resolved, &t_target_native) || !MCS_pathtonative(*t_alias_resolved, &t_alias_native))
         return False;
     
-	return MCsystem -> CreateAlias(*t_target_resolved, *t_alias_resolved);
+	return MCsystem -> CreateAlias(*t_target_native, *t_alias_native);
 }
 
 Boolean MCS_resolvealias(MCStringRef p_path, MCStringRef& r_resolved)
@@ -706,7 +694,7 @@ Boolean MCS_resolvealias(MCStringRef p_path, MCStringRef& r_resolved)
     if (!MCS_pathtonative(*t_resolved_path, &t_native_path))
         return False;
     
-	return MCsystem -> ResolveAlias(*t_resolved_path, r_resolved);
+	return MCsystem -> ResolveAlias(*t_native_path, r_resolved);
 }
 
 bool MCS_setresource(MCStringRef p_source, MCStringRef p_type, MCStringRef p_id, MCStringRef p_name,
@@ -916,6 +904,7 @@ struct MCS_getentries_state
 {
 	bool files;
 	bool details;
+    bool utf8;
 	MCListRef list;
 };
 
@@ -951,7 +940,7 @@ static bool MCS_getentries_callback(void *p_context, const MCSystemFolderEntry *
         // SN-2015-01-22: [[ Bug 14412 ]] the detailed files should return
         //   URL-encoded filenames
         MCAutoStringRef t_url_encoded;
-        if (!MCU_urlencode(*t_normalized, false, &t_url_encoded))
+        if (!MCU_urlencode(*t_normalized, t_state -> utf8, &t_url_encoded))
 			return false;
         
 #ifdef _WIN32
@@ -1008,6 +997,7 @@ static bool MCS_getentries_callback(void *p_context, const MCSystemFolderEntry *
 bool MCS_getentries(MCStringRef p_folder,
                     bool p_files,
                     bool p_detailed,
+                    bool p_utf8,
                     MCListRef& r_list)
 {
 	MCAutoStringRef t_resolved_folder;
@@ -1026,6 +1016,7 @@ bool MCS_getentries(MCStringRef p_folder,
 	MCS_getentries_state t_state;	
 	t_state.files = p_files;
 	t_state.details = p_detailed;
+    t_state.utf8 = p_utf8;
 	t_state.list = *t_list;
 	
     // SN-2015-11-09: [[ Bug 16223 ]] Make sure that the list starts with ..
@@ -1828,11 +1819,12 @@ bool MCS_isinteractiveconsole(int p_fd)
 
 bool MCS_isnan(double p_number)
 {
-#ifdef _WIN32
-    return (_isnan(p_number) != 0);
-#else
-    return (isnan(p_number) != 0);
-#endif
+    return isnan(p_number);
+}
+
+bool MCS_isfinite(double p_number)
+{
+    return isfinite(p_number);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

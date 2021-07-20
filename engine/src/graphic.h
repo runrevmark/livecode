@@ -93,7 +93,9 @@ public:
 	virtual const char *gettypestring();
 
 	virtual const MCObjectPropertyTable *getpropertytable(void) const { return &kPropertyTable; }
-
+    
+    virtual bool visit_self(MCObjectVisitor *p_visitor);
+    
 	virtual Boolean mfocus(int2 x, int2 y);
 	virtual Boolean mdown(uint2 which);
 	virtual Boolean mup(uint2 which, bool p_release);
@@ -112,6 +114,10 @@ public:
 
 	// MW-2011-09-06: [[ Redraw ]] Added 'sprite' option - if true, ink and opacity are not set.
 	virtual void draw(MCDC *dc, const MCRectangle &dirty, bool p_isolated, bool p_sprite);
+    
+    /* The drawselection method of the graphic renders any editMode decorations
+     * which have been requested. */
+    virtual void drawselection(MCDC *dc, const MCRectangle& dirty);
 
 	virtual Boolean maskrect(const MCRectangle &srect);
 	virtual void fliph();
@@ -126,7 +132,6 @@ public:
 	MCRectangle expand_minrect(const MCRectangle &trect);
 	MCRectangle reduce_minrect(const MCRectangle &trect);
 	void compute_minrect();
-	virtual MCRectangle geteffectiverect(void) const;
 	void delpoints();
 	bool closepolygon(MCPoint *&pts, uint2 &npts);
 	MCStringRef getlabeltext();
@@ -165,6 +170,8 @@ public:
     void DoSetGradientFill(MCExecContext& ctxt, MCGradientFill*& p_fill, Draw_index p_di, MCNameRef p_prop, MCExecValue p_value);
     
     void DoCopyPoints(MCExecContext& ctxt, uindex_t p_count, MCPoint* p_points, uindex_t& r_count, MCPoint*& r_points);
+    
+    void SetPointsCommon(MCExecContext& ctxt, uindex_t p_count, MCPoint* p_points, bool p_is_relative);
 
 	////////// PROPERTY ACCESSORS
 

@@ -655,6 +655,91 @@ Exec_stat MCHandleAllowedOrientations(void *context, MCParameter *p_parameters)
 	return ES_ERROR;
 }
 
+Exec_stat MCHandleSetFullScreenRectForOrientations(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    
+    MCAutoStringRef t_orientations;
+    
+    bool t_success = p_parameters != nil;
+    
+    if (t_success)
+    {
+        MCAutoValueRef t_value;
+        if (p_parameters -> eval_argument(ctxt, &t_value))
+        {
+            ctxt . ConvertToString(*t_value, &t_orientations);
+        }
+        t_success = t_orientations.IsSet();
+        p_parameters = p_parameters -> getnext();
+    }
+    
+    MCRectangle *t_rect_ptr = nullptr;
+    MCRectangle t_rect;
+    
+    if (t_success && p_parameters != nil)
+    {
+        MCAutoValueRef t_value;
+        if (p_parameters -> eval_argument(ctxt, &t_value))
+        {
+            bool t_have_rect = false;
+            ctxt.TryToConvertToLegacyRectangle(*t_value, t_have_rect, t_rect);
+            if (t_have_rect)
+            {
+                t_rect_ptr = &t_rect;
+            }
+        }
+    }
+    
+    MCAutoArrayRef t_orientations_array;
+    if (t_success)
+    {
+        t_success = MCStringSplit(*t_orientations, MCSTR(","), nil, kMCCompareExact, &t_orientations_array);
+    }
+    
+    uint32_t t_orientations_count;
+    if (t_success)
+    {
+        t_orientations_count = MCArrayGetCount(*t_orientations_array);
+    }
+    
+    intset_t t_orientations_set = 0;
+    if (t_success)
+    {
+        for(uint32_t i = 0; i < t_orientations_count; i++)
+        {
+            // Note: 't_orientations_array' is an array of strings
+            MCValueRef t_orien_value = nil;
+            if (MCArrayFetchValueAtIndex(*t_orientations_array, i + 1, t_orien_value))
+            {
+                MCStringRef t_orientation = (MCStringRef)(t_orien_value);
+                if (MCStringIsEqualToCString(t_orientation, "portrait", kMCCompareCaseless))
+                    t_orientations_set |= ORIENTATION_PORTRAIT;
+                else if (MCStringIsEqualToCString(t_orientation, "portrait upside down", kMCCompareCaseless))
+                    t_orientations_set |= ORIENTATION_PORTRAIT_UPSIDE_DOWN;
+                else if (MCStringIsEqualToCString(t_orientation, "landscape right", kMCCompareCaseless))
+                    t_orientations_set |= ORIENTATION_LANDSCAPE_RIGHT;
+                else if (MCStringIsEqualToCString(t_orientation, "landscape left", kMCCompareCaseless))
+                    t_orientations_set |= ORIENTATION_LANDSCAPE_LEFT;
+                else if (MCStringIsEqualToCString(t_orientation, "face up", kMCCompareCaseless))
+                    t_orientations_set |= ORIENTATION_FACE_UP;
+                else if (MCStringIsEqualToCString(t_orientation, "face down", kMCCompareCaseless))
+                    t_orientations_set |= ORIENTATION_FACE_DOWN;
+            }
+        }
+    }
+    
+    if (t_success)
+    {
+        MCOrientationSetRectForOrientations(ctxt, t_orientations_set, t_rect_ptr);
+    }
+    
+    if (t_success && !ctxt . HasError())
+        return ES_NORMAL;
+    
+    return ES_ERROR;
+}
+
 Exec_stat MCHandleSetAllowedOrientations(void *context, MCParameter *p_parameters)
 {
 	MCExecContext ctxt(nil, nil, nil);
@@ -921,7 +1006,7 @@ Exec_stat MCHandleStartTrackingSensor(void *p_context, MCParameter *p_parameters
     {
         MCAutoValueRef t_value;
         MCAutoStringRef t_string;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
         t_sensor = MCSensorTypeFromString(*t_string);
         p_parameters = p_parameters->getnext();
@@ -931,7 +1016,7 @@ Exec_stat MCHandleStartTrackingSensor(void *p_context, MCParameter *p_parameters
     {
         MCAutoValueRef t_value;
         MCAutoBooleanRef t_bool;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         // PM-2015-03-11: [[ Bug 14855 ]] Evaluate correctly the second param
         if (ctxt . ConvertToBoolean(*t_value, &t_bool))
             t_loosely = MCValueIsEqualTo(*t_bool, kMCTrue);
@@ -963,7 +1048,7 @@ Exec_stat MCHandleStopTrackingSensor(void *p_context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
         MCAutoStringRef t_string;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
         t_sensor = MCSensorTypeFromString(*t_string);
         p_parameters = p_parameters->getnext();
@@ -1042,7 +1127,7 @@ Exec_stat MCHandleSensorReading(void *p_context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
         MCAutoStringRef t_string;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
         t_sensor = MCSensorTypeFromString(*t_string);
         p_parameters = p_parameters->getnext();
@@ -1052,7 +1137,7 @@ Exec_stat MCHandleSensorReading(void *p_context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
         MCAutoBooleanRef t_bool;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         // PM-2015-03-11: [[ Bug 14855 ]] Evaluate correctly the second param
         if(ctxt . ConvertToBoolean(*t_value, &t_bool))
             t_detailed = MCValueIsEqualTo(*t_bool, kMCTrue);
@@ -1184,7 +1269,7 @@ Exec_stat MCHandleSetHeadingCalibrationTimeout(void *p_context, MCParameter *p_p
     {
         MCAutoValueRef t_value;
         MCAutoNumberRef t_number;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToNumber(*t_value, &t_number);
         t_timeout = MCNumberFetchAsInteger(*t_number);
     }
@@ -1230,7 +1315,7 @@ Exec_stat MCHandleSensorAvailable(void *p_context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
         MCAutoStringRef t_string;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_string);
         t_sensor = MCSensorTypeFromString(*t_string);
         p_parameters = p_parameters->getnext();
@@ -1249,6 +1334,30 @@ Exec_stat MCHandleSensorAvailable(void *p_context, MCParameter *p_parameters)
 		return ES_NORMAL;
 
 	return ES_ERROR;
+}
+
+Exec_stat MCHandleAllowBackgroundLocationUpdates(void *p_context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    ctxt . SetTheResultToEmpty();
+    
+    bool t_allow_background_location_updates = false;
+    
+    if (p_parameters)
+    {
+        MCAutoValueRef t_value;
+        MCAutoBooleanRef t_bool;
+        p_parameters->eval_argument(ctxt, &t_value);
+        if(ctxt . ConvertToBoolean(*t_value, &t_bool))
+            t_allow_background_location_updates = MCValueIsEqualTo(*t_bool, kMCTrue);
+    }
+    
+    MCSensorAllowBackgroundLocationUpdates(ctxt, t_allow_background_location_updates);
+    
+    if (!ctxt . HasError())
+        return ES_NORMAL;
+    
+    return ES_ERROR;
 }
 
 Exec_stat MCHandleCanTrackLocation(void *p_context, MCParameter *p_parameters)
@@ -1299,7 +1408,7 @@ Exec_stat MCHandleSetLocationHistoryLimit(void *p_context, MCParameter *p_parame
         return ES_NORMAL;
     
     MCAutoValueRef t_value;
-    p_parameters->eval(ctxt, &t_value);
+    p_parameters->eval_argument(ctxt, &t_value);
         
     uinteger_t t_limit = 0;
     /* UNCHECKED */ ctxt . ConvertToUnsignedInteger(*t_value, t_limit);
@@ -1375,7 +1484,7 @@ Exec_stat MCHandleShowContact(void *context, MCParameter *p_parameters) // ABPer
     {
         MCAutoValueRef t_value;
         MCAutoNumberRef t_number;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToNumber(*t_value, &t_number);
         t_contact_id = MCNumberFetchAsInteger(*t_number);
     }
@@ -1428,7 +1537,7 @@ Exec_stat MCHandleGetContactData(void *context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
         MCAutoNumberRef t_number;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToNumber(*t_value, &t_number);
         t_contact_id = MCNumberFetchAsInteger(*t_number);
     }
@@ -1456,7 +1565,7 @@ Exec_stat MCHandleRemoveContact(void *context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
         MCAutoNumberRef t_number;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToNumber(*t_value, &t_number);
         t_contact_id = MCNumberFetchAsInteger(*t_number);
     }
@@ -1495,7 +1604,7 @@ Exec_stat MCHandleFindContact(void *context, MCParameter *p_parameters)
     if (p_parameters)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_contact_name);
     }
     ctxt.SetTheResultToEmpty();
@@ -1893,7 +2002,7 @@ Exec_stat MCHandleFindEvent(void *context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
 
-        if (p_parameters->eval(ctxt, &t_value)
+        if (p_parameters->eval_argument(ctxt, &t_value)
                 && !MCValueIsEmpty(*t_value))
         {
 			t_success = MCD_convert_to_datetime(ctxt, *t_value, CF_UNDEFINED, CF_UNDEFINED, t_start_date);
@@ -1904,7 +2013,7 @@ Exec_stat MCHandleFindEvent(void *context, MCParameter *p_parameters)
     {
         MCAutoValueRef t_value;
 
-        if (p_parameters->eval(ctxt, &t_value)
+        if (p_parameters->eval_argument(ctxt, &t_value)
                 && !MCValueIsEmpty(*t_value))
         {
 			t_success = MCD_convert_to_datetime(ctxt, *t_value, CF_UNDEFINED, CF_UNDEFINED, t_end_date);
@@ -1942,7 +2051,7 @@ Exec_stat MCHandleCreateLocalNotification (void *context, MCParameter *p_paramet
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        if (p_parameters->eval(ctxt, &t_value)
+        if (p_parameters->eval_argument(ctxt, &t_value)
                 && !MCValueIsEmpty(*t_value))
         {
             t_success = MCD_convert_to_datetime(ctxt, *t_value, CF_UNDEFINED, CF_UNDEFINED, t_date);
@@ -2731,6 +2840,23 @@ Exec_stat MCHandleVibrate(void *p_context, MCParameter *p_parameters)
     return ES_ERROR;
 }
 
+Exec_stat MCHandleDeviceModel(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    
+    MCAutoStringRef t_device_model;
+    MCMiscGetDeviceModel(ctxt, &t_device_model);
+    
+    if (!ctxt.HasError())
+    {
+        ctxt.SetTheResultToValue(*t_device_model);
+        return ES_NORMAL;
+    }
+    
+    ctxt.SetTheResultToEmpty();
+    return ES_ERROR;
+}
+
 Exec_stat MCHandleDeviceResolution(void *context, MCParameter *p_parameters)
 {
     MCExecContext ctxt(nil, nil, nil);
@@ -2821,6 +2947,23 @@ static Exec_stat MCHandleLocationAuthorizationStatus(void *context, MCParameter 
     return ES_ERROR;
 }
 
+static Exec_stat MCHandleTrackingAuthorizationStatus(void *context, MCParameter *p_parameters)
+{
+    MCAutoStringRef t_status;
+    MCExecContext ctxt(nil, nil,nil);
+    
+    MCMiscGetTrackingAuthorizationStatus(ctxt, &t_status);
+    
+    if (!ctxt . HasError())
+    {
+        ctxt . SetTheResultToValue(*t_status);
+        return ES_NORMAL;
+    }
+    
+    ctxt . SetTheResultToEmpty();
+    return ES_ERROR;
+}
+
 
 static MCMiscStatusBarStyle MCMiscStatusBarStyleFromString(MCStringRef p_string)
 {
@@ -2882,26 +3025,26 @@ Exec_stat MCHandleHideStatusBar(void* context, MCParameter* p_parameters)
     return ES_ERROR;
 }
 
-static MCMiscKeyboardType MCMiscKeyboardTypeFromString(MCStringRef p_string)
+static MCInterfaceKeyboardType MCInterfaceKeyboardTypeFromString(MCStringRef p_string)
 {
     if (MCStringIsEqualToCString(p_string, "alphabet", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeAlphabet;
+        return kMCInterfaceKeyboardTypeAlphabet;
     else if (MCStringIsEqualToCString(p_string, "numeric", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeNumeric;
+        return kMCInterfaceKeyboardTypeNumeric;
     else if (MCStringIsEqualToCString(p_string, "decimal", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeDecimal;
+        return kMCInterfaceKeyboardTypeDecimal;
     else if (MCStringIsEqualToCString(p_string, "number", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeNumber;
+        return kMCInterfaceKeyboardTypeNumber;
     else if (MCStringIsEqualToCString(p_string, "phone", kMCCompareCaseless))
-        return kMCMiscKeyboardTypePhone;
+        return kMCInterfaceKeyboardTypePhone;
     else if (MCStringIsEqualToCString(p_string, "email", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeEmail;
+        return kMCInterfaceKeyboardTypeEmail;
     else if (MCStringIsEqualToCString(p_string, "url", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeUrl;
+        return kMCInterfaceKeyboardTypeUrl;
     else if (MCStringIsEqualToCString(p_string, "contact", kMCCompareCaseless))
-        return kMCMiscKeyboardTypeContact;
+        return kMCInterfaceKeyboardTypeContact;
     else // default
-        return kMCMiscKeyboardTypeDefault;
+        return kMCInterfaceKeyboardTypeDefault;
 }
 
 Exec_stat MCHandleSetKeyboardType (void *context, MCParameter *p_parameters)
@@ -2911,11 +3054,11 @@ Exec_stat MCHandleSetKeyboardType (void *context, MCParameter *p_parameters)
     bool t_success = true;
     
     MCAutoStringRef t_keyboard_type_string;
-    MCMiscKeyboardType t_keyboard_type;
+    MCInterfaceKeyboardType t_keyboard_type;
     
     t_success = MCParseParameters(p_parameters, "x", &(&t_keyboard_type_string));
     
-    t_keyboard_type = MCMiscKeyboardTypeFromString(*t_keyboard_type_string);
+    t_keyboard_type = MCInterfaceKeyboardTypeFromString(*t_keyboard_type_string);
     
     MCMiscSetKeyboardType(ctxt, t_keyboard_type);
     
@@ -2924,30 +3067,30 @@ Exec_stat MCHandleSetKeyboardType (void *context, MCParameter *p_parameters)
     return ES_ERROR;
 }
 
-static MCMiscKeyboardReturnKey MCMiscKeyboardReturnKeyTypeFromString(MCStringRef p_string)
+static MCInterfaceReturnKeyType MCInterfaceReturnKeyTypeTypeFromString(MCStringRef p_string)
 {
     if (MCStringIsEqualToCString(p_string, "go", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyGo;
+        return kMCInterfaceReturnKeyTypeGo;
     else if (MCStringIsEqualToCString(p_string, "google", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyGoogle;
+        return kMCInterfaceReturnKeyTypeGoogle;
     else if (MCStringIsEqualToCString(p_string, "join", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyJoin;
+        return kMCInterfaceReturnKeyTypeJoin;
     else if (MCStringIsEqualToCString(p_string, "next", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyNext;
+        return kMCInterfaceReturnKeyTypeNext;
     else if (MCStringIsEqualToCString(p_string, "route", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyRoute;
+        return kMCInterfaceReturnKeyTypeRoute;
     else if (MCStringIsEqualToCString(p_string, "search", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeySearch;
+        return kMCInterfaceReturnKeyTypeSearch;
     else if (MCStringIsEqualToCString(p_string, "send", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeySend;
+        return kMCInterfaceReturnKeyTypeSend;
     else if (MCStringIsEqualToCString(p_string, "yahoo", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyYahoo;
+        return kMCInterfaceReturnKeyTypeYahoo;
     else if (MCStringIsEqualToCString(p_string, "done", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyDone;
+        return kMCInterfaceReturnKeyTypeDone;
     else if (MCStringIsEqualToCString(p_string, "emergency call", kMCCompareCaseless))
-        return kMCMiscKeyboardReturnKeyEmergencyCall;
+        return kMCInterfaceReturnKeyTypeEmergencyCall;
     else // default
-        return kMCMiscKeyboardReturnKeyDefault;
+        return kMCInterfaceReturnKeyTypeDefault;
 }
 
 Exec_stat MCHandleSetKeyboardReturnKey (void *context, MCParameter *p_parameters)
@@ -2955,19 +3098,75 @@ Exec_stat MCHandleSetKeyboardReturnKey (void *context, MCParameter *p_parameters
 	MCExecContext ctxt(nil, nil, nil);
     
     MCAutoStringRef t_keyboard_return_key_string;
-    MCMiscKeyboardReturnKey t_keyboard_return_key;
+    MCInterfaceReturnKeyType t_keyboard_return_key;
     bool t_success;
     
     t_success = MCParseParameters(p_parameters, "x", &(&t_keyboard_return_key_string));
     
     if (t_success)
     {
-        t_keyboard_return_key = MCMiscKeyboardReturnKeyTypeFromString(*t_keyboard_return_key_string);
+        t_keyboard_return_key = MCInterfaceReturnKeyTypeTypeFromString(*t_keyboard_return_key_string);
         MCMiscSetKeyboardReturnKey(ctxt, t_keyboard_return_key);
     }
     
     if (!ctxt.HasError())
         return ES_NORMAL;
+    
+    return ES_ERROR;
+}
+
+static const char *s_keyboard_display_names[] =
+{
+    "over", "pan", nil
+};
+
+
+Exec_stat MCHandleSetKeyboardDisplay(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    ctxt.SetTheResultToEmpty();
+    
+    MCAutoStringRef t_mode_string;
+    if (!MCParseParameters(p_parameters, "x", &(&t_mode_string)))
+    {
+        return ES_ERROR;
+    }
+    
+    bool t_success = true;
+    
+    intenum_t t_mode = 0;
+    for (uint32_t i = 0; s_keyboard_display_names[i] != nil; i++)
+    {
+        if (MCStringIsEqualToCString(*t_mode_string, s_keyboard_display_names[i], kMCCompareCaseless))
+        {
+            t_mode = i;
+            break;
+        }
+    }
+    
+    MCMiscExecSetKeyboardDisplay(ctxt, t_mode);
+    
+    if (!ctxt.HasError())
+    {
+        return ES_NORMAL;
+    }
+    
+    return ES_ERROR;
+}
+
+Exec_stat MCHandleGetKeyboardDisplay(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    ctxt.SetTheResultToEmpty();
+    
+    intenum_t t_mode;
+    MCMiscExecGetKeyboardDisplay(ctxt, t_mode);
+    
+    if (!ctxt.HasError())
+    {
+        ctxt.SetTheResultToStaticCString(s_keyboard_display_names[t_mode]);
+        return ES_NORMAL;
+    }
     
     return ES_ERROR;
 }
@@ -3174,7 +3373,7 @@ Exec_stat MCHandleFileSetDoNotBackup(void *context, MCParameter *p_parameters)
 	t_no_backup = true;
     
 	if (t_success)
-        t_success = MCParseParameters(p_parameters, "xu", &(&t_path), &t_no_backup);
+        t_success = MCParseParameters(p_parameters, "xb", &(&t_path), &t_no_backup);
     
     if (t_success)
         MCMiscSetDoNotBackupFile(ctxt, *t_path, t_no_backup);
@@ -3292,6 +3491,99 @@ Exec_stat MCHandleBuildInfo(void *context, MCParameter *p_parameters)
     return ES_ERROR;
 }
 
+/////////////////// Android 6.0 runtime permissions /////////////////////////
+Exec_stat MCHandleRequestPermission(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    
+    MCAutoStringRef t_permission;
+    bool t_success, t_granted;
+    
+    t_success = MCParseParameters(p_parameters, "x", &(&t_permission));
+    
+    bool t_permission_exists;
+    MCMiscExecPermissionExists(ctxt, *t_permission, t_permission_exists);
+    
+    if (!t_permission_exists)
+    {
+        ctxt.LegacyThrow(EE_BAD_PERMISSION_NAME);
+        t_success = false;
+    }
+    
+    if (t_success)
+        MCMiscExecRequestPermission(ctxt, *t_permission, t_granted);
+    
+    Exec_stat t_stat;
+    if (!ctxt . HasError())
+        t_stat = ES_NORMAL;
+    else
+        t_stat = ES_ERROR;
+    
+    ctxt.SetTheResultToEmpty();
+    return t_stat;
+}
+
+Exec_stat MCHandlePermissionExists(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    
+    MCAutoStringRef t_permission;
+    bool t_success, t_exists;
+    
+    t_success = MCParseParameters(p_parameters, "x", &(&t_permission));
+    
+    if (t_success)
+        MCMiscExecPermissionExists(ctxt, *t_permission, t_exists);
+    
+    if (!ctxt . HasError())
+    {
+        if (t_exists)
+            ctxt.SetTheResultToValue(kMCTrueString);
+        else
+            ctxt.SetTheResultToValue(kMCFalseString);
+        
+        return ES_NORMAL;
+    }
+    
+    ctxt.SetTheResultToEmpty();
+    return ES_ERROR;
+}
+
+Exec_stat MCHandleHasPermission(void *context, MCParameter *p_parameters)
+{
+    MCExecContext ctxt(nil, nil, nil);
+    
+    MCAutoStringRef t_permission;
+    bool t_success, t_permission_granted;
+    
+    t_success = MCParseParameters(p_parameters, "x", &(&t_permission));
+    
+    bool t_permission_exists;
+    MCMiscExecPermissionExists(ctxt, *t_permission, t_permission_exists);
+    
+    if (!t_permission_exists)
+    {
+        ctxt.LegacyThrow(EE_BAD_PERMISSION_NAME);
+        t_success = false;
+    }
+    
+    if (t_success)
+        MCMiscExecHasPermission(ctxt, *t_permission, t_permission_granted);
+    
+    if (!ctxt . HasError())
+    {
+        if (t_permission_granted)
+            ctxt.SetTheResultToValue(kMCTrueString);
+        else
+            ctxt.SetTheResultToValue(kMCFalseString);
+        
+        return ES_NORMAL;
+    }
+    
+    ctxt.SetTheResultToEmpty();
+    return ES_ERROR;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 static MCMediaType MCMediaTypeFromString(MCStringRef p_string)
@@ -3362,7 +3654,7 @@ Exec_stat MCHandleIPhonePickMedia(void *context, MCParameter *p_parameters)
 		else if (MCCStringEqualCaseless(t_option_list, "audiobook"))
 			t_media_types += kMCMediaTypeAudiobooks;
 #ifdef __IPHONE_5_0
-		if (MCmajorosversion >= 500)
+		if (MCmajorosversion >= MCOSVersionMake(5,0,0))
 		{
 			if (MCCStringEqualCaseless(t_option_list, "movie"))
 				t_media_types += kMCMediaTypeMovies;
@@ -3382,7 +3674,7 @@ Exec_stat MCHandleIPhonePickMedia(void *context, MCParameter *p_parameters)
 	{
 		t_media_types = MCMediaTypeFromString(MCSTR("podcast, songs, audiobook"));;
 #ifdef __IPHONE_5_0
-		if (MCmajorosversion >= 500)
+		if (MCmajorosversion >= MCOSVersionMake(5,0,0))
 			t_media_types += MCMediaTypeFromString(MCSTR("movies, tv, videoPodcasts, musicVideos, videoITunesU"));;
 #endif
 	}
@@ -3567,7 +3859,7 @@ Exec_stat MCHandlePickDate(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_current);
         p_parameters = p_parameters->getnext();
     }
@@ -3575,7 +3867,7 @@ Exec_stat MCHandlePickDate(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_start);
         p_parameters = p_parameters->getnext();
     }
@@ -3583,7 +3875,7 @@ Exec_stat MCHandlePickDate(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_end);
         p_parameters = p_parameters->getnext();
     }
@@ -3655,7 +3947,7 @@ Exec_stat MCHandlePickTime(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_current);
         p_parameters = p_parameters->getnext();
     }
@@ -3663,7 +3955,7 @@ Exec_stat MCHandlePickTime(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_start);
         p_parameters = p_parameters->getnext();
     }
@@ -3671,7 +3963,7 @@ Exec_stat MCHandlePickTime(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_end);
         p_parameters = p_parameters->getnext();
     }
@@ -3738,7 +4030,7 @@ Exec_stat MCHandlePickDateAndTime(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_current);
         p_parameters = p_parameters->getnext();
     }
@@ -3746,7 +4038,7 @@ Exec_stat MCHandlePickDateAndTime(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_start);
         p_parameters = p_parameters->getnext();
     }
@@ -3754,7 +4046,7 @@ Exec_stat MCHandlePickDateAndTime(void *context, MCParameter *p_parameters)
 	if (t_success && p_parameters != nil)
     {
         MCAutoValueRef t_value;
-        p_parameters->eval(ctxt, &t_value);
+        p_parameters->eval_argument(ctxt, &t_value);
         t_success = ctxt . ConvertToString(*t_value, &t_end);
         p_parameters = p_parameters->getnext();
     }
@@ -3915,6 +4207,11 @@ Exec_stat MCHandlePickPhoto(void *p_context, MCParameter *p_parameters)
 		p_parameters -> eval_argument(ctxt, &t_value);
         /* UNCHECKED */ ctxt . ConvertToString(*t_value, &t_source);
 	}
+    
+    if (!t_source.IsSet())
+    {
+        return ES_ERROR;
+    }
 	
 	MCPhotoSourceType t_photo_source;
 	bool t_is_take;
@@ -4003,7 +4300,7 @@ Exec_stat MCHandleControlSet(void *context, MCParameter *p_parameters)
 
     MCAutoValueRef t_value;
     if (t_success && p_parameters != nil)
-        t_success = p_parameters -> eval(ctxt, &t_value);
+        t_success = p_parameters -> eval_argument(ctxt, &t_value);
     
     if (t_success)
         MCNativeControlExecSet(ctxt, *t_control_name, *t_property, *t_value);
@@ -4056,7 +4353,7 @@ Exec_stat MCHandleControlDo(void *context, MCParameter *p_parameters)
     MCValueRef t_value;
     while (t_success && p_parameters != nil)
     {
-        p_parameters -> eval(ctxt, t_value);
+        p_parameters -> eval_argument(ctxt, t_value);
         t_success = t_params . Push(t_value);
         p_parameters = p_parameters -> getnext();
     }
@@ -4316,6 +4613,7 @@ static const MCPlatformMessageSpec s_platform_messages[] =
     
     // MM-2012-02-11: Added support old style senseor syntax (iPhoneEnableAcceleromter etc)
 	/* DEPRECATED */ {false, "iphoneCanTrackLocation", MCHandleCanTrackLocation, nil},
+    {false, "iphoneAllowBackgroundLocationUpdates", MCHandleAllowBackgroundLocationUpdates, nil},
 
     // PM-2014-10-07: [[ Bug 13590 ]] StartTrackingLocation and StopTrackingLocation must run on the script thread
     /* DEPRECATED */ {true, "iphoneStartTrackingLocation", MCHandleLocationTrackingState, (void *)true},
@@ -4402,7 +4700,8 @@ static const MCPlatformMessageSpec s_platform_messages[] =
 	{false, "mobileOrientation", MCHandleOrientation, nil},
 	{false, "mobileAllowedOrientations", MCHandleAllowedOrientations, nil},
 	{false, "mobileSetAllowedOrientations", MCHandleSetAllowedOrientations, nil},
-	{false, "mobileLockOrientation", MCHandleLockOrientation, nil},
+    {false, "mobileSetFullScreenRectForOrientations", MCHandleSetFullScreenRectForOrientations, nil},
+    {false, "mobileLockOrientation", MCHandleLockOrientation, nil},
 	{false, "mobileUnlockOrientation", MCHandleUnlockOrientation, nil},
 	{false, "mobileOrientationLocked", MCHandleOrientationLocked, nil},
     
@@ -4425,6 +4724,7 @@ static const MCPlatformMessageSpec s_platform_messages[] =
 	{false, "mobileSetKeyboardType", MCHandleSetKeyboardType, nil},
     {false, "mobileSetKeyboardReturnKey", MCHandleSetKeyboardReturnKey, nil}, // Added from androidmisc.cpp
 	
+    {false, "iphoneDeviceModel", MCHandleDeviceModel, nil},
 	{false, "iphoneDeviceResolution", MCHandleDeviceResolution, nil},
 	{false, "iphoneUseDeviceResolution", MCHandleUseDeviceResolution, nil},
 	{false, "iphoneDeviceScale", MCHandleDeviceScale, nil},
@@ -4432,12 +4732,17 @@ static const MCPlatformMessageSpec s_platform_messages[] =
     {false, "mobileUseDeviceResolution", MCHandleUseDeviceResolution, nil},
     {false, "mobileDeviceScale", MCHandleDeviceScale, nil},
     {false, "mobilePixelDensity", MCHandlePixelDensity, nil},
+    
+    {false, "iphoneTrackingAuthorizationStatus", MCHandleTrackingAuthorizationStatus, nil},
 
     // SN-2014-10-15: [[ Merge-6.7.0-rc-3 ]]
     {false, "iphoneLocationAuthorizationStatus", MCHandleLocationAuthorizationStatus, nil},
     {false, "mobileLocationAuthorizationStatus", MCHandleLocationAuthorizationStatus, nil},
     
 	{false, "mobileBuildInfo", MCHandleBuildInfo, nil},
+    {false, "androidRequestPermission", MCHandleRequestPermission, nil},
+    {false, "androidPermissionExists", MCHandlePermissionExists, nil},
+    {false, "androidHasPermission", MCHandleHasPermission, nil},
 	
 	{false, "mobileCanMakePurchase", MCHandleCanMakePurchase, nil},
 	{false, "mobileEnablePurchaseUpdates", MCHandleEnablePurchaseUpdates, nil},
@@ -4596,7 +4901,10 @@ static const MCPlatformMessageSpec s_platform_messages[] =
 	{false, "mobileEnableNFCDispatch", MCHandleEnableNFCDispatch, nil},
 	{false, "mobileDisableNFCDispatch", MCHandleDisableNFCDispatch, nil},
     
-	{nil, nil, nil}    
+    {false, "mobileSetKeyboardDisplay", MCHandleSetKeyboardDisplay, nil},
+    {false, "mobileGetKeyboardDisplay", MCHandleGetKeyboardDisplay, nil},
+    
+	{false, nil, nil}    
 };
 
 bool MCIsPlatformMessage(MCNameRef handler_name)

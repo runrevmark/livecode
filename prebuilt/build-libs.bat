@@ -6,7 +6,7 @@ REM #
 REM #   CONFIGURE VERSIONS AND FOLDERS
 REM #
 
-REM If called with no arguments ICU, OpenSSL and Curl will be built.
+REM If called with no arguments ICU, OpenSSL, CEF and Curl will be built.
 REM Otherwise it can be called with one or two arguments. The first argument is
 REM the library to build, the second is either not present or 'prepare'. If
 REM 'prepare', then the source will be downloaded and unpacked into a unique
@@ -114,7 +114,12 @@ IF %ARCH%==x86 (
 	SET ARCH_STRING=amd64
 )
 
-SET VSCONFIGTOOL="%ProgramFiles(x86)%\Microsoft Visual Studio %TOOL%.0\VC\vcvarsall.bat"
+IF %TOOL%==15 (
+	REM Look for build tools within VS 2017 folder
+	SET VSCONFIGTOOL="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+) ELSE (
+	SET VSCONFIGTOOL="%ProgramFiles(x86)%\Microsoft Visual Studio %TOOL%.0\VC\vcvarsall.bat"
+)
 
 REM Ensure the desired vsvarsall.bat file exists for the chosen options
 IF NOT EXIST %VSCONFIGTOOL% (
@@ -191,6 +196,10 @@ IF %1=="" (
 
 	REM Build ICU
 	CALL "scripts\build-icu.bat"
+	IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
+
+  REM Build CEF
+	CALL "scripts\build-cef.bat"
 	IF %ERRORLEVEL% NEQ 0 EXIT /B %ERRORLEVEL%
 ) ELSE (
 	CALL "scripts\build-%1.bat" %2

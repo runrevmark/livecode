@@ -137,6 +137,17 @@ public:
         return t_value;
     }
     
+    // The MakeUnique method inters the value-ref so that it uses an existing
+    // uniqued value if present.
+    inline bool MakeUnique(void)
+    {
+        if (!MCValueInterAndRelease(m_value, m_value))
+        {
+            return false;
+        }
+        return true;
+    }
+    
     friend T In<>(const MCAutoValueRefBase<T>&);
     friend T& Out<>(MCAutoValueRefBase<T>&);
     friend T& InOut<>(MCAutoValueRefBase<T>&);
@@ -1083,6 +1094,16 @@ public:
 		m_ptr[m_size - 1] = p_value;
 		return true;
 	}
+	
+	bool Pop(T &r_value)
+	{
+		if (m_size == 0)
+			return false;
+		
+		r_value = m_ptr[m_size - 1];
+		Shrink(m_size - 1);
+		return true;
+	}
 
 	//////////
 
@@ -1124,6 +1145,118 @@ public:
 private:
 	T *m_ptr = nullptr;
 	uindex_t m_size = 0;
+};
+
+/* Use the MCAutoArrayZeroedNonPod class when T has a destructor which will
+ * only delete non-null members. */
+template<typename T> class MCAutoArrayZeroedNonPod
+{
+public:
+    constexpr MCAutoArrayZeroedNonPod() = default;
+    
+    ~MCAutoArrayZeroedNonPod(void)
+    {
+        for(uindex_t i = 0; i < m_size; i++)
+            m_ptr[i].~T();
+        MCMemoryDeleteArray(m_ptr);
+    }
+    
+    //////////
+    
+    T* Ptr()
+    {
+        return m_ptr;
+    }
+    
+    uindex_t Size() const
+    {
+        return m_size;
+    }
+    
+    //////////
+    
+    bool New(uindex_t p_size)
+    {
+        MCAssert(m_ptr == nil);
+        return MCMemoryNewArray(p_size, m_ptr, m_size);
+    }
+    
+    void Delete(void)
+    {
+        MCMemoryDeleteArray(m_ptr);
+        m_ptr = nil;
+        m_size = 0;
+    }
+    
+    //////////
+    
+    bool Resize(uindex_t p_new_size)
+    {
+        return MCMemoryResizeArray(p_new_size, m_ptr, m_size);
+    }
+    
+    bool Extend(uindex_t p_new_size)
+    {
+        MCAssert(p_new_size >= m_size);
+        return Resize(p_new_size);
+    }
+    
+    void Shrink(uindex_t p_new_size)
+    {
+        MCAssert(p_new_size <= m_size);
+        Resize(p_new_size);
+    }
+    
+    //////////
+    
+    bool Push(T p_value)
+    {
+        if (!Extend(m_size + 1))
+            return false;
+        m_ptr[m_size - 1] = p_value;
+        return true;
+    }
+    
+    //////////
+    
+    T*& PtrRef()
+    {
+        MCAssert(m_ptr == nil);
+        return m_ptr;
+    }
+    
+    uindex_t& SizeRef()
+    {
+        MCAssert(m_size == 0);
+        return m_size;
+    }
+    
+    //////////
+    
+    void Take(T*& r_array, uindex_t& r_count)
+    {
+        r_array = m_ptr;
+        r_count = m_size;
+        
+        m_ptr = nil;
+        m_size = 0;
+    }
+    
+    //////////
+    
+    T& operator [] (uindex_t p_index)
+    {
+        return m_ptr[p_index];
+    }
+    
+    const T& operator [] (uindex_t p_index) const
+    {
+        return m_ptr[p_index];
+    }
+    
+private:
+    T *m_ptr = nullptr;
+    uindex_t m_size = 0;
 };
 
 // Version of MCAutoArray that applies the provided deallocator to each element of the array when freed
@@ -1259,12 +1392,12 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class MCAutoNativeCharArray
+template <typename T, MCStringEncoding ENCODING> class MCAutoCharArray
 {
 public:
-    constexpr MCAutoNativeCharArray() = default;
+    constexpr MCAutoCharArray() = default;
 
-	~MCAutoNativeCharArray(void)
+	~MCAutoCharArray(void)
 	{
 		if (m_chars != nil)
 			MCMemoryDeleteArray(m_chars);
@@ -1272,7 +1405,7 @@ public:
 
 	//////////
 
-	char_t *Chars(void) const
+	T *Chars(void) const
 	{
 		return m_chars;
 	}
@@ -1284,7 +1417,7 @@ public:
 
 	//////////
 	
-	void Give(char_t *p_chars, uindex_t p_char_count)
+	void Give(T *p_chars, uindex_t p_char_count)
 	{
 		MCAssert(m_chars == nil);
 		m_chars = p_chars;
@@ -1329,12 +1462,12 @@ public:
 
 	bool CreateString(MCStringRef& r_string)
 	{
-		return MCStringCreateWithNativeChars(m_chars, m_char_count, r_string);
+		return MCStringCreateWithBytes(m_chars, m_char_count * sizeof(T), ENCODING, false, r_string);
 	}
 
 	bool CreateStringAndRelease(MCStringRef& r_string)
 	{
-		if (MCStringCreateWithNativeChars(m_chars, m_char_count, r_string))
+		if (MCStringCreateWithBytes(m_chars, m_char_count * sizeof(T), ENCODING, false, r_string))
 		{
             MCMemoryDeleteArray(m_chars);
 			m_chars = nil;
@@ -1345,9 +1478,14 @@ public:
 	}
 
 private:
-	char_t *m_chars = nullptr;
+	T *m_chars = nullptr;
 	uindex_t m_char_count = 0;
 };
+
+typedef MCAutoCharArray<char_t, kMCStringEncodingNative> MCAutoNativeCharArray;
+typedef MCAutoCharArray<char_t, kMCStringEncodingUTF8> MCAutoUTF8CharArray;
+
+//////////
 
 class MCAutoByteArray
 {

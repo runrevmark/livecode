@@ -22,11 +22,11 @@ IF "%2"=="" (
 	SET ARCH=%2
 )
 
-SET PREBUILT_LIBS=openssl curl icu
+SET PREBUILT_LIBS=OpenSSL Curl ICU CEF thirdparty
 
 ECHO Building Libs %PREBUILT_LIBS%
 
-SET TOOL=14
+SET TOOL=15
 FOR %%L IN (%PREBUILT_LIBS%) DO (
 	SET PREBUILT_LIB=%%L
 

@@ -81,7 +81,7 @@ extern bool MCS_resolvepath(MCStringRef p_path, MCStringRef& r_resolved_path);
 extern void MCS_getcurdir(MCStringRef& r_path);
 /* LEGACY */ extern char *MCS_getcurdir();
 extern Boolean MCS_setcurdir(MCStringRef p_path);
-extern bool MCS_getentries(MCStringRef p_folder, bool p_files, bool p_detailed, MCListRef& r_list);
+extern bool MCS_getentries(MCStringRef p_folder, bool p_files, bool p_detailed, bool p_utf8, MCListRef& r_list);
 
 extern bool MCS_getDNSservers(MCListRef& r_list);
 extern Boolean MCS_getdevices(MCStringRef& r_list);
@@ -100,7 +100,7 @@ extern Boolean MCS_rmdir(MCStringRef path);
 extern uint4 MCS_getpid();
 extern bool MCS_getaddress(MCStringRef& r_string);
 extern bool MCS_getmachine(MCStringRef& r_string);
-extern MCNameRef MCS_getprocessor();
+extern bool MCS_getprocessor(MCStringRef& r_string);
 extern real8 MCS_getfreediskspace(void);
 extern bool MCS_getsystemversion(MCStringRef& r_string);
 extern bool MCS_loadtextfile(MCStringRef p_filename, MCStringRef& r_text);
@@ -164,6 +164,7 @@ extern bool MCS_changeprocesstype(bool to_foreground);
 
 extern bool MCS_isinteractiveconsole(int);
 extern bool MCS_isnan(double p_value);
+extern bool MCS_isfinite(double p_number);
 
 extern bool MCS_mcisendstring(MCStringRef p_command, MCStringRef& r_result, bool& r_error);
 

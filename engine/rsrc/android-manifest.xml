@@ -6,13 +6,14 @@
           ${INSTALL_LOCATION}>
 ${PUSH_PERMISSIONS}
 ${USES_PERMISSION}${USES_FEATURE}
-  <uses-sdk android:minSdkVersion="${MIN_SDK_VERSION}" android:targetSdkVersion="${MIN_SDK_VERSION}"/>
+  <uses-feature android:glEsVersion="0x00030000"/>
+  <uses-sdk android:minSdkVersion="${MIN_SDK_VERSION}" android:targetSdkVersion="${TARGET_SDK_VERSION}"/>
   <supports-screens
       android:largeScreens="true"
       android:normalScreens="true"
       android:smallScreens="true"
       android:anyDensity="true" />
-  <application android:label="${LABEL}" ${ICON} android:debuggable="false">
+  <application android:label="${LABEL}" ${ICON} android:debuggable="false" ${ALLOW_HTTP_CONNECTIONS}>
     <activity android:name="${NAME}"
       android:theme="${THEME}"
       android:screenOrientation="${ORIENTATION}"

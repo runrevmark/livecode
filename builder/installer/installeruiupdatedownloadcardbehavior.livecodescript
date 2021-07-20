@@ -57,7 +57,7 @@ private command downloadNewVersion pUrl, pCheckSum, pDestination
       put urlEncode(the last item of pURL) into the last item of pURL
       set the itemDel to comma
       libURLSetStatusCallback "downloadLatestRevisionUpdates", the long id of me
-      load URL pURL with message "downloadLatestRevisionComplete"
+      libURLDownloadToFile pUrl, sFileName, "downloadLatestRevisionComplete"
    else
       
       -- The file already exists execute it
@@ -77,7 +77,6 @@ end downloadNewVersion
 --
 on downloadLatestRevisionComplete pURL, pStatus
    if pStatus is among the words "downloaded cached" then
-      put URL the uRemoteURL of me into URL ("binfile:" & sFileName)
       launchDownloadedInstaller
       if the result is not empty then
          set the uError of card "Finish" to the result
@@ -152,12 +151,11 @@ private command launchDownloadedInstaller
                put quote & sFileName & quote && "install" &&  the loc of this stack into tCommand
                break
             case "linux"
-               local tOldPath
-               --put $PATH into tOldPath
-               --set the itemDel to slash
-               --put item 1 to -2 of sFileName into $PATH
-               --put item -1 of sFileName && "install" && the loc of this stack into tCommand
-               --set the itemDel to comma
+               local tChmodResult
+               get shell("chmod +x " & quote & sFileName & quote)
+               if it is not empty then
+                  return "Launching downloaded installer - Setting executable permission failed - " & it
+               end if
                put sFileName && "install" &&  the loc of this stack into tCommand
                break
          end switch
@@ -170,9 +168,7 @@ private command launchDownloadedInstaller
       if the result is not empty then
          return "Could not launch downloaded installer:"  && the result
       end if      
-      if tOldPath is not empty then
-         put tOldPath into $PATH
-      end if      
+        
       return empty
       
    end if

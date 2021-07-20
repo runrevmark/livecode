@@ -1169,7 +1169,6 @@ MCExecEnumTypeElementInfo _kMCInterfaceEncodingElementInfo[] =
 {
 	{ MCnativestring, 0, true },
 	{ MCunicodestring, 1, true },
-	{ MCmixedstring, 2, true },
 };
 
 MCExecEnumTypeInfo _kMCInterfaceEncodingTypeInfo =
@@ -1690,7 +1689,13 @@ void MCObject::GetParentScript(MCExecContext& ctxt, MCStringRef& r_parent_script
 
 void MCObject::SetParentScript(MCExecContext& ctxt, MCStringRef new_parent_script)
 {
-	// MW-2008-10-25: Add the setting logic for parent scripts. This code is a
+    MCObject *t_current_parent = nil;
+    if (parent_script != nil)
+    {
+        t_current_parent = parent_script -> GetParent() -> GetObject();
+    }
+    
+    // MW-2008-10-25: Add the setting logic for parent scripts. This code is a
 	//   modified version of what goes on in MCChunk::getobj when the final
 	//   target for a chunk is an expression. We first parse the string as a
 	//   chunk expression, then attempt to get the object of it. If the object
@@ -1701,6 +1706,13 @@ void MCObject::SetParentScript(MCExecContext& ctxt, MCStringRef new_parent_scrip
 	//   error.
 	if (MCStringIsEmpty(new_parent_script))
 	{
+        if (t_current_parent != nil &&
+            t_current_parent -> getscriptdepth() > 0)
+        {
+            ctxt . LegacyThrow(EE_PARENTSCRIPT_EXECUTING);
+            return;
+        }
+        
 		if (parent_script != NULL)
 			parent_script -> Release();
 		parent_script = NULL;
@@ -1729,12 +1741,6 @@ void MCObject::SetParentScript(MCExecContext& ctxt, MCStringRef new_parent_scrip
 	uint32_t t_part_id;
 	if (t_success)
 		t_success = t_chunk -> getobj(ctxt, t_object, t_part_id, False);
-	
-	MCObject *t_current_parent = nil;
-	if (parent_script != nil)
-	{
-		t_current_parent = parent_script -> GetParent() -> GetObject();
-	}
 	
 	// Check to see if we are already parent-linked to t_object and if so
 	// do nothing.
@@ -3179,7 +3185,7 @@ void MCObject::SetVisible(MCExecContext& ctxt, uint32_t part, bool setting)
     
 	if (dirty)
         // AL-2015-06-30: [[ Bug 15556 ]] Use refactored function to sync mouse focus
-        sync_mfocus();
+        sync_mfocus(true, true);
 }
 
 void MCObject::GetVisible(MCExecContext& ctxt, uint32_t part, bool& r_setting)
@@ -3735,20 +3741,16 @@ void MCObject::SetRectProp(MCExecContext& ctxt, bool p_effective, MCRectangle p_
 
 	if (!MCU_equal_rect(t_rect, rect))
 	{
-		bool needmfocus;
-		needmfocus = false;
-
-		if (opened && getstack() == MCmousestackptr)
+		bool t_sync_mouse = false;
+		if (MCU_point_in_rect(rect, MCmousex, MCmousey))
 		{
-			MCControl *mfocused = MCmousestackptr->getcard()->getmfocused();
-			if (MCU_point_in_rect(rect, MCmousex, MCmousey))
-			{
-				if (!MCU_point_in_rect(t_rect, MCmousex, MCmousey) && isancestorof(mfocused))
-					needmfocus = true;
-			}
-			else
-				if (MCU_point_in_rect(t_rect, MCmousex, MCmousey) && isancestorof(mfocused))
-					needmfocus = true;
+			if (!MCU_point_in_rect(t_rect, MCmousex, MCmousey))
+				t_sync_mouse = true;
+		}
+		else
+		{
+			if (MCU_point_in_rect(t_rect, MCmousex, MCmousey))
+				t_sync_mouse = true;
 		}
 
 		if (gettype() >= CT_GROUP)
@@ -3761,8 +3763,8 @@ void MCObject::SetRectProp(MCExecContext& ctxt, bool p_effective, MCRectangle p_
 		else
 			setrect(t_rect);
 
-		if (needmfocus)
-			MCmousestackptr->getcard()->mfocus(MCmousex, MCmousey);
+		if (t_sync_mouse)
+			sync_mfocus(false, false);
 	}
 }
 
@@ -4722,7 +4724,7 @@ void MCObject::GetRevAvailableVariables(MCExecContext& ctxt, MCNameRef p_key, MC
         r_variables = nil;
 }
 
-void MCObject::GetRevScriptDescription(MCExecContext& ctxt, MCValueRef& r_status)
+void MCObject::GetRevScriptDescription(MCExecContext& ctxt, MCValueRef& r_desc)
 {
     if (!getstack() -> iskeyed())
     {
@@ -4731,15 +4733,27 @@ void MCObject::GetRevScriptDescription(MCExecContext& ctxt, MCValueRef& r_status
     }
     
     MCAutoValueRefBase<MCScriptObjectRef> t_object_ref;
-    
-    if (MCEngineScriptObjectCreate(this, 0, &t_object_ref))
+    if (!MCEngineScriptObjectCreate(this, 0, &t_object_ref))
     {
-        r_status = MCEngineExecDescribeScriptOfScriptObject(*t_object_ref);
-        if (MCExtensionConvertToScriptType(ctxt, r_status))
-            return;
+        ctxt.Throw();
+        return;
     }
     
-    ctxt . Throw();
+    MCValueRef t_desc = MCEngineExecDescribeScriptOfScriptObject(*t_object_ref);
+    if (t_desc == nil)
+    {
+        ctxt.Throw();
+        return;
+    }
+    
+    if (!MCExtensionConvertToScriptType(ctxt, t_desc))
+    {
+        MCValueRelease(t_desc);
+        ctxt.Throw();
+        return;
+    }
+
+    r_desc = t_desc;
 }
 
 void MCObject::GetEffectiveRevScriptDescription(MCExecContext& ctxt, MCValueRef& r_descriptions)
@@ -4764,18 +4778,21 @@ void MCObject::GetEffectiveRevScriptDescription(MCExecContext& ctxt, MCValueRef&
         {
             if (!t_object_ref -> getremoved() && t_object_ref -> getobject() -> getstack() -> iskeyed())
             {
-                MCAutoValueRef t_description;
-                
                 MCAutoValueRefBase<MCScriptObjectRef> t_script_object_ref;
-                
                 if (t_success)
                     t_success = MCEngineScriptObjectCreate(t_object_ref -> getobject(), 0, &t_script_object_ref);
                 
+                MCAutoArrayRef t_description;
+                if (t_success)
+                {
+                    t_description.Give(MCEngineExecDescribeScriptOfScriptObject(*t_script_object_ref,
+                                                                                t_object_ref -> getobject() == this));
+                    t_success = t_description.IsSet();
+                }
+                    
                 MCAutoArrayRef t_object_description;
                 if (t_success)
                 {
-                    t_description = MCEngineExecDescribeScriptOfScriptObject(*t_script_object_ref, t_object_ref -> getobject() == this);
-                
                     MCAutoStringRef t_object_id;
                     t_object_ref -> getobject() -> GetLongId(ctxt, 0, &t_object_id);
                     
@@ -4815,6 +4832,10 @@ void MCObject::GetEffectiveRevScriptDescription(MCExecContext& ctxt, MCValueRef&
     {
         t_value = t_descriptions.Take();
         t_success = MCExtensionConvertToScriptType(ctxt, t_value);
+        if (!t_success)
+        {
+            MCValueRelease(t_value);
+        }
     }
     
     if (!t_success)

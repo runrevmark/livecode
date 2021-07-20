@@ -49,6 +49,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "text.h"
 
 #include "mblandroidjava.h"
+#include "exec-interface.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -269,7 +270,56 @@ bool MCParseParameters(MCParameter*& p_parameters, const char *p_format, ...)
 
 bool MCSystemPick(MCStringRef p_options, bool p_use_checkmark, uint32_t p_initial_index, uint32_t& r_chosen_index, MCRectangle p_button_rect)
 {
-	return false;
+	r_chosen_index = 0;
+	
+	MCStringRef *t_options_array = nil;
+	MCPickList *t_pick_list = nil;
+	
+	MCAutoProperListRef t_options_list;
+	uindex_t t_count = 0;
+	
+	// Split the string on new lines
+	bool t_success = true;
+	t_success = MCStringSplitByDelimiter(p_options, kMCLineEndString, kMCStringOptionCompareExact, &t_options_list);
+	
+	if (t_success)
+	{
+		t_count = MCProperListGetLength(*t_options_list);
+		t_success = MCMemoryNewArray(t_count, t_options_array);
+		
+		for (uindex_t i = 0; t_success && i < t_count; i++)
+			t_options_array[i] = static_cast<MCStringRef>(MCProperListFetchElementAtIndex(*t_options_list, i));
+	}
+	
+	if (t_success)
+	{
+		t_success = MCMemoryNew(t_pick_list);
+		
+		t_pick_list -> options = t_options_array;
+		t_pick_list -> option_count = t_count;
+		t_pick_list -> initial = p_initial_index;
+	}
+	
+	if (t_success)
+	{
+		uindex_t *t_result = nil;
+		uint32_t t_chosen_index;
+		
+		bool t_cancelled;
+		
+		t_success = MCSystemPickOption(t_pick_list, 1, t_result, t_chosen_index, p_use_checkmark, false, false, false, t_cancelled, p_button_rect);
+		
+		r_chosen_index = t_cancelled ? 0 : *t_result;
+	}
+	
+	if (t_success)
+	{
+		// cleanup
+		MCMemoryDeleteArray(t_options_array);
+		MCMemoryDelete(t_pick_list);
+	}
+	
+	return t_success;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -509,21 +559,21 @@ void MCAndroidSearchKey()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int32_t MCMiscAndroidKeyboardEnumFromMCExecEnum(MCMiscKeyboardType p_type)
+int32_t MCInterfaceAndroidKeyboardEnumFromMCExecEnum(MCInterfaceKeyboardType p_type)
 {
     switch(p_type)
     {
-        case kMCMiscKeyboardTypeAlphabet:
+        case kMCInterfaceKeyboardTypeAlphabet:
             return 1;
-        case kMCMiscKeyboardTypeDecimal:
+        case kMCInterfaceKeyboardTypeDecimal:
             return 1;
-        case kMCMiscKeyboardTypeNumeric:
+        case kMCInterfaceKeyboardTypeNumeric:
             return 3;
-        case kMCMiscKeyboardTypeNumber:
+        case kMCInterfaceKeyboardTypeNumber:
             return 2;
-        case kMCMiscKeyboardTypePhone:
+        case kMCInterfaceKeyboardTypePhone:
             return 4;
-        case kMCMiscKeyboardTypeEmail:
+        case kMCInterfaceKeyboardTypeEmail:
             return 5;
         default:
             return 1;
@@ -532,19 +582,13 @@ static int32_t MCMiscAndroidKeyboardEnumFromMCExecEnum(MCMiscKeyboardType p_type
 
 bool MCSystemSetKeyboardType(intenum_t p_type)
 {
-    int32_t t_type = MCMiscAndroidKeyboardEnumFromMCExecEnum((MCMiscKeyboardType)p_type);
+    int32_t t_type = MCInterfaceAndroidKeyboardEnumFromMCExecEnum((MCInterfaceKeyboardType)p_type);
     
     g_android_keyboard_type = t_type;
     
 	MCAndroidEngineRemoteCall("setTextInputMode", "vi", nil, g_android_keyboard_type);
     
     return true;
-}
-
-bool MCSystemSetKeyboardReturnType(intenum_t p_type)
-{
-    // not implemented on Android
-    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -611,6 +655,12 @@ bool MCSystemGetPixelDensity(real64_t& r_density)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool MCSystemGetDeviceModel(MCStringRef& p_model)
+{
+    // Not implemented
+    return false;
+}
+
 bool MCSystemGetDeviceResolution(MCStringRef& p_resolution)
 {
     // Not implemented
@@ -635,6 +685,12 @@ bool MCSystemGetSystemIdentifier(MCStringRef& r_identifier)
     return false;
 }
 
+bool MCSystemGetTrackingAuthorizationStatus (MCStringRef& r_status)
+{
+    // not supported on Android
+    return false;
+}
+
 bool MCSystemGetApplicationIdentifier(MCStringRef& r_identifier)
 {
     // not implemented on Android
@@ -653,9 +709,40 @@ bool MCSystemGetReachabilityTarget(MCStringRef& r_target)
     return false;
 }
 
+int32_t MCInterfaceAndroidReturnKeyTypeEnumFromMCExecEnum(MCInterfaceReturnKeyType p_type)
+{
+    switch(p_type)
+    {
+        case kMCInterfaceReturnKeyTypeGo:
+            return 0x2; // IME_ACTION_GO
+        case kMCInterfaceReturnKeyTypeNext:
+            return 0x5; // IME_ACTION_NEXT
+        case kMCInterfaceReturnKeyTypeSearch:
+            return 0x3; // IME_ACTION_SEARCH
+        case kMCInterfaceReturnKeyTypeSend:
+            return 0x4; // IME_ACTION_SEND
+        case kMCInterfaceReturnKeyTypeDone:
+            return 0x6; // IME_ACTION_DONE
+        case kMCInterfaceReturnKeyTypeDefault:
+            return 0x40000000 | 0x6; // IME_FLAG_NO_ENTER_ACTION | IME_ACTION_DONE
+        default:
+            return 0x0; // IME_ACTION_UNSPECIFIED
+    }
+}
+
 bool MCSystemSetKeyboardReturnKey(intenum_t p_type)
 {
-    return false;
+    int32_t t_type = MCInterfaceAndroidReturnKeyTypeEnumFromMCExecEnum(static_cast<MCInterfaceReturnKeyType>(p_type));
+    MCAndroidEngineRemoteCall("setKeyboardReturnKey", "vi", nullptr, t_type);
+    
+    return true;
+}
+
+
+bool MCSystemSetKeyboardDisplay(intenum_t p_type)
+{
+    MCAndroidEngineRemoteCall("setKeyboardDisplay", "vi", nullptr, p_type);
+    return true;
 }
 
 // SN-2014-12-18: [[ Bug 13860 ]] Parameter added in case it's a filename, not raw data, in the DataRef
@@ -664,6 +751,10 @@ bool MCSystemExportImageToAlbum(MCStringRef& r_save_result, MCDataRef p_raw_data
     // SN-2015-01-05: [[ Bug 11417 ]] The file extension has a trailing '\n', which causes issues on Android.
     MCAutoStringRef t_android_filetype;
     MCStringCopySubstring(p_file_extension, MCRangeMake(0, MCStringGetLength(p_file_extension) - 1), &t_android_filetype);
+    
+    if (!MCAndroidCheckRuntimePermission(MCSTR("android.permission.WRITE_EXTERNAL_STORAGE")))
+        return false;
+    
     MCAndroidEngineCall("exportImageToAlbum", "xdxx", &r_save_result, p_raw_data, p_file_name, *t_android_filetype);
     
     return true;
@@ -683,7 +774,7 @@ bool MCS_getnetworkinterfaces(MCStringRef& r_interfaces)
     MCAutoStringRef t_interfaces;
 	MCAndroidEngineCall("getNetworkInterfaces", "x", &(&t_interfaces));
 
-	if (*t_interfaces == nil)
+    if (MCStringIsEmpty(*t_interfaces))
 		r_interfaces = MCValueRetain(kMCEmptyString);
 	else
 		r_interfaces = MCValueRetain(*t_interfaces);
@@ -749,6 +840,26 @@ bool MCSystemFileGetDataProtection(MCStringRef p_path, MCStringRef& r_protection
 bool MCSystemBuildInfo(MCStringRef p_key, MCStringRef& r_value)
 {
     return MCAndroidGetBuildInfo(p_key, r_value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool MCSystemRequestPermission(MCStringRef p_permission, bool& r_granted)
+{
+    r_granted = MCAndroidCheckRuntimePermission(p_permission);
+    return true;
+}
+
+bool MCSystemPermissionExists(MCStringRef p_permission, bool& r_exists)
+{
+    r_exists = MCAndroidCheckPermissionExists(p_permission);
+    return true;
+}
+
+bool MCSystemHasPermission(MCStringRef p_permission, bool& r_permission_granted)
+{
+    r_permission_granted = MCAndroidHasPermission(p_permission);
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

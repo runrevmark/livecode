@@ -27,11 +27,8 @@ Returns (enum):
 The <recordCompressionTypes> <function> <return|returns> a list of
 available audio <codec|codecs>, one per <line>. Each <line> consists of
 two <items> :
-
-        - the codec's name
-
-
--   the codec's four: character identifier
+- the codec's name
+- the codec's four-character identifier
 
 
 Description:
@@ -69,7 +66,8 @@ function (control structure), compress (function), qtVersion (function),
 property (glossary), loaded into memory (glossary), return (glossary),
 compress (glossary), QuickTime (glossary), command (glossary),
 codec (glossary), items (keyword), character (keyword), line (keyword),
-dontUseQT (property), recordCompression (property)
+dontUseQT (property), dontUseQTEffects (property), 
+recordCompression (property)
 
 Tags: multimedia
 

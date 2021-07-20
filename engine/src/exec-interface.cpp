@@ -67,211 +67,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "graphics_util.h"
 #include "mcerror.h"
 
-
-////////////////////////////////////////////////////////////////////////////////
-MC_EXEC_DEFINE_MAKE_METHOD(Interface, CustomImagePaletteSettings, 2)
-MC_EXEC_DEFINE_MAKE_METHOD(Interface, OptimalImagePaletteSettings, 2)
-MC_EXEC_DEFINE_MAKE_METHOD(Interface, WebSafeImagePaletteSettings, 1)
-MC_EXEC_DEFINE_MAKE_METHOD(Interface, VisualEffect, 8)
-MC_EXEC_DEFINE_MAKE_METHOD(Interface, VisualEffectArgument, 4)
-
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ScreenColors, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ScreenDepth, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ScreenName, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ScreenRect, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ScreenLoc, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickH, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickV, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickLoc, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickChar, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickText, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickCharChunk, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickChunk, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickLine, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickField, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ClickStack, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, Mouse, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseClick, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseColor, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseH, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseV, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseLoc, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseChar, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseText, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseCharChunk, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseChunk, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseLine, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseControl, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MouseStack, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FoundText, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FoundField, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FoundChunk, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FoundLine, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FoundLoc, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedText, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedTextOf, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedChunk, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedChunkOf, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedLine, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedLineOf, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedLoc, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedLocOf, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedField, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedImage, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, SelectedObject, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, CapsLockKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, CommandKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ControlKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, OptionKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ShiftKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, EventCapsLockKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, EventCommandKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, EventControlKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, EventOptionKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, EventShiftKey, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, KeysDown, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MainStacks, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, OpenStacks, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, Stacks, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, TopStack, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, TopStackOf, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FocusedObject, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ColorNames, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, FlushEvents, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, GlobalLoc, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, LocalLoc, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, MovingControls, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, WaitDepth, 1)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, Intersect, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, IntersectWithThreshold, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, Within, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ThereIsAnObject, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ThereIsNotAnObject, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ControlAtLoc, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Interface, ControlAtScreenLoc, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Beep, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ClickCmd, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CloseStack, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CloseDefaultStack, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Drag, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, FocusOnNothing, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, FocusOn, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Grab, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GroupControls, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GroupSelection, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopToLast, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Pop, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PushRecentCard, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PushCurrentCard, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PushCard, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PlaceGroupOnCard, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, RemoveGroupFromCard, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ResetCursors, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ResetTemplate, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Revert, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, RevertStack, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SelectEmpty, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SelectAllTextOfField, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SelectAllTextOfButton, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SelectTextOfField, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SelectTextOfButton, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SelectObjects, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, StartEditingGroup, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, StopEditingDefaultStack, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, StopEditingGroup, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, StopMovingObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Type, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Undo, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UngroupObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UngroupSelection, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CopyObjectsToContainer, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CutObjectsToContainer, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Delete, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DeleteObjects, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DeleteObjectChunks, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DisableChunkOfButton, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, EnableChunkOfButton, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnhiliteChunkOfButton, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HiliteChunkOfButton, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DisableObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, EnableObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnhiliteObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HiliteObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SaveStack, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SaveStackAs, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, MoveObjectBetween, 7)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, MoveObjectAlong, 8)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HideGroups, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HideObject, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HideObjectWithEffect, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HideMenuBar, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, HideTaskBar, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowGroups, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowAllCards, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowMarkedCards, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowCards, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowObject, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowObjectWithEffect, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowMenuBar, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ShowTaskBar, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopupWidget, 3);
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopupButton, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DrawerStack, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DrawerStackByName, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DrawerStackLegacy, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, DrawerStackByNameLegacy, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SheetStack, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SheetStackByName, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, OpenStack, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, OpenStackByName, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopupStack, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PopupStackByName, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CreateStack, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CreateStackWithGroup, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CreateCard, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, CreateControl, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Clone, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, Find, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PutIntoObject, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, PutIntoField, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, LockCursor, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, LockMenus, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, LockMoves, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, LockRecent, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, LockScreen, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, LockScreenForEffect, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnlockCursor, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnlockMenus, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnlockMoves, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnlockRecent, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnlockScreen, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, UnlockScreenWithEffect, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ImportSnapshotOfScreen, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ImportSnapshotOfStack, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ImportSnapshotOfObject, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ImportAudioClip, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ImportVideoClip, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ImportImage, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportSnapshotOfScreen, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportSnapshotOfScreenToFile, 6)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportSnapshotOfStack, 7)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportSnapshotOfStackToFile, 8)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportSnapshotOfObject, 8)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportSnapshotOfObjectToFile, 9)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportImage, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ExportImageToFile, 6)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SortCardsOfStack, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SortField, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, SortContainer, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, ChooseTool, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GoCardAsMode, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GoCardInWindow, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GoRecentCard, 0)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GoCardRelative, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GoCardEnd, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, GoHome, 1)
-MC_EXEC_DEFINE_EXEC_METHOD(Interface, VisualEffect, 1)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 static MCExecEnumTypeElementInfo _kMCInterfaceWindowPositionElementInfo[] =
@@ -354,8 +149,12 @@ void MCInterfaceVisualEffectFree(MCExecContext& ctxt, MCInterfaceVisualEffect& p
 {
 	MCValueRelease(p_effect . name);
 	MCValueRelease(p_effect . sound);
-	for (uindex_t i = 0; i < p_effect . nargs; i++)
-		MCInterfaceVisualEffectArgumentFree(ctxt, p_effect . arguments[i]);
+	if (p_effect . arguments != nil)
+	{
+		for (uindex_t i = 0; i < p_effect . nargs; i++)
+			MCInterfaceVisualEffectArgumentFree(ctxt, p_effect . arguments[i]);
+		MCMemoryDeallocate(p_effect . arguments);
+	}
 }
 
 static MCExecCustomTypeInfo _kMCInterfaceVisualEffectTypeInfo =
@@ -444,6 +243,7 @@ void MCInterfaceMakeWebSafeImagePaletteSettings(MCExecContext& ctxt, MCInterface
 
 void MCInterfaceMakeVisualEffect(MCExecContext& ctxt, MCStringRef name, MCStringRef sound, MCInterfaceVisualEffectArgument *effect_args, uindex_t count, Visual_effects type, Visual_effects direction, Visual_effects speed, Visual_effects image, MCInterfaceVisualEffect& r_effect)
 {
+	MCMemoryClear(r_effect);
 	if (MCMemoryAllocate(count * sizeof(MCInterfaceVisualEffectArgument), r_effect . arguments))
 	{
 		for (uindex_t i = 0; i < count; i++)
@@ -1245,7 +1045,7 @@ void MCInterfaceEvalKeysDown(MCExecContext& ctxt, MCStringRef& r_string)
 
 void MCInterfaceEvalMouse(MCExecContext& ctxt, integer_t p_which, MCNameRef& r_result)
 {
-	Boolean t_abort;
+	Boolean t_abort = false;
 	r_result = MCInterfaceKeyConditionToName(MCscreen->getmouse(p_which, t_abort) != 0);
 	MCValueRetain(r_result);
 	if (t_abort)
@@ -2927,9 +2727,25 @@ void MCInterfaceExecPopupWidget(MCExecContext &ctxt, MCNameRef p_kind, MCPoint *
 	
 	MCPoint t_at;
 	if (p_at != nil)
-		t_at = *p_at;
+    {
+        if (!MCtargetptr)
+        {
+            ctxt . LegacyThrow(EE_SUBWINDOW_NOSTACK);
+            return;
+        }
+        
+		t_at = MCtargetptr->getstack()->stacktogloballoc(*p_at);
+    }
 	else
-		t_at = MCPointMake(MCmousex, MCmousey);
+    {
+        if (!MCmousestackptr)
+        {
+            ctxt . LegacyThrow(EE_SUBWINDOW_NOSTACK);
+            return;
+        }
+        
+		t_at = MCmousestackptr->stacktogloballoc(MCPointMake(MCmousex, MCmousey));
+    }
 	
 	MCAutoValueRef t_result;
 	if (!MCWidgetPopupAtLocationWithProperties(p_kind, t_at, p_properties, &t_result) || MCValueIsEmpty(*t_result))
@@ -3365,7 +3181,7 @@ void MCInterfaceExecCreateControl(MCExecContext& ctxt, MCStringRef p_new_name, i
 		t_object->setstringprop(ctxt, 0, P_NAME, False, p_new_name);
 
     // AL-2015-06-30: [[ Bug 15556 ]] Ensure mouse focus is synced after creating object
-    t_object -> sync_mfocus();
+    t_object -> sync_mfocus(false, true);
     
 	MCAutoValueRef t_id;
 	t_object->names(P_LONG_ID, &t_id);
@@ -3402,7 +3218,7 @@ void MCInterfaceExecCreateWidget(MCExecContext& ctxt, MCStringRef p_new_name, MC
         t_widget->setstringprop(ctxt, 0, P_NAME, False, p_new_name);
     
     // AL-2015-06-30: [[ Bug 15556 ]] Ensure mouse focus is synced after creating object
-    t_widget -> sync_mfocus();
+    t_widget -> sync_mfocus(false, true);
     
     MCAutoValueRef t_id;
     t_widget->names(P_LONG_ID, &t_id);
@@ -4534,8 +4350,9 @@ void MCInterfaceExecChooseTool(MCExecContext& ctxt, MCStringRef p_input, int p_t
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void MCInterfaceExecGo(MCExecContext& ctxt, MCCard *p_card, MCStringRef p_window, int p_mode, bool p_this_stack, bool p_visible)
+void MCInterfaceExecGo(MCExecContext& ctxt, MCCard *p_card, MCStringRef p_window, int p_mode, bool p_this_stack, MCInterfaceExecGoVisibility p_visibility_type)
 {
+	
 	if (p_card == nil)
     {
         if (MCresult -> isclear())
@@ -4657,11 +4474,14 @@ void MCInterfaceExecGo(MCExecContext& ctxt, MCCard *p_card, MCStringRef p_window
 	MCtrace = False;
 
 	// MW-2007-02-11: [[ Bug 4029 ]] - 'go invisible' fails to close stack window if window already open
-	if (!p_visible && t_stack -> getflag(F_VISIBLE))
+	if (p_visibility_type != kMCInterfaceExecGoVisibilityImplicit)
 	{
 		if (t_stack -> getwindow() != NULL)
 			MCscreen -> closewindow(t_stack -> getwindow());
-		t_stack->setflag(False, F_VISIBLE);
+		if (p_visibility_type == kMCInterfaceExecGoVisibilityExplicitVisible)
+			t_stack->setflag(true, F_VISIBLE);
+		if (p_visibility_type == kMCInterfaceExecGoVisibilityExplicitInvisible)
+			t_stack->setflag(false, F_VISIBLE);
 	}
 
 	// MW-2011-02-27: [[ Bug ]] Make sure that if we open as a sheet, we have a parent pointer!
@@ -4744,14 +4564,14 @@ void MCInterfaceExecGo(MCExecContext& ctxt, MCCard *p_card, MCStringRef p_window
 		ctxt . Throw();
 }
 
-void MCInterfaceExecGoCardAsMode(MCExecContext& ctxt, MCCard *p_card, int p_mode, bool p_visible, bool p_this_stack)
+void MCInterfaceExecGoCardAsMode(MCExecContext& ctxt, MCCard *p_card, int p_mode, MCInterfaceExecGoVisibility p_visibility_type, bool p_this_stack)
 {
-	MCInterfaceExecGo(ctxt, p_card, nil, p_mode, p_this_stack, p_visible);
+	MCInterfaceExecGo(ctxt, p_card, nil, p_mode, p_this_stack, p_visibility_type);
 }
 
-void MCInterfaceExecGoCardInWindow(MCExecContext& ctxt, MCCard *p_card, MCStringRef p_window, bool p_visible, bool p_this_stack)
+void MCInterfaceExecGoCardInWindow(MCExecContext& ctxt, MCCard *p_card, MCStringRef p_window, MCInterfaceExecGoVisibility p_visibility_type, bool p_this_stack)
 {
-	MCInterfaceExecGo(ctxt, p_card, p_window, WM_MODELESS, p_this_stack, p_visible);
+	MCInterfaceExecGo(ctxt, p_card, p_window, WM_MODELESS, p_this_stack, p_visibility_type);
 }
 
 void MCInterfaceExecGoRecentCard(MCExecContext& ctxt)
@@ -4777,7 +4597,7 @@ void MCInterfaceExecGoHome(MCExecContext& ctxt, MCCard *p_card)
 		MCdefaultstackptr->close();
 		MCdefaultstackptr->checkdestroy();
 	}
-	MCInterfaceExecGo(ctxt, p_card, nil, 0, false, true);
+	MCInterfaceExecGo(ctxt, p_card, nil, 0, false, kMCInterfaceExecGoVisibilityImplicit);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

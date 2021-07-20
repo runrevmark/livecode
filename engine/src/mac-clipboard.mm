@@ -59,8 +59,9 @@ MCRawClipboard* MCRawClipboard::CreateSystemClipboard()
 
 MCRawClipboard* MCRawClipboard::CreateSystemSelectionClipboard()
 {
-    // Create a pasteboard internal to LiveCode
-    return new MCMacRawClipboard([NSPasteboard pasteboardWithUniqueName]);
+    // Create a pasteboard internal to LiveCode. Pasteboards created in this
+    // manner must be released using 'releaseGlobally'.
+    return new MCMacRawClipboard([NSPasteboard pasteboardWithUniqueName], true);
 }
 
 MCRawClipboard* MCRawClipboard::CreateSystemDragboard()
@@ -69,11 +70,13 @@ MCRawClipboard* MCRawClipboard::CreateSystemDragboard()
 }
 
 
-MCMacRawClipboard::MCMacRawClipboard(NSPasteboard* p_pasteboard) :
+MCMacRawClipboard::MCMacRawClipboard(NSPasteboard* p_pasteboard,
+                                     bool p_release_globally) :
   MCRawClipboard(),
   m_pasteboard(p_pasteboard),
   m_last_changecount(0),
   m_items(nil),
+  m_release_globally(p_release_globally),
   m_dirty(false),
   m_external_data(false)
 {
@@ -83,6 +86,14 @@ MCMacRawClipboard::MCMacRawClipboard(NSPasteboard* p_pasteboard) :
 MCMacRawClipboard::~MCMacRawClipboard()
 {
     [m_items release];
+    
+    /* If the pasteboard requires global release, then do this before releasing
+     * it in the usual way. */
+    if (m_release_globally)
+    {
+        [m_pasteboard releaseGlobally];
+    }
+    
     [m_pasteboard release];
 }
 
@@ -236,6 +247,12 @@ MCDataRef MCMacRawClipboard::EncodeFileListForTransfer(MCStringRef p_file_path) 
         return NULL;
     if (!MCStringFindAndReplace(*t_modified, MCSTR("%2F"), MCSTR("/"), kMCStringOptionCompareExact))
         return NULL;
+    // Undo the transformation of spaces to '+'
+    if (!MCStringFindAndReplace(*t_modified, MCSTR("+"), MCSTR(" "), kMCStringOptionCompareExact))
+        return NULL;
+    // Properly encode spaces
+    if (!MCStringFindAndReplace(*t_modified, MCSTR(" "), MCSTR("%20"), kMCStringOptionCompareExact))
+        return NULL;
     
     // Add the required "file://" prefix to the path
     if (!MCStringPrepend(*t_modified, MCSTR("file://")))
@@ -315,7 +332,7 @@ MCStringRef MCMacRawClipboard::CopyAsUTI(MCStringRef p_key)
     
     // Convert the UTI to a StringRef
     MCStringRef t_return = NULL;
-    MCStringCreateWithCFString(t_uti, t_return);
+    MCStringCreateWithCFStringRef(t_uti, t_return);
     CFRelease(t_uti);
     return t_return;
 }
@@ -406,8 +423,10 @@ bool MCMacRawClipboardItem::AddRepresentation(MCStringRef p_type, MCDataRef p_by
         if (!FetchRepresentationAtIndex(i))
             return false;
         
-        MCAutoStringRef t_type(m_rep_cache[i]->CopyTypeString());
-        if (MCStringIsEqualTo(*t_type, p_type, kMCStringOptionCompareExact))
+        MCAutoStringRef t_type;
+        t_type.Give(m_rep_cache[i]->CopyTypeString());
+        if (t_type.IsSet() &&
+            MCStringIsEqualTo(*t_type, p_type, kMCStringOptionCompareExact))
         {
             // This is the rep we're looking for
             t_rep = m_rep_cache[i];
@@ -574,7 +593,7 @@ MCStringRef MCMacRawClipboardItemRep::CopyTypeString() const
     
     // Convert the NSString into a StringRef
     MCStringRef t_type_string;
-    if (!MCStringCreateWithCFString((CFStringRef)t_type, t_type_string))
+    if (!MCStringCreateWithCFStringRef((CFStringRef)t_type, t_type_string))
         return NULL;
     
     m_type = t_type_string;
@@ -612,7 +631,7 @@ MCDataRef MCMacRawClipboardItemRep::CopyData() const
         
         // Turn this path into a LiveCode string
         MCAutoStringRef t_path_string;
-        if (!MCStringCreateWithCFString((CFStringRef)t_path, &t_path_string))
+        if (!MCStringCreateWithCFStringRef((CFStringRef)t_path, &t_path_string))
             return NULL;
         
         // Because this needs to return data, UTF-8 encode the result
@@ -626,7 +645,8 @@ MCDataRef MCMacRawClipboardItemRep::CopyData() const
     else if ([m_item isKindOfClass:[NSPasteboardItem class]])
     {
         // Get the type string for this representation (as lookup is by type)
-        MCAutoStringRef t_type_string(CopyTypeString());
+        MCAutoStringRef t_type_string;
+        t_type_string.Give(CopyTypeString());
         if (*t_type_string == NULL)
             return NULL;
         

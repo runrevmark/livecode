@@ -67,6 +67,12 @@ enum MCIPhoneApplicationStatus
 	kMCIPhoneApplicationStatusShutdown,
 };
 
+enum MCIPhoneKeyboardDisplayMode
+{
+    kMCIPhoneKeyboardDisplayModeOver,
+    kMCIPhoneKeyboardDisplayModePan,
+};
+
 @interface MCIPhoneApplication : NSObject <UIApplicationDelegate>
 {
 	// The actual application object (remember this object is only a delegate!).
@@ -132,6 +138,10 @@ enum MCIPhoneApplicationStatus
     bool m_pending_launch_url;
     // We need to know if the application is active before we can send a message
     bool m_did_become_active;
+
+    MCIPhoneKeyboardDisplayMode m_keyboard_display;
+    UIKeyboardType m_keyboard_type;
+    UIReturnKeyType m_return_key_type;
 }
 
 //////////
@@ -227,6 +237,8 @@ enum MCIPhoneApplicationStatus
 - (void)configureKeyboardType: (UIKeyboardType)newKeyboardType;
 // Configure the type of return key.
 - (void)configureReturnKeyType: (UIReturnKeyType)newReturnKeyType;
+// Configure the keyboard display.
+- (void)configureKeyboardDisplay: (MCIPhoneKeyboardDisplayMode)p_mode;
 
 // Get the set of allowed orientations.
 - (uint32_t)allowedOrientations;
@@ -284,8 +296,6 @@ enum MCIPhoneApplicationStatus
 {
 	// The orientation of the current image view.
 	UIInterfaceOrientation m_image_orientation;
-	// The image view currently being displayed.
-	UIImageView *m_image_view;
 }
 
 - (id)init;
@@ -294,8 +304,6 @@ enum MCIPhoneApplicationStatus
 - (BOOL)shouldAutorotate;
 - (NSUInteger)supportedInterfaceOrientations;
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation;
-
-- (void)loadView;
 
 - (void)viewDidLoad;
 - (void)viewDidUnload;
@@ -308,8 +316,6 @@ enum MCIPhoneApplicationStatus
 - (void)willRotateToInterfaceOrientation:(UIInterfaceOrientation)toInterfaceOrientation duration:(NSTimeInterval)duration;
 - (void)willAnimateRotationToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation duration:(NSTimeInterval)duration;
 - (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)fromInterfaceOrientation;
-
-- (void)switchImageToOrientation: (UIInterfaceOrientation)orientation;
 
 @end
 
@@ -393,6 +399,7 @@ void MCIPhoneSwitchViewToOpenGL(void);
 UIKeyboardType MCIPhoneGetKeyboardType(void);
 void MCIPhoneSetKeyboardType(UIKeyboardType type);
 void MCIPhoneSetReturnKeyType(UIReturnKeyType type);
+void MCIPhoneSetKeyboardDisplay(MCIPhoneKeyboardDisplayMode p_mode);
 UIInterfaceOrientation MCIPhoneGetOrientation(void);
 bool MCIPhoneIsEmbedded(void);
 void MCIPhoneBreakWait(void);

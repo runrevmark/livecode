@@ -22,24 +22,24 @@
 
 static MCJavaType MCJavaMapTypeCodeSubstring(MCStringRef p_type_code, MCRange p_range)
 {
-    if (MCStringSubstringIsEqualToCString(p_type_code, p_range, "[",
-                                          kMCStringOptionCompareExact))
-        return kMCJavaTypeArray;
-    
     for (uindex_t i = 0; i < sizeof(type_map) / sizeof(type_map[0]); i++)
     {
-        if (MCStringSubstringIsEqualToCString(p_type_code, p_range, type_map[i] . name, kMCStringOptionCompareExact))
+        if (MCStringSubstringIsEqualToCString(p_type_code,
+                                              MCRangeMake(p_range.offset, 1),
+                                              type_map[i] . name,
+                                              kMCStringOptionCompareExact))
         {
             return type_map[i] . type;
         }
     }
     
-    return kMCJavaTypeObject;
+    return kMCJavaTypeUnknown;
 }
 
-int MCJavaMapTypeCode(MCStringRef p_type_code)
+MCJavaType MCJavaMapTypeCode(MCStringRef p_type_code)
 {
-    return static_cast<int>(MCJavaMapTypeCodeSubstring(p_type_code,MCRangeMake(0,MCStringGetLength(p_type_code))));
+    return MCJavaMapTypeCodeSubstring(p_type_code,
+                                      MCRangeMake(0, MCStringGetLength(p_type_code)));
 }
 
 static bool __GetExpectedTypeCode(MCTypeInfoRef p_type, MCJavaType& r_code)
@@ -86,6 +86,11 @@ static bool __MCTypeInfoConformsToJavaType(MCTypeInfoRef p_type, MCJavaType p_co
     if (!__GetExpectedTypeCode(p_type, t_code))
         return false;
     
+    // At the moment we don't have a separate type for arrays.
+    if (p_code == kMCJavaTypeArray &&
+        t_code == kMCJavaTypeObject)
+        return true;
+    
     return t_code == p_code;
 }
 
@@ -109,6 +114,9 @@ static bool __NextArgument(MCStringRef p_arguments, MCRange& x_range)
         t_length++;
     }
     
+    if (t_next_type == kMCJavaTypeUnknown)
+        return false;
+    
     if (t_next_type == kMCJavaTypeObject)
     {
         if (!MCStringFirstIndexOfChar(p_arguments, ';', x_range . offset, kMCStringOptionCompareExact, t_length))
@@ -116,6 +124,9 @@ static bool __NextArgument(MCStringRef p_arguments, MCRange& x_range)
         
         // Consume the ;
         t_length++;
+        
+        // Correct the length for the starting point
+        t_length -= x_range.offset;
     }
     
     x_range . length = t_length;
@@ -198,7 +209,7 @@ bool MCJavaPrivateCheckSignature(MCTypeInfoRef p_signature, MCStringRef p_args, 
             return __MCTypeInfoConformsToJavaType(t_return_type, kMCJavaTypeVoid);
         default:
         {
-            auto t_return_code = static_cast<MCJavaType>(MCJavaMapTypeCode(p_return));
+            auto t_return_code = MCJavaMapTypeCode(p_return);
             return __MCTypeInfoConformsToJavaType(t_return_type, t_return_code);
         }
     }
@@ -265,6 +276,31 @@ extern void MCJavaDetachCurrentThread();
 static JNIEnv *s_env;
 static JavaVM *s_jvm;
 
+/* The MCJavaAutoLocalRef class should be used to hold a local-ref which is
+ * transient. */
+template<typename T>
+class MCJavaAutoLocalRef
+{
+public:
+    MCJavaAutoLocalRef(T p_object)
+        : m_object(p_object)
+    {
+    }
+    
+    ~MCJavaAutoLocalRef(void)
+    {
+        s_env->DeleteLocalRef(m_object);
+    }
+    
+    operator T (void) const
+    {
+        return m_object;
+    }
+    
+private:
+    T m_object;
+};
+
 #if defined(TARGET_PLATFORM_LINUX) || defined(TARGET_PLATFORM_MACOS_X)
 
 static bool s_weak_link_jvm = false;
@@ -330,14 +366,18 @@ bool initialise_jvm()
     vm_args.version = JNI_VERSION_1_6;
     init_jvm_args(&vm_args);
     
+    char t_option[PATH_MAX];
+    const char *t_option_prefix = "-Djava.class.path=";
+    strcpy(t_option, t_option_prefix);
+    
     const char *t_class_path = getenv("CLASSPATH");
-    if (t_class_path == nullptr)
+    if (t_class_path == nullptr ||
+        strlen(t_option_prefix) + strlen(t_class_path) >= PATH_MAX)
     {
         t_class_path = "/usr/lib/java";
     }
-    
-    char *t_option = strdup("-Djava.class.path=");
-    t_option = strcat(t_option, t_class_path);
+    strcat(t_option, t_class_path);
+    t_option[strlen(t_option_prefix)+strlen(t_class_path)] = '\0';
     
     JavaVMOption* options = new (nothrow) JavaVMOption[1];
     options[0].optionString = t_option;
@@ -346,9 +386,7 @@ bool initialise_jvm()
     vm_args.options = options;
     vm_args.ignoreUnrecognized = false;
     
-    bool t_success = create_jvm(&vm_args);
-    free(t_option);
-    return t_success;
+    return create_jvm(&vm_args);
 #endif
     return true;
 }
@@ -475,14 +513,24 @@ static bool __MCJavaProperListFromJObjectArray(jobjectArray p_obj_array, MCPrope
     {
         MCAutoValueRef t_value;
         
-        jobject t_object = s_env -> GetObjectArrayElement(p_obj_array, i);
+        /* Make sure the fetched jobject (local-ref) is deleted on each iteration */
+        MCJavaAutoLocalRef<jobject> t_object =
+            s_env -> GetObjectArrayElement(p_obj_array, i);
         
-        MCAutoJavaObjectRef t_obj;
-        if (!MCJavaObjectCreate(t_object, &t_obj))
-            return false;
+        if (t_object != nullptr)
+        {
+            MCAutoJavaObjectRef t_obj;
+            if (!MCJavaObjectCreate(t_object, &t_obj))
+                return false;
 
-        if (!MCProperListPushElementOntoBack(*t_list, *t_obj))
-            return false;
+            if (!MCProperListPushElementOntoBack(*t_list, *t_obj))
+                return false;
+        }
+        else
+        {
+            if (!MCProperListPushElementOntoBack(*t_list, kMCNull))
+                return false;
+        }
     }
     
     return MCProperListCopy(*t_list, r_list);
@@ -507,23 +555,24 @@ bool MCJavaObjectCreateNullable(jobject p_object, MCJavaObjectRef &r_object)
 
 static jstring MCJavaGetJObjectClassName(jobject p_obj)
 {
-    jclass t_class = s_env->GetObjectClass(p_obj);
-    
-    jclass javaClassClass = s_env->FindClass("java/lang/Class");
-    
+	MCJavaDoAttachCurrentThread();
+	
+	/* Make sure the fetched class local-refs are deleted on exit */
+    MCJavaAutoLocalRef<jclass> t_class =
+        s_env->GetObjectClass(p_obj);
+    MCJavaAutoLocalRef<jclass> javaClassClass =
+        s_env->FindClass("java/lang/Class");
+
     jmethodID javaClassNameMethod = s_env->GetMethodID(javaClassClass, "getName", "()Ljava/lang/String;");
     
-    jstring className = (jstring)s_env->CallObjectMethod(t_class, javaClassNameMethod);
-    
-    return className;
+    return (jstring)s_env->CallObjectMethod(t_class, javaClassNameMethod);;
 }
 
-static bool __JavaJNIInstanceMethodResult(jobject p_instance, jmethodID p_method_id, jvalue *p_params, int p_return_type, void *r_result)
+static bool __JavaJNIInstanceMethodResult(jobject p_instance, jmethodID p_method_id, jvalue *p_params, MCJavaType p_return_type, void *r_result)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_return_type = static_cast<MCJavaType>(p_return_type);
     
-    switch (t_return_type)
+    switch (p_return_type)
     {
         case kMCJavaTypeBoolean:
         {
@@ -584,7 +633,8 @@ static bool __JavaJNIInstanceMethodResult(jobject p_instance, jmethodID p_method
         case kMCJavaTypeObject:
         case kMCJavaTypeArray:
         {
-            jobject t_result =
+            /* Make sure the returned jobject (local-ref) is deleted on exit */
+            MCJavaAutoLocalRef<jobject> t_result =
                 s_env -> CallObjectMethodA(p_instance, p_method_id, p_params);
             
             MCJavaObjectRef t_result_value;
@@ -596,17 +646,20 @@ static bool __JavaJNIInstanceMethodResult(jobject p_instance, jmethodID p_method
         case kMCJavaTypeVoid:
             s_env -> CallVoidMethodA(p_instance, p_method_id, p_params);
             return true;
+            
+        // Should be unreachable
+        case kMCJavaTypeUnknown:
+            break;
     }
     
     MCUnreachableReturn(false);
 }
 
-static bool __JavaJNIStaticMethodResult(jclass p_class, jmethodID p_method_id, jvalue *p_params, int p_return_type, void *r_result)
+static bool __JavaJNIStaticMethodResult(jclass p_class, jmethodID p_method_id, jvalue *p_params, MCJavaType p_return_type, void *r_result)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_return_type = static_cast<MCJavaType>(p_return_type);
     
-    switch (t_return_type) {
+    switch (p_return_type) {
         case kMCJavaTypeBoolean:
         {
             jboolean t_result =
@@ -666,7 +719,8 @@ static bool __JavaJNIStaticMethodResult(jclass p_class, jmethodID p_method_id, j
         case kMCJavaTypeObject:
         case kMCJavaTypeArray:
         {
-            jobject t_result =
+            /* Make sure the returned jobject (local-ref) is deleted on exit */
+            MCJavaAutoLocalRef<jobject> t_result =
                 s_env -> CallStaticObjectMethodA(p_class, p_method_id, p_params);
             
             MCJavaObjectRef t_result_value;
@@ -678,17 +732,20 @@ static bool __JavaJNIStaticMethodResult(jclass p_class, jmethodID p_method_id, j
         case kMCJavaTypeVoid:
             s_env -> CallStaticVoidMethodA(p_class, p_method_id, p_params);
             return true;
+            
+        // Should be unreachable
+        case kMCJavaTypeUnknown:
+            break;
     }
     
     MCUnreachableReturn(false);
 }
 
-static bool __JavaJNINonVirtualMethodResult(jobject p_instance, jclass p_class, jmethodID p_method_id, jvalue *p_params, int p_return_type, void *r_result)
+static bool __JavaJNINonVirtualMethodResult(jobject p_instance, jclass p_class, jmethodID p_method_id, jvalue *p_params, MCJavaType p_return_type, void *r_result)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_return_type = static_cast<MCJavaType>(p_return_type);
     
-    switch (t_return_type) {
+    switch (p_return_type) {
         case kMCJavaTypeBoolean:
         {
             jboolean t_result =
@@ -748,7 +805,8 @@ static bool __JavaJNINonVirtualMethodResult(jobject p_instance, jclass p_class, 
         case kMCJavaTypeObject:
         case kMCJavaTypeArray:
         {
-            jobject t_result =
+            /* Make sure the returned jobject (local-ref) is deleted on exit */
+            MCJavaAutoLocalRef<jobject> t_result =
                 s_env -> CallNonvirtualObjectMethodA(p_instance, p_class, p_method_id, p_params);
             
             MCJavaObjectRef t_result_value;
@@ -760,17 +818,21 @@ static bool __JavaJNINonVirtualMethodResult(jobject p_instance, jclass p_class, 
         case kMCJavaTypeVoid:
             s_env -> CallNonvirtualVoidMethodA(p_instance, p_class, p_method_id, p_params);
             return true;
+            
+        // Should be unreachable
+        case kMCJavaTypeUnknown:
+            break;
     }
     
     MCUnreachableReturn(false);
 }
 
-static bool __JavaJNIGetFieldResult(jobject p_instance, jfieldID p_field_id, int p_return_type, void *r_result)
+static bool __JavaJNIGetFieldResult(jobject p_instance, jfieldID p_field_id, MCJavaType p_return_type, void *r_result)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_return_type = static_cast<MCJavaType>(p_return_type);
     
-    switch (t_return_type) {
+    switch (p_return_type)
+    {
         case kMCJavaTypeBoolean:
         {
             jboolean t_result =
@@ -830,7 +892,8 @@ static bool __JavaJNIGetFieldResult(jobject p_instance, jfieldID p_field_id, int
         case kMCJavaTypeObject:
         case kMCJavaTypeArray:
         {
-            jobject t_result =
+            /* Make sure the returned jobject (local-ref) is deleted on exit */
+            MCJavaAutoLocalRef<jobject> t_result =
                 s_env -> GetObjectField(p_instance, p_field_id);
             
             MCJavaObjectRef t_result_value;
@@ -840,18 +903,19 @@ static bool __JavaJNIGetFieldResult(jobject p_instance, jfieldID p_field_id, int
             return true;
         }
         case kMCJavaTypeVoid:
+        case kMCJavaTypeUnknown:
             break;
     }
     
     MCUnreachableReturn(false);
 }
 
-static bool __JavaJNIGetStaticFieldResult(jclass p_class, jfieldID p_field_id, int p_field_type, void *r_result)
+static bool __JavaJNIGetStaticFieldResult(jclass p_class, jfieldID p_field_id, MCJavaType p_field_type, void *r_result)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_field_type = static_cast<MCJavaType>(p_field_type);
     
-    switch (t_field_type) {
+    switch (p_field_type)
+    {
         case kMCJavaTypeBoolean:
         {
             jboolean t_result =
@@ -911,7 +975,8 @@ static bool __JavaJNIGetStaticFieldResult(jclass p_class, jfieldID p_field_id, i
         case kMCJavaTypeObject:
         case kMCJavaTypeArray:
         {
-            jobject t_result =
+            /* Make sure the returned jobject (local-ref) is deleted on exit */
+            MCJavaAutoLocalRef<jobject> t_result =
                 s_env -> GetStaticObjectField(p_class, p_field_id);
             
             MCJavaObjectRef t_result_value;
@@ -921,18 +986,18 @@ static bool __JavaJNIGetStaticFieldResult(jclass p_class, jfieldID p_field_id, i
             return true;
         }
         case kMCJavaTypeVoid:
+        case kMCJavaTypeUnknown:
             break;
     }
     
     MCUnreachableReturn(false);
 }
 
-static void __JavaJNISetFieldResult(jobject p_instance, jfieldID p_field_id, const void *p_param, int p_field_type)
+static void __JavaJNISetFieldResult(jobject p_instance, jfieldID p_field_id, const void *p_param, MCJavaType p_field_type)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_field_type = static_cast<MCJavaType>(p_field_type);
     
-    switch (t_field_type)
+    switch (p_field_type)
     {
         case kMCJavaTypeBoolean:
         {
@@ -1006,18 +1071,18 @@ static void __JavaJNISetFieldResult(jobject p_instance, jfieldID p_field_id, con
                                     t_obj);
         }
         case kMCJavaTypeVoid:
+        case kMCJavaTypeUnknown:
             break;
     }
     
     MCUnreachable();
 }
 
-static void __JavaJNISetStaticFieldResult(jclass p_class, jfieldID p_field_id, const void *p_param, int p_field_type)
+static void __JavaJNISetStaticFieldResult(jclass p_class, jfieldID p_field_id, const void *p_param, MCJavaType p_field_type)
 {
     MCJavaDoAttachCurrentThread();
-    auto t_field_type = static_cast<MCJavaType>(p_field_type);
     
-    switch (t_field_type)
+    switch (p_field_type)
     {
         case kMCJavaTypeBoolean:
         {
@@ -1092,6 +1157,7 @@ static void __JavaJNISetStaticFieldResult(jclass p_class, jfieldID p_field_id, c
             return;
         }
         case kMCJavaTypeVoid:
+        case kMCJavaTypeUnknown:
             break;
     }
     
@@ -1101,8 +1167,10 @@ static void __JavaJNISetStaticFieldResult(jclass p_class, jfieldID p_field_id, c
 static bool __JavaJNIConstructorResult(jclass p_class, jmethodID p_method_id, jvalue *p_params, void *r_result)
 {
     MCJavaDoAttachCurrentThread();
-
-    jobject t_result = s_env -> NewObjectA(p_class, p_method_id, p_params);
+    
+    /* Make sure the returned jobject (local-ref) is deleted on exit */
+    MCJavaAutoLocalRef<jobject> t_result =
+        s_env -> NewObjectA(p_class, p_method_id, p_params);
     
     MCJavaObjectRef t_result_value;
     if (!MCJavaObjectCreate(t_result, t_result_value))
@@ -1116,6 +1184,8 @@ static bool __JavaJNIGetParams(void **args, MCTypeInfoRef p_signature, jvalue *&
 {
     uindex_t t_param_count = MCHandlerTypeInfoGetParameterCount(p_signature);
     
+    /* There's no need for any local-ref deletion here as the refs held in the
+     * jvalues will be global-refs. */
     MCAutoArray<jvalue> t_args;
     if (!t_args . New(t_param_count))
         return false;
@@ -1169,7 +1239,8 @@ static bool __JavaJNIGetParams(void **args, MCTypeInfoRef p_signature, jvalue *&
             case kMCJavaTypeDouble:
                 t_args[i].d = *(static_cast<jdouble *>(args[i]));
                 break;
-            default:
+            case kMCJavaTypeVoid:
+            case kMCJavaTypeUnknown:
                 MCUnreachableReturn(false);
         }
     }
@@ -1194,35 +1265,37 @@ static jclass MCJavaPrivateFindClass(MCNameRef p_class_name)
 {
     // The system class loader does not know about LC's android engine
     // classes. We cache the android engine class loader on startup and
-    // call its findClass method to find any classes named
-    // com.runrev.android.<Class>. For all other classes we just use
-    // the JNIEnv FindClass method & system class loader.
-    if (MCStringBeginsWith(MCNameGetString(p_class_name),
-                           MCSTR("com.runrev.android"),
-                           kMCStringOptionCompareExact))
-    {
+    // call its findClass method to find any classes in the com.runrev.android
+    // package, or any custom classes that have been included.
+    // For all other classes we just use the JNIEnv FindClass method &
+    // system class loader.
 #if defined(TARGET_SUBPLATFORM_ANDROID)
-        jstring t_class_string;
-        if (!__MCJavaStringToJString(MCNameGetString(p_class_name), t_class_string))
-            return nullptr;
-        
-        extern void* MCAndroidGetClassLoader(void);
-        jobject t_class_loader = static_cast<jobject>(MCAndroidGetClassLoader());
-        
-        jclass t_class_loader_class = s_env->FindClass("java/lang/ClassLoader");
-        jmethodID t_find_class = s_env->GetMethodID(t_class_loader_class,
-                                                    "findClass",
-                                                    "(Ljava/lang/String;)Ljava/lang/Class;");
-        
-        jobject t_class = s_env->CallObjectMethod(t_class_loader,
-                                                  t_find_class,
-                                                  t_class_string);
-        
-        return static_cast<jclass>(t_class);
-#else
+    jstring t_class_string;
+    if (!__MCJavaStringToJString(MCNameGetString(p_class_name), t_class_string))
         return nullptr;
+    
+    /* The class loader is a global-ref so no need to manage it locally */
+    extern void* MCAndroidGetClassLoader(void);
+    jobject t_class_loader =
+        static_cast<jobject>(MCAndroidGetClassLoader());
+    
+    /* Make sure the class loader class local-ref is deleted on exit */
+    MCJavaAutoLocalRef<jclass> t_class_loader_class =
+        s_env->FindClass("java/lang/ClassLoader");
+    jmethodID t_find_class = s_env->GetMethodID(t_class_loader_class,
+                                                "findClass",
+                                                "(Ljava/lang/String;)Ljava/lang/Class;");
+    
+    /* The class is the return value so don't manage its local-ref here */
+    jobject t_class = s_env->CallObjectMethod(t_class_loader,
+                                              t_find_class,
+                                              t_class_string);
+    if (t_class != nullptr)
+        return static_cast<jclass>(t_class);
+    
+    // Clear the ClassNotFoundException
+    s_env -> ExceptionClear();
 #endif
-    }
     
     MCAutoStringRef t_class_path;
     if (!MCJavaClassNameToPathString(p_class_name, &t_class_path))
@@ -1237,17 +1310,21 @@ static jclass MCJavaPrivateFindClass(MCNameRef p_class_name)
 
 static bool __MCJavaIsHandlerSuitableForListener(MCNameRef p_class_name, MCValueRef p_handlers)
 {
-    jclass t_class_class = s_env->FindClass("java/lang/Class");
+    /* This handler only manipulates java objects locally, so all jobject
+     * (local-refs) are held in auto class instances. */
+    
+    MCJavaAutoLocalRef<jclass> t_class_class = s_env->FindClass("java/lang/Class");
     jmethodID t_get_methods = s_env->GetMethodID(t_class_class, "getMethods",
                                                  "()[Ljava/lang/reflect/Method;");
- 
-    jclass t_class = MCJavaPrivateFindClass(p_class_name);
     
-    jobjectArray t_methods =
+    MCJavaAutoLocalRef<jclass> t_class = MCJavaPrivateFindClass(p_class_name);
+    
+    MCJavaAutoLocalRef<jobjectArray> t_methods =
         static_cast<jobjectArray>(s_env->CallObjectMethod(t_class,
                                                           t_get_methods));
 
-    jclass t_method_class = s_env->FindClass("java/lang/reflect/Method");
+    MCJavaAutoLocalRef<jclass> t_method_class =
+        s_env->FindClass("java/lang/reflect/Method");
     
     jmethodID t_get_parameters = s_env->GetMethodID(t_method_class,
                                                     "getParameterTypes",
@@ -1257,12 +1334,12 @@ static bool __MCJavaIsHandlerSuitableForListener(MCNameRef p_class_name, MCValue
                                                  "getReturnType",
                                                  "()Ljava/lang/Class;");
     
-    jclass t_void_class = s_env->FindClass("java/lang/Void");
+    MCJavaAutoLocalRef<jclass> t_void_class = s_env->FindClass("java/lang/Void");
     jfieldID t_void_type_field = s_env->GetStaticFieldID(t_void_class,
                                                "TYPE",
                                                "Ljava/lang/Class;");
-    jobject t_void_type = s_env-> GetStaticObjectField(t_void_class,
-                                                       t_void_type_field);
+    MCJavaAutoLocalRef<jobject> t_void_type =
+        s_env-> GetStaticObjectField(t_void_class, t_void_type_field);
     
     
     // Lambda to check if a handler is suitable for the given method
@@ -1286,7 +1363,7 @@ static bool __MCJavaIsHandlerSuitableForListener(MCNameRef p_class_name, MCValue
         }
         
         // Ensure the correct number of parameters
-        jobjectArray t_params =
+        MCJavaAutoLocalRef<jobjectArray> t_params =
             static_cast<jobjectArray>(s_env->CallObjectMethod(p_method,
                                                               t_get_parameters));
         uindex_t t_expected_param_count =
@@ -1305,8 +1382,8 @@ static bool __MCJavaIsHandlerSuitableForListener(MCNameRef p_class_name, MCValue
                                                     nullptr);
         }
 
-        jobject t_return_class = s_env->CallObjectMethod(p_method,
-                                                         t_get_return);
+        MCJavaAutoLocalRef<jobject> t_return_class =
+            s_env->CallObjectMethod(p_method, t_get_return);
         MCTypeInfoRef t_return_type = MCHandlerTypeInfoGetReturnType(t_type_info);
         
         // Check the return types match
@@ -1420,30 +1497,40 @@ bool MCJavaCreateInterfaceProxy(MCNameRef p_class_name, MCTypeInfoRef p_signatur
         return false;
     
     MCValueRef t_handlers = *(static_cast<MCValueRef *>(p_args[0]));
-
-    if (!__MCJavaIsHandlerSuitableForListener(p_class_name, t_handlers))
-        return false;
     
-    jclass t_inv_handler_class =
+    if (!__MCJavaIsHandlerSuitableForListener(p_class_name, t_handlers))
+    {
+        return false;
+    }
+    
+    /* Make sure the LCB internal class local-ref is deleted on exit */
+    MCJavaAutoLocalRef<jclass> t_inv_handler_class =
         MCJavaPrivateFindClass(MCNAME("com.runrev.android.LCBInvocationHandler"));
 
     jmethodID t_method = static_cast<jmethodID>(p_method_id);
     
-    jclass t_interface = MCJavaPrivateFindClass(p_class_name);
+    /* Make sure the interface class local-ref is deleted on exit */
+    MCJavaAutoLocalRef<jclass> t_interface =
+        MCJavaPrivateFindClass(p_class_name);
     
     jlong t_handler = reinterpret_cast<jlong>(MCValueRetain(t_handlers));
     
-    jobject t_proxy = s_env->CallStaticObjectMethod(t_inv_handler_class,
-                                                    t_method,
-                                                    t_interface,
-                                                    t_handler);
+    /* Make sure the proxy object local-ref is deleted on exit */
+    MCJavaAutoLocalRef<jobject> t_proxy =
+        s_env->CallStaticObjectMethod(t_inv_handler_class,
+                                      t_method,
+                                      static_cast<jclass>(t_interface),
+                                      t_handler);
+    
     
     MCJavaObjectRef t_result_value;
-    if (!MCJavaObjectCreateNullable(t_proxy, t_result_value))
-        return false;
+    bool t_success = MCJavaObjectCreateNullable(t_proxy, t_result_value);
+    if (t_success)
+    {
+        *(static_cast<MCJavaObjectRef *>(r_result)) = t_result_value;
+    }
     
-    *(static_cast<MCJavaObjectRef *>(r_result)) = t_result_value;
-    return true;
+    return t_success;
 }
 
 bool MCJavaPrivateCallJNIMethodOnEnv(void *p_env, MCNameRef p_class_name, void *p_method_id, int p_call_type, MCTypeInfoRef p_signature, void *r_return, void **p_args, uindex_t p_arg_count)
@@ -1460,13 +1547,15 @@ bool MCJavaPrivateCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p
 {
     if (p_method_id == nullptr)
         return false;
-
+    
     uindex_t t_param_count = MCHandlerTypeInfoGetParameterCount(p_signature);
     
     MCJavaType t_return_type;
     if (!__GetExpectedTypeCode(MCHandlerTypeInfoGetReturnType(p_signature), t_return_type))
         return false;
     
+    /* Any refs in the jvalue array here are global-refs (as they come from
+     * MCJavaObject values) so they don't need to be managed. */
     jvalue *t_params = nullptr;
     if (p_call_type != MCJavaCallTypeInterfaceProxy &&
         !__JavaJNIGetParams(p_args, p_signature, t_params))
@@ -1488,7 +1577,9 @@ bool MCJavaPrivateCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p
         case MCJavaCallTypeConstructor:
         {
             MCAssert(t_return_type == kMCJavaTypeObject);
-            jclass t_target_class = MCJavaPrivateFindClass(p_class_name);
+            /* Make sure the target class local-ref is deleted on exit */
+            MCJavaAutoLocalRef<jclass> t_target_class =
+                MCJavaPrivateFindClass(p_class_name);
             if (!__JavaJNIConstructorResult(t_target_class,
                                             static_cast<jmethodID>(p_method_id),
                                             &t_params[0],
@@ -1524,7 +1615,9 @@ bool MCJavaPrivateCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p
         }
         case MCJavaCallTypeStatic:
         {
-            jclass t_target_class = MCJavaPrivateFindClass(p_class_name);
+            /* Make sure the target class local-ref is deleted on exit */
+            MCJavaAutoLocalRef<jclass> t_target_class =
+                MCJavaPrivateFindClass(p_class_name);
             if (! __JavaJNIStaticMethodResult(t_target_class,
                                               static_cast<jmethodID>(p_method_id),
                                               t_params, t_return_type,
@@ -1537,7 +1630,9 @@ bool MCJavaPrivateCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p
         {
             MCAssert(t_param_count > 0);
             jobject t_instance = t_params[0].l;
-            jclass t_target_class = MCJavaPrivateFindClass(p_class_name);
+            /* Make sure the target class local-ref is deleted on exit */
+            MCJavaAutoLocalRef<jclass> t_target_class =
+                MCJavaPrivateFindClass(p_class_name);
             if (t_param_count > 1)
             {
                 if (!__JavaJNINonVirtualMethodResult(t_instance,
@@ -1591,7 +1686,9 @@ bool MCJavaPrivateCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p
         case MCJavaCallTypeStaticGetter:
         case MCJavaCallTypeStaticSetter:
         {
-            jclass t_target_class = MCJavaPrivateFindClass(p_class_name);
+            /* Make sure the target class local-ref is deleted on exit */
+            MCJavaAutoLocalRef<jclass> t_target_class =
+                MCJavaPrivateFindClass(p_class_name);
             if (p_call_type == MCJavaCallTypeStaticGetter)
             {
                 if (!__JavaJNIGetStaticFieldResult(t_target_class,
@@ -1617,6 +1714,11 @@ bool MCJavaPrivateCallJNIMethod(MCNameRef p_class_name, void *p_method_id, int p
         default:
             MCUnreachableReturn(false);
     }
+
+	/* In the event the method called resulted in engine callbacks that may have
+	 * altered s_env we need to ensure we are making calls on the correct
+	 * environment */
+	MCJavaDoAttachCurrentThread();
     
     // If we got here there were no memory errors. Check the JNI Env for
     // exceptions
@@ -1654,7 +1756,10 @@ bool MCJavaPrivateConvertStringRefToJString(MCStringRef p_string, MCJavaObjectRe
     if (!__MCJavaStringToJString(p_string, t_string))
         return false;
     
-    return MCJavaObjectCreate(t_string, r_object);
+    /* Make sure the created (localref) jobject is deleted on return */
+    MCJavaAutoLocalRef<jstring> t_held_string = t_string;
+    
+    return MCJavaObjectCreate(t_held_string, r_object);
 }
 
 bool MCJavaPrivateConvertJStringToStringRef(MCJavaObjectRef p_object, MCStringRef &r_string)
@@ -1669,7 +1774,10 @@ bool MCJavaPrivateConvertDataRefToJByteArray(MCDataRef p_data, MCJavaObjectRef &
     if (!__MCJavaDataToJByteArray(p_data, t_array))
         return false;
     
-    return MCJavaObjectCreate(t_array, r_object);
+    /* Make sure the created (localref) jobject is deleted on return */
+    MCJavaAutoLocalRef<jbyteArray> t_held_array = t_array;
+    
+    return MCJavaObjectCreate(t_held_array, r_object);
 }
 
 bool MCJavaPrivateConvertJByteArrayToDataRef(MCJavaObjectRef p_object, MCDataRef &r_data)
@@ -1681,7 +1789,11 @@ bool MCJavaPrivateConvertJByteArrayToDataRef(MCJavaObjectRef p_object, MCDataRef
 bool MCJavaPrivateGetJObjectClassName(MCJavaObjectRef p_object, MCStringRef &r_name)
 {
     jobject t_object = static_cast<jobject>(MCJavaObjectGetObject(p_object));
-    jstring t_class_name = MCJavaGetJObjectClassName(t_object);
+    
+    /* Make sure the created (localref) jobject is deleted on return */
+    MCJavaAutoLocalRef<jstring> t_class_name =
+        MCJavaGetJObjectClassName(t_object);
+    
     return __MCJavaStringFromJString(t_class_name, r_name);
 }
 
@@ -1693,7 +1805,9 @@ void* MCJavaPrivateGetMethodId(MCNameRef p_class_name, MCStringRef p_method_name
     
     MCJavaDoAttachCurrentThread();
     
-    jclass t_java_class = MCJavaPrivateFindClass(p_class_name);
+    /* Make sure the created (localref) jobject is deleted on return */
+    MCJavaAutoLocalRef<jclass> t_java_class =
+        MCJavaPrivateFindClass(p_class_name);
     
     void *t_id = nullptr;
     if (t_java_class != nullptr)
@@ -1738,7 +1852,8 @@ void* MCJavaPrivateGetMethodId(MCNameRef p_class_name, MCStringRef p_method_name
             }
             case MCJavaCallTypeInterfaceProxy:
             {
-                jclass t_inv_handler_class =
+                /* Make sure the created (localref) jobject is deleted on return */
+                MCJavaAutoLocalRef<jclass> t_inv_handler_class =
                     MCJavaPrivateFindClass(MCNAME("com.runrev.android.LCBInvocationHandler"));
                 
                 t_id = s_env->GetStaticMethodID(t_inv_handler_class,
@@ -1847,10 +1962,17 @@ jobject MCJavaPrivateDoNativeListenerCallback(jlong p_handler, jstring p_method_
     MCProperListRef t_mutable_list;
     if (!MCProperListMutableCopy(*t_list, t_mutable_list))
         return nullptr;
-    
-    MCErrorRef t_error =
+	
+	/* The handler is run on the script thread and could call code which executes
+	 * MCJavaDoAttachCurrentThread() so we must ensure s_env is reset correctly for the
+	 * current thread */
+	JNIEnv *t_old_env;
+	t_old_env = s_env;
+	MCErrorRef t_error =
         MCHandlerTryToExternalInvokeWithList(static_cast<MCHandlerRef>(t_handler),
                                              t_mutable_list, &t_result);
+	s_env = t_old_env;
+	
     jobject t_return = nullptr;
     if (*t_result != nil)
     {
@@ -1869,6 +1991,10 @@ jobject MCJavaPrivateDoNativeListenerCallback(jlong p_handler, jstring p_method_
     if (t_error != nil)
         MCErrorThrow(t_error);
     
+    /* The return value will be a global ref which might well get deleted when
+     * the t_result value is released, so create a new local-ref here - which is
+     * what is expected as this method is called to return a jobject to a native
+     * method call into C. */
     return s_env->NewLocalRef(t_return);
 }
 #else

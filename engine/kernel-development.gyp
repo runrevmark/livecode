@@ -12,7 +12,7 @@
 		'module_test_sources':
 		[
 			'<@(engine_test_source_files)',
-			'<(SHARED_INTERMEDIATE_DIR)/src/startupstack.cpp',
+			'src/dummystartupstack.cpp',
 		],
 		'module_test_include_dirs':
 		[
@@ -50,7 +50,7 @@
 				'kernel.gyp:kernel',
 
 				'../thirdparty/libopenssl/libopenssl.gyp:libopenssl_stubs',
-				'../thirdparty/libz/libz.gyp:libz',
+				'../prebuilt/thirdparty.gyp:thirdparty_prebuilt_z',
 			],
 			
 			'sources':

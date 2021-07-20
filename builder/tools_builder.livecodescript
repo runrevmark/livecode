@@ -15,7 +15,7 @@ command toolsBuilderRun pPlatform, pEdition, pVersion
    -- If on windows or linux, we can't do anything macosxy due to lack of lipo/strip :o(
    local tEngineFolders
 
-   get "windows linux-x86 linux-x86_64 linux-armv6hf macosx ios android emscripten"
+   get "win-x86 win-x86_64 linux-x86 linux-x86_64 linux-armv6hf macosx ios android-armeabi-v7a android-arm64-v8a android-x86 android-x86_64 emscripten"
       
    repeat for each word tPlatform in it
       builderFetchEngine pVersion, tPlatform
@@ -192,13 +192,18 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    packageCompilerConfigureSource tPackager, "linux-x86", pEngineFolders["linux-x86"]
    packageCompilerConfigureSource tPackager, "linux-x86_64", pEngineFolders["linux-x86_64"]
    packageCompilerConfigureSource tPackager, "linux-armv6-hf", pEngineFolders["linux-armv6hf"]
-   packageCompilerConfigureSource tPackager, "windows", pEngineFolders["windows"]
+   packageCompilerConfigureSource tPackager, "win-x86", pEngineFolders["win-x86"]
+   packageCompilerConfigureSource tPackager, "win-x86_64", pEngineFolders["win-x86_64"]
    packageCompilerConfigureSource tPackager, "ios", pEngineFolders["ios"]
-   packageCompilerConfigureSource tPackager, "android", pEngineFolders["android"]
+   packageCompilerConfigureSource tPackager, "android-armeabi-v7a", pEngineFolders["android-armeabi-v7a"]
+   packageCompilerConfigureSource tPackager, "android-arm64-v8a", pEngineFolders["android-arm64-v8a"]
+   packageCompilerConfigureSource tPackager, "android-x86", pEngineFolders["android-x86"]
+   packageCompilerConfigureSource tPackager, "android-x86_64", pEngineFolders["android-x86_64"]
    packageCompilerConfigureSOurce tPackager, "emscripten", pEngineFolders["emscripten"]
    packageCompilerConfigureSource tPackager, "prebuilt", builderRepoFolder() & slash & "prebuilt"
    packageCompilerConfigureSource tPackager, "repo", builderRepoFolder()
    packageCompilerConfigureSource tPackager, "ext", builderUnpackFolder(pEdition)
+
    if editionIsInPrivateRepo(tEditionType) then
       packageCompilerConfigureSource tPackager, "private", builderPrivateRepoFolder()
    end if
@@ -216,6 +221,8 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    end if
    if pPlatform begins with "linux" then
       packageCompilerConfigureVariable tPackager, "TargetPlatform", "linux"
+   else if pPlatform begins with "win" then
+      packageCompilerConfigureVariable tPackager, "TargetPlatform", "windows"
    else
       packageCompilerConfigureVariable tPackager, "TargetPlatform", pPlatform
    end if
@@ -224,11 +231,11 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    packageCompilerConfigureVariable tPackager, "EscapedVersionTag", tVersionEscaped
    packageCompilerConfigureVariable tPackager, "ProductBranch", char 1 to 3 of pVersion
    packageCompilerConfigureVariable tPackager, "TargetArchitectures", "i386"
-   if pPlatform is "linux-x86" then
+   if pPlatform ends with "-x86" then
       packageCompilerConfigureVariable tPackager, "TargetArchitecture", "x86"
-   else if pPlatform is "linux-x86_64" then
+   else if pPlatform ends with "-x86_64" then
       packageCompilerConfigureVariable tPackager, "TargetArchitecture", "x86_64"
-   else if pPlatform is "linux-armv6hf" then
+   else if pPlatform ends with "-armv6hf" then
       packageCompilerConfigureVariable tPackager, "TargetArchitecture", "armv6-hf"
    end if
    
@@ -244,11 +251,6 @@ private command toolsBuilderMakePackage pVersion, pEdition, pPlatform, pEngineFo
    packageCompilerConfigureVariable tPackager, "ProductTitle", tProductName && getReadableVersion(pVersion)
    packageCompilerConfigureVariable tPackager, "ProductTag", tProductTag & "_" & getTaggedVersion(pVersion)
 
-   -- For Linux only, case-fold the product name to lowercase and
-   -- remove all spaces - we can just use the product tag
-   if pPlatform is "Linux" or pPlatform is "Linux-x86_64" or pPlatform is "Linux-armv6hf" then
-      put tProductTag into tProductName
-   end if
    packageCompilerConfigureVariable tPackager, "ProductName", tProductName
    
    -- The edition tags.
@@ -405,6 +407,7 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    put pVersion into tParams["version"]["ProductVersion"]
    put pVersion into tParams["version"]["FileVersion"]
    
+   # TODO: Add the initialisation library and init libs in same way as normal standalone building
    # AL-2015-03-14: Use deploy parameters to include libURL scriptified stack in installer standalone
    local tAuxStackfiles
    if there is a stack "revLibUrl" then
@@ -415,12 +418,13 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
    put return & builderSystemFolder() & slash & "installer_utilities.livecodescript" after tAuxStackfiles
    put tAuxStackfiles into tParams["auxiliary_stackfiles"]
    
-   // revLibURL needs to initialise its custom props, and revLoadLibrary must therefore be called.
-   put merge("send [[quote]]revLoadLibrary[[quote]] to stack [[quote]]revLibUrl[[quote]]") into tParams["startup_script"]
+   // revLibURL needs to initialise its custom props, and extensionInitialize must therefore be called.
+   put merge("send [[quote]]extensionInitialize[[quote]] to stack [[quote]]revLibUrl[[quote]]") into tParams["startup_script"]
    put return & "insert script of stack" && quote & "InstallerUtilities" & quote && "into back" after tParams["startup_script"]
    
    switch pPlatform
-      case "windows"
+      case "win-x86"
+      case "win-x86_64"
          -- Process the manifest appropriately
          local tManifestFile
          get windowsManifest()
@@ -431,7 +435,7 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
          put tManifestFile into tParams["manifest"]
          
          -- First we deploy the installer unsigned
-         put abstractPinFile(builderInstallerEngine("windows")) into tParams["engine"]
+         put abstractPinFile(builderInstallerEngine(pPlatform)) into tParams["engine"]
          put tInstallerStackfile into tParams["stackfile"] 
          put pPackageFile into tParams["payload"]
          put tOutputFileStub & ".unsigned.exe" into tParams["output"]
@@ -526,8 +530,8 @@ private command toolsBuilderMakeInstaller pVersion, pEdition, pPlatform, pIdeFol
          put tInstallerStackFile into tParams["stackfile"]
          put tOutputFileStub & ".app" & slash & "Contents/MacOS/Installer" into tParams["output"]
          
-         -- We deploy as 32-bit only for now as the 64-bit slice isn't neccessary
-         put "i386" into tParams["architectures"]
+         -- We deploy as 64-bit only as 32-bit apps will be blocked on MacOS 10.15+
+         put "x86-64" into tParams["architectures"]
          
          put url ("binfile:" & pPackageFile) into url ("binfile:" & tOutputFileStub & ".app" & slash & "Contents/Resources/payload")
          
@@ -689,6 +693,44 @@ command toolsBuilderMakeAppBundle pVersion, pEdition, pPlatform
                 builderLog "error", "Could not sign iOS extension:" && it
                 throw "failure"
             end if
+         end repeat
+      end repeat
+      
+      -- Sign any extension code resources
+      local tExtensions
+      put folders(tAppBundle & "/Contents/Tools/Extensions") into tExtensions
+      repeat for each line tExtension in tExtensions
+         local tCodeFolders
+         put folders(tAppBundle & "/Contents/Tools/Extensions/" & tExtension & "/code") into tCodeFolders
+         filter tCodeFolders with "*iphonesimulator*"
+         if tCodeFolders is empty then next repeat
+         
+         
+         repeat for each line tCodeFolder in tCodeFolders
+            local tDylibs
+            filter files(tAppBundle & "/Contents/Tools/Extensions/" & tExtension & "/code/" & tCodeFolder) \
+               with "*.dylib" into tDylibs
+            if tDylibs is empty then next repeat
+            
+            repeat for each line tFile in tDylibs
+               -- Ignore files that aren't dylibs
+               local tFullCodePath
+               put tAppBundle & "/Contents/Tools/Extensions/" & tExtension & "/code/" & tCodeFolder & "/" & tFile into tFullCodePath
+               get shell("file" && escapeArg(tFullCodePath))
+               if "Mach-O" is not among the words of it then next repeat
+
+               clearExtendedAttributes escapeArg(tFullCodePath)
+   			
+               -- Sign the extension
+               -- The "--force" parameter strips the existing signature (which was
+               -- made using a not-valid-for-distribution profile)
+               builderLog "message", "Signing iOS extension" && "'" & tFullCodePath & "'"
+               get shell("/usr/bin/codesign --sign" && word 2 of tSigningId && "--force --verbose=2" && escapeArg(tFullCodePath))
+               if the result is not zero then
+                   builderLog "error", "Could not sign iOS extension:" && it
+                   throw "failure"
+               end if
+            end repeat
          end repeat
       end repeat
 
@@ -897,8 +939,10 @@ function getInstallerFilenameStub pVersion, pPlatform, pEdition
    replace "." with "_" in pVersion
    if pPlatform is "macosx" then
       put "Mac" into pPlatform
-   else if pPlatform is "windows" then
-      put "Windows" into pPlatform
+   else if pPlatform is "win-x86" then
+      put "Windows-x86" into pPlatform
+   else if pPlatform is "win-x86_64" then
+      put "Windows-x86_64" into pPlatform
    else if pPlatform begins with "linux" then
       put "Linux" into pPlatform
    end if
@@ -915,8 +959,10 @@ function getDmgFilenameStub pVersion, pPlatform, pEdition
    replace "." with "_" in pVersion
    if pPlatform is "macosx" then
       put "Mac" into pPlatform
-   else if pPlatform is "windows" then
-      put "Windows" into pPlatform
+   else if pPlatform is "win-x86" then
+      put "Windows-x86" into pPlatform
+   else if pPlatform is "win-x86_64" then
+      put "Windows-x86_64" into pPlatform
    else if pPlatform is "linux" or pPlatform is "linux-x64" or pPlatform is "linux-armv6hf" then
       put "Linux" into pPlatform
    end if

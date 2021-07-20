@@ -553,6 +553,8 @@ void MCMacOSXPrinter::SetProperties(bool p_include_output)
 		t_page_width = ceil(t_width);
 		t_page_height = ceil(t_height);
 
+        if (m_paper != nullptr)
+            PMRelease(m_paper);
         m_paper = t_pm_paper;
         PMRetain(t_pm_paper);
 	}
@@ -2410,7 +2412,7 @@ bool MCListSystemPrinters(MCStringRef &r_names)
     for(CFIndex i = 0; i < CFArrayGetCount(t_printers) && t_success; ++i)
 	{
         MCAutoStringRef t_name;
-        t_success = MCStringCreateWithCFString(PMPrinterGetName((PMPrinter)CFArrayGetValueAtIndex(t_printers, i)), &t_name)
+        t_success = MCStringCreateWithCFStringRef(PMPrinterGetName((PMPrinter)CFArrayGetValueAtIndex(t_printers, i)), &t_name)
                         && MCListAppend(*t_names, *t_name);
 	}
 

@@ -36,7 +36,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "objectstream.h"
 #include "parentscript.h"
 #include "osspec.h"
-#include "syntax.h"
 #include "variable.h"
 
 #include <utility>
@@ -119,7 +118,7 @@ bool MCVariable::encode(void *&r_buffer, uindex_t& r_size)
     }
     else if (MCExecTypeIsNumber(value . type))
     {
-        double t_value;
+        double t_value = 0.0;
         if (value . type == kMCExecValueTypeUInt)
             t_value = (double)value . uint_value;
         else if (value . type == kMCExecValueTypeUInt)
@@ -614,7 +613,8 @@ bool MCVariable::modify_ctxt(MCExecContext& ctxt, MCExecValue p_value, MCVariabl
 
 bool MCVariable::modify_ctxt(MCExecContext& ctxt, MCExecValue p_value, MCSpan<MCNameRef> p_path, MCVariableSettingStyle p_setting)
 {
-    if (p_value . type == kMCExecValueTypeDataRef)
+    if (MCExecTypeIsValueRef(p_value.type) &&
+        MCValueGetTypeCode(p_value.valueref_value) == kMCValueTypeCodeData)
     {
         if (can_become_data(ctxt, p_path))
         {
@@ -1038,26 +1038,33 @@ MCVarref *MCVariable::newvarref(void)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static MCAutoPointer<MCNameRef[]>
-__join_paths(MCSpan<MCNameRef> p_base,
-             MCSpan<MCNameRef> p_extra)
-{
-    MCAutoPointer<MCNameRef[]> t_result =
-            new (nothrow) MCNameRef[p_base.size() + p_extra.size()];
-    if (t_result)
-    {
-        int t_count = 0;
-        for (MCNameRef t_name : p_base)
-            t_result[t_count++] = t_name;
-        for (MCNameRef t_name : p_extra)
-            t_result[t_count++] = t_name;
-    }
-    
-    return t_result;
-}
-
 MCContainer::~MCContainer(void)
 {
+    /* If the path_length < 6, then use fallthrough to release each element
+     * explicitly. This should compile to a 'jump' followed by straight thru
+     * execution on most archs. */
+    switch(m_path_length)
+    {
+    case 6:
+        MCValueRelease(m_short_path[5]);
+    case 5:
+        MCValueRelease(m_short_path[4]);
+    case 4:
+        MCValueRelease(m_short_path[3]);
+    case 3:
+        MCValueRelease(m_short_path[2]);
+    case 2:
+        MCValueRelease(m_short_path[1]);
+    case 1:
+        MCValueRelease(m_short_path[0]);
+    case 0:
+        break;
+    default:
+        for(unsigned i = 0; i < m_path_length; i++)
+            MCValueRelease(m_long_path[i]);
+        MCMemoryDeleteArray(m_long_path);
+        break;
+    }
 }
 
 bool MCContainer::eval(MCExecContext& ctxt, MCValueRef& r_value)
@@ -1065,32 +1072,9 @@ bool MCContainer::eval(MCExecContext& ctxt, MCValueRef& r_value)
     return m_variable -> eval(ctxt, getpath(), r_value);
 }
 
-bool MCContainer::eval_on_path(MCExecContext& ctxt, MCSpan<MCNameRef> p_path, MCValueRef& r_value)
-{
-    MCAutoPointer<MCNameRef[]> t_full_path = __join_paths(m_path.Span(), p_path);
-    
-    if (!t_full_path)
-        return false;
-
-    return m_variable->eval(ctxt,
-                            {*t_full_path, p_path.size() + m_path.Span().size()},
-                            r_value);
-}
-
 bool MCContainer::set(MCExecContext& ctxt, MCValueRef p_value, MCVariableSettingStyle p_setting)
 {
 	return m_variable -> set(ctxt, p_value, getpath(), p_setting);
-}
-
-bool MCContainer::set_on_path(MCExecContext& ctxt, MCSpan<MCNameRef> p_path, MCValueRef p_value)
-{
-    MCAutoPointer<MCNameRef[]> t_full_path = __join_paths(m_path.Span(), p_path);
-    
-    if (!t_full_path)
-        return false;
-    
-    return m_variable->set(ctxt, p_value,
-                           {*t_full_path, p_path.size() + m_path.Span().size()});
 }
 
 bool MCContainer::eval_ctxt(MCExecContext& ctxt, MCExecValue& r_value)
@@ -1120,12 +1104,13 @@ bool MCContainer::remove(MCExecContext& ctxt)
 
 bool MCContainer::set_valueref(MCValueRef p_value)
 {
-	return m_variable -> setvalueref(getpath(), m_case_sensitive, p_value);
+    m_variable -> clearuql();
+    return m_variable -> setvalueref(getpath(), false, p_value);
 }
 
 MCValueRef MCContainer::get_valueref()
 {
-	return m_variable -> getvalueref(getpath(), m_case_sensitive);
+	return m_variable -> getvalueref(getpath(), false);
 }
 
 bool MCContainer::clear(void)
@@ -1135,7 +1120,7 @@ bool MCContainer::clear(void)
 
 bool MCContainer::set_real(double p_real)
 {
-    if (m_path.Count() == 0)
+    if (m_path_length == 0)
     {
         m_variable -> setnvalue(p_real);
         return true;
@@ -1149,28 +1134,12 @@ bool MCContainer::set_real(double p_real)
 
 MCSpan<MCNameRef> MCContainer::getpath()
 {
-    return m_path.Span();
-}
-
-bool MCContainer::createwithvariable(MCVariable *p_var, MCContainer& r_container)
-{
-	r_container.m_variable = p_var;
-    r_container.m_path.Reset();
-	r_container.m_case_sensitive = false;
-	return true;
-}
-
-bool MCContainer::createwithpath(MCVariable *p_var, MCNameRef *p_path, uindex_t p_length, MCContainer& r_container)
-{
-	r_container.m_variable = p_var;
-	r_container.m_path.Give(p_path, p_length);
-	r_container.m_case_sensitive = false;
-	return true;
-}
-
-bool MCContainer::copywithpath(MCContainer *p_container, MCNameRef *p_path, uindex_t p_length, MCContainer& r_container)
-{
-	return createwithpath(p_container -> m_variable, p_path, p_length, r_container);
+    MCNameRef *t_path = nullptr;
+    if (m_path_length <= sizeof(m_short_path) / sizeof(m_short_path[0]))
+        t_path = m_short_path;
+    else
+        t_path = m_long_path;
+    return MCMakeSpan(t_path, m_path_length);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1231,34 +1200,6 @@ void MCVarref::eval_ctxt(MCExecContext &ctxt, MCExecValue &r_value)
 bool MCVarref::evalcontainer(MCExecContext& ctxt, MCContainer& r_container)
 {
     return resolve(ctxt, r_container);
-}
-
-void MCVarref::compile(MCSyntaxFactoryRef ctxt)
-{
-	MCSyntaxFactoryBeginExpression(ctxt, line, pos);
-	MCSyntaxFactoryEvalUnimplemented(ctxt);
-	MCSyntaxFactoryEndExpression(ctxt);
-}
-
-void MCVarref::compile_in(MCSyntaxFactoryRef ctxt)
-{
-	MCSyntaxFactoryBeginExpression(ctxt, line, pos);
-	MCSyntaxFactoryEvalUnimplemented(ctxt);
-	MCSyntaxFactoryEndExpression(ctxt);
-}
-
-void MCVarref::compile_out(MCSyntaxFactoryRef ctxt)
-{
-	MCSyntaxFactoryBeginExpression(ctxt, line, pos);
-	MCSyntaxFactoryEvalUnimplemented(ctxt);
-	MCSyntaxFactoryEndExpression(ctxt);
-}
-
-void MCVarref::compile_inout(MCSyntaxFactoryRef ctxt)
-{
-	MCSyntaxFactoryBeginExpression(ctxt, line, pos);
-	MCSyntaxFactoryEvalUnimplemented(ctxt);
-	MCSyntaxFactoryEndExpression(ctxt);
 }
 
 MCVarref *MCVarref::getrootvarref(void)
@@ -1395,11 +1336,126 @@ bool MCVarref::dofree(MCExecContext& ctxt)
 	return t_container.remove(ctxt);
 }
 
+class MCContainerBuilder
+{
+public:
+    MCContainerBuilder(MCContainer& p_target)
+        : m_container(p_target)
+    {
+    }
+    
+    /* Append a value-ref to the path. If the value-ref is a sequence array then
+     * each element of the sequence will be added (as a value-ref); otherwise
+     * value is converted to a name and appended. */
+    bool AppendValueRef(MCExecContext& ctxt, MCValueRef p_value)
+    {
+        MCValueTypeCode t_code = MCValueGetTypeCode(p_value);
+        if (t_code == kMCValueTypeCodeName)
+            return AppendNameRef((MCNameRef)p_value);
+        else if (t_code != kMCValueTypeCodeArray ||
+                 (MCArrayRef)p_value == kMCEmptyArray)
+            return AppendNonArrayRef(ctxt, p_value);
+        else
+            return AppendArrayRef(ctxt, (MCArrayRef)p_value);
+    }
+    
+    bool AppendNameSpan(MCSpan<MCNameRef> p_path)
+    {
+        for (MCNameRef t_name : p_path)
+            if (!AppendNameRef(t_name))
+                return false;
+        return true;
+    }
+    
+private:
+    bool AppendNonArrayRef(MCExecContext& ctxt, MCValueRef p_value)
+    {
+        MCNewAutoNameRef t_name;
+        if (!ctxt.ConvertToName(p_value, &t_name))
+        {
+            ctxt.LegacyThrow(EE_VARIABLE_BADINDEX);
+            return false;
+        }
+        return AppendNameRef(*t_name);
+    }
+    
+    bool AppendArrayRef(MCExecContext& ctxt, MCArrayRef p_value)
+    {
+        if (!MCArrayIsSequence(p_value))
+        {
+            ctxt . LegacyThrow(EE_VARIABLE_BADINDEX);
+            return false;
+        }
+        
+        uindex_t t_length = MCArrayGetCount(p_value);
+        for(uindex_t t_index = 1; t_index <= t_length; t_index += 1)
+        {
+            MCValueRef t_value_fetched;
+            if (!MCArrayFetchValueAtIndex(p_value, t_index, t_value_fetched))
+                return false;
+            if (!AppendValueRef(ctxt, t_value_fetched))
+                return false;
+        }
+        return true;
+    }
+
+    bool AppendNameRef(MCNameRef p_name)
+    {
+        if (m_container.m_path_length < MCContainer::kShortPathLength)
+        {
+            m_container.m_short_path[m_container.m_path_length++] = MCValueRetain(p_name);
+            return true;
+        }
+        else if (m_container.m_path_length != MCContainer::kShortPathLength)
+        {
+            if (m_container.m_path_length == m_container.m_long_path_capacity)
+            {
+                if (!Extend())
+                    return false;
+            }
+        }
+        else
+        {
+            if (!Switch())
+                return false;
+        }
+        
+        m_container.m_long_path[m_container.m_path_length++] = MCValueRetain(p_name);
+        
+        return true;
+    }
+    
+    bool Extend(void)
+    {
+        return MCMemoryResizeArray(m_container.m_long_path_capacity + MCContainer::kLongPathSegmentLength, 
+                                   m_container.m_long_path,
+                                   m_container.m_long_path_capacity);
+    }
+    
+    bool Switch(void)
+    {
+        MCNameRef *t_long_path;
+        if (!MCMemoryNewArray(MCContainer::kLongPathSegmentLength, t_long_path))
+            return false;
+        MCMemoryCopy(t_long_path, m_container.m_short_path, sizeof(m_container.m_short_path));
+        m_container.m_long_path = t_long_path;
+        m_container.m_long_path_capacity = MCContainer::kLongPathSegmentLength;
+        return true;
+    }
+    
+    MCContainer& m_container;
+};
+
 // Resolve references to the appropriate element refered to by this Varref.
 bool MCVarref::resolve(MCExecContext& ctxt, MCContainer& r_container)
 {
+    MCAssert(r_container.m_variable == nullptr && r_container.m_path_length == 0);
+    
     if (dimensions == 0 && !isparam)
-        return MCContainer::createwithvariable(fetchvar(ctxt), r_container);
+    {
+        r_container.m_variable = fetchvar(ctxt);
+        return true;
+    }
 
 	MCExpression **t_dimensions;
 	if (dimensions == 1)
@@ -1407,73 +1463,31 @@ bool MCVarref::resolve(MCExecContext& ctxt, MCContainer& r_container)
 	else
 		t_dimensions = exps;
     
+    MCContainerBuilder t_builder(r_container);
+    
     // AL-2014-08-20: [[ ArrayElementRefParams ]] If the Varref refers to a container then
     //  resolving the path requires appending the new dimensions to the old path
-    
-	MCNameRef *t_path;
     MCSpan<MCNameRef> t_old_path = getpath(ctxt);
-    uindex_t t_path_length = t_old_path.size();
-    
-    uindex_t t_new_dimension_count;
-	t_new_dimension_count = dimensions + t_path_length;
-
-    /* UNCHECKED */ MCMemoryNewArray(t_new_dimension_count, t_path, t_new_dimension_count);
-
-    for (uindex_t i = 0; i < t_path_length; i++)
-        t_path[i] = MCValueRetain(t_old_path[i]);
-    
-    for(uindex_t i = 0; i < dimensions && !ctxt . HasError(); i++)
+    if (t_old_path.length() > 0)
+        if (!t_builder.AppendNameSpan(t_old_path))
+            return false;
+            
+    for(uindex_t i = 0; i < dimensions; i++)
 	{
         MCAutoValueRef t_value;
-        if (ctxt . EvalExprAsValueRef(t_dimensions[i], EE_VARIABLE_BADINDEX, &t_value))
-        {
-            MCAutoArrayRef t_array;
-
-            if (ctxt . ConvertToArray(*t_value, &t_array)
-                    && !MCArrayIsEmpty(*t_array))
-            {
-                if (!MCArrayIsSequence(*t_array))
-                    ctxt . LegacyThrow(EE_VARIABLE_BADINDEX);
-                else
-				{
-					uindex_t t_length;
-                    t_length = MCArrayGetCount(*t_array);
-                    
-					/* UNCHECKED */ MCMemoryResizeArray(t_new_dimension_count + t_length, t_path, t_new_dimension_count);
-
-					for(uindex_t t_index = 1; t_index <= t_length; t_index += 1)
-                    {
-                        MCValueRef t_value_fetched;
-                        /* UNCHECKED */ MCArrayFetchValueAtIndex(*t_array, t_index, t_value_fetched);
-
-                        if (!ctxt . ConvertToName(t_value_fetched, t_path[t_path_length++]))
-                        {
-                            ctxt . LegacyThrow(EE_VARIABLE_BADINDEX);
-							break;
-						}
-					}
-				}
-			}
-            else if (!ctxt . ConvertToName(*t_value, t_path[t_path_length++]))
-                ctxt . LegacyThrow(EE_VARIABLE_BADINDEX);
-		}
-	}
-
-    if (!ctxt . HasError())
-    {
-        if (isparam)
-            return MCContainer::copywithpath(fetchcontainer(ctxt), t_path, t_path_length, r_container);
-        else
-            return MCContainer::createwithpath(fetchvar(ctxt), t_path, t_path_length, r_container);
+        if (!ctxt . EvalExprAsValueRef(t_dimensions[i], EE_VARIABLE_BADINDEX, &t_value))
+            return false;
+        
+        if (!t_builder.AppendValueRef(ctxt, *t_value))
+            return false;
     }
-	else
-	{
-		for(uindex_t i = 0; i < t_path_length; i++)
-			MCValueRelease(t_path[i]);
-        MCMemoryDeleteArray(t_path);
 
-        return false;
-    }
+    if (!isparam)
+        r_container.m_variable = fetchvar(ctxt);
+    else
+        r_container.m_variable = fetchcontainer(ctxt)->getvar();
+    
+    return true;
 }
 
 MCSpan<MCNameRef> MCVarref::getpath(MCExecContext& ctxt)

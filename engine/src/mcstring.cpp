@@ -632,6 +632,8 @@ MCNameRef MCN_font_message;
 MCNameRef MCN_font_tooltip;
 MCNameRef MCN_font_system;
 
+MCNameRef MCM_system_appearance_changed;
+
 const struct { const char *cstring; MCNameRef *name_var; } kInitialNames[] =
 {
 	{ "msg", &MCN_msg },
@@ -718,12 +720,6 @@ const struct { const char *cstring; MCNameRef *name_var; } kInitialNames[] =
 	{ "bold-italic", &MCN_bold_italic },
 
 	{ "unknown", &MCN_unknown },
-	{ "x86", &MCN_x86 },
-    { "x86_64", &MCN_x86_64 },
-	{ "Motorola PowerPC", &MCN_motorola_powerpc },
-	{ "i386", &MCN_i386 },
-	{ "ARM", &MCN_arm },
-    { "arm64", &MCN_arm64 },
 
 	{ "local Mac", &MCN_local_mac },
 	{ "local Win32", &MCN_local_win32 },
@@ -964,6 +960,7 @@ const struct { const char *cstring; MCNameRef *name_var; } kInitialNames[] =
 	{ "unloadURL", &MCM_unload_url },
 	{ "updateScreen", &MCM_update_screen },
 	{ "updateVariable", &MCM_update_var },
+	{ "systemAppearanceChanged", &MCM_system_appearance_changed },
 
 #ifdef FEATURE_PLATFORM_URL
 	{ "urlProgress", &MCM_url_progress },

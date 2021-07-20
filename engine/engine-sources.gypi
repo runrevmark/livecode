@@ -10,7 +10,9 @@
 			'src/bitmapeffectblur.h',
 			'src/color.h',
 			'src/context.h',
+			'src/customfont.h',
 			'src/font.h',
+			'src/freetype-font.h',
 			'src/gradient.h',
 			'src/graphics_util.h',
 			'src/graphicscontext.h',
@@ -23,15 +25,20 @@
 			'src/redraw.h',
 			'src/region.h',
 			'src/resolution.h',
+			'src/skiatypeface.h',
 			'src/textlayout.h',
 			'src/tilecache.h',
 			'src/bitmapeffect.cpp',
 			'src/bitmapeffectblur.cpp',
 			'src/color.cpp',
 			'src/combiners.cpp',
+			'src/customfont.cpp',
 			'src/customprinter.cpp',
 			'src/font.cpp',
 			'src/fonttable.cpp',
+			'src/freetype-font.cpp',
+			'src/glcontext.cpp',
+			'src/glcontext.h',
 			'src/gradient.cpp',
 			'src/graphics_util.cpp',
 			'src/graphicscontext.cpp',
@@ -44,13 +51,13 @@
 			'src/region.cpp',
 			'src/resolution.cpp',
 			'src/rgb.cpp',
+			'src/skiatypeface.cpp',
 			'src/surface.cpp',
 			'src/tilecache.cpp',
 			'src/tilecachecg.cpp',
 			'src/tilecachegl.cpp',
+			'src/tilecachegl3.x.cpp',
 			'src/tilecachesw.cpp',
-			'src/mcsemaphore.h',
-			'src/mctristate.h',
 			
 			# Group "Core - Language"
 			'src/ans.h',
@@ -89,7 +96,6 @@
 			'src/cmdsm.cpp',
 			'src/cmdsp.cpp',
 			'src/cmdss.cpp',
-			'src/constant.cpp',
 			'src/date.cpp',
 			'src/express.cpp',
 			'src/external.cpp',
@@ -130,8 +136,10 @@
             'src/license.cpp',
 			'src/mcerror.h',
 			'src/mcio.h',
+			'src/mcsemaphore.h',
 			'src/mcssl.h',
 			'src/mcstring.h',
+			'src/mctristate.h',
 			'src/mcutility.h',
 			'src/md5.h',
 			'src/meta.h',
@@ -427,7 +435,6 @@
 			'src/mblandroid.h',
 			'src/mblandroidcontrol.h',
 			'src/mblandroidjava.h',
-			'src/mblandroidtypeface.h',
 			'src/mblandroidutil.h',
 			'src/mblandroid.cpp',
 			'src/mblandroidbrowser.cpp',
@@ -461,7 +468,6 @@
 			'src/mblandroidsound.cpp',
 			'src/mblandroidtextlayout.cpp',
 			'src/mblandroidtextmessaging.cpp',
-			'src/mblandroidtypeface.cpp',
 			'src/mblandroidurl.cpp',
 			
 			# Group "Mobile - iOS"
@@ -560,6 +566,10 @@
 			#'src/text-segment.cpp',
 			#'src/text-simplebreakingengine.cpp',
 			
+			# Group "Emscripten"
+			'src/jsobject.h',
+			'src/jsobject.cpp',
+			
 			# Group "Desktop"
 			'src/quicktime.cpp',
 			'src/quicktime.stubs',
@@ -584,10 +594,6 @@
 			'src/mblandroid-theme.cpp',
 			'src/mbliphone-theme.mm',
 			'src/windows-theme.cpp',
-				
-			# Group "Syntax"
-			'src/syntax.h',
-			'src/syntax.cpp',
 			
 			# Other files
 			'src/socket_resolve.cpp',
@@ -761,20 +767,33 @@
 			# Group "Desktop - Emscripten"
 			'src/em-async.h',
 			'src/em-async.js',
+			'src/em-clipboard.h',
+			'src/em-clipboard.cpp',
 			'src/em-dc-mainloop.cpp',
 			'src/em-dc.h',
 			'src/em-dc.cpp',
+			'src/em-dc.js',
 			'src/em-dialog.js',
 			'src/em-event.h',
 			'src/em-event.cpp',
 			'src/em-event.js',
 			'src/em-filehandle.h',
 			'src/em-filehandle.cpp',
+			'src/em-font.h',
+			'src/em-font.cpp',
 			'src/em-fontlist.h',
 			'src/em-fontlist.cpp',
+			'src/em-javascript.h',
+			'src/em-javascript.cpp',
+			'src/em-liburl.h',
+			'src/em-liburl.cpp',
+			'src/em-liburl.js',
 			'src/em-main.cpp',
+			'src/em-native-layer.h',
+			'src/em-native-layer.cpp',
 			'src/em-osspec-misc.cpp',
 			'src/em-osspec-network.cpp',
+			'src/em-preamble-overlay.js',
 			'src/em-preamble.js',
 			'src/em-resolution.cpp',
 			'src/em-stack.cpp',
@@ -783,6 +802,7 @@
 			'src/em-standalone.js',
 			'src/em-surface.h',
 			'src/em-surface.cpp',
+			'src/em-surface.js',
 			'src/em-system.h',
 			'src/em-system.cpp',
 			'src/em-system.js',
@@ -793,9 +813,6 @@
 			'src/em-util.js',
 			'src/em-view.h',
 			'src/em-view.cpp',
-			'src/em-liburl.h',
-			'src/em-liburl.cpp',
-			'src/em-liburl.js',
 		],
 		
 		# Sources that need to be compiled separately for each mode
@@ -891,7 +908,7 @@
 		[
 			'src/java/com/runrev/android/AccelerationChangeListener.java',
 			'src/java/com/runrev/android/Alert.java',
-			'src/java/com/runrev/android/AttachmentProvider.java',
+			'src/java/com/runrev/android/AppProvider.java',
 			'src/java/com/runrev/android/BitmapView.java',
 			'src/java/com/runrev/android/BusyIndicator.java',
 			'src/java/com/runrev/android/CalendarEvents.java',
@@ -902,6 +919,7 @@
 			'src/java/com/runrev/android/Engine.java',
 			'src/java/com/runrev/android/EngineApi.java',
 			'src/java/com/runrev/android/EngineReceiver.java',
+			'src/java/com/runrev/android/FileProvider.java',
 			'src/java/com/runrev/android/LCBInvocationHandler.java',
 			'src/java/com/runrev/android/LiveCodeActivity.java',
 			'src/java/com/runrev/android/LiveCodeService.java',
@@ -956,7 +974,6 @@
 		# Sources only used in Commercial Android builds
 		'engine_commercial_java_files':
 		[
-			'src/java/com/runrev/android/AdModule.java',
 			'src/java/com/runrev/android/billing/amazon/AmazonBillingProvider.java',
 			'src/java/com/runrev/android/billing/amazon/MyPurchasingObserver.java',
 		],
@@ -983,6 +1000,7 @@
 			'src/module-resources.cpp',
 			
 			'src/module-browser.cpp',
+			'src/module-emscripten.cpp',
 		],
 		
 		# Engine LCB files containing syntax
@@ -992,11 +1010,19 @@
 			'src/engine.lcb',
 			'src/widget.lcb',
 		],
+        
+        # Engine LCB files containing syntax which don't require compiling into
+        # the engine.
+        'engine_syntax_only_lcb_files':
+        [
+            'src/license.lcb',
+        ],
 		
 		# Other engine LCB files
 		'engine_other_lcb_files':
 		[
 			'src/browser.lcb',
+			'src/emscripten.lcb',
 		],
 
 		# Engine cpptest source files
@@ -1133,6 +1159,8 @@
 					[
 						'src/fiber.cpp',
 						'src/tilecachegl.cpp',
+						'src/tilecachegl3.x.cpp',
+						'src/glcontext.cpp',
 						'src/player-legacy.cpp',
 						
 						'src/desktop-ans.cpp',
@@ -1157,6 +1185,8 @@
 						'src/sysunxrandom.cpp',
 						'src/sysunxregion.cpp',
 						'src/tilecachegl.cpp',
+						'src/tilecachegl3.x.cpp',
+						'src/glcontext.cpp',
 					],
 				},
 			],
@@ -1180,6 +1210,18 @@
 					],
 				},
 			],
+			# Exclude freetype / skia font handling code used by Android & Emscripten
+			[
+				'OS != "android" and OS != "emscripten"',
+				{
+					'sources!':
+					[
+						'src/customfont.cpp',
+						'src/freetype-font.cpp',
+						'src/skiatypeface.cpp',
+					],
+				},
+			],
 			[
 				'OS == "linux"',
 				{
@@ -1187,6 +1229,8 @@
 					[
 						'src/player-platform.cpp',
 						'src/tilecachegl.cpp',
+						'src/tilecachegl3.x.cpp',
+						'src/glcontext.cpp',
 						
 						'src/desktop.cpp',
 						'src/desktop-ans.cpp',
@@ -1208,6 +1252,7 @@
 					[
 						'src/player-platform.cpp',
 						'src/sysunxnetwork.cpp',
+						'src/tilecachegl.cpp',
 
 						'src/desktop.cpp',
 						'src/desktop-ans.cpp',
@@ -1231,6 +1276,7 @@
 						'src/stacke.cpp',
 						'src/sysunxdate.cpp',
 						'src/sysunxrandom.cpp',
+						'src/tilecachegl.cpp',
 						
 						'src/mbliphoneembedded.mm',
 						'src/mbliphoneembeddedtest.mm',
@@ -1265,6 +1311,8 @@
 						'src/notify.cpp',
 						'src/player-platform.cpp',
 						'src/tilecachegl.cpp',
+						'src/tilecachegl3.x.cpp',
+						'src/glcontext.cpp',
 						
 						'src/desktop.cpp',
 						'src/desktop-ans.cpp',

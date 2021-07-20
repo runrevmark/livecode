@@ -172,6 +172,7 @@ MCWin32RawClipboardItem* MCWin32RawClipboardCommon::CreateNewItem()
 	// Create a new data item
 	m_item = new (nothrow) MCWin32RawClipboardItem(this);
 	m_item->Retain();
+	
 	return m_item;
 }
 
@@ -758,6 +759,21 @@ bool MCWin32RawClipboard::FlushData()
 	return OleFlushClipboard() == S_OK;
 }
 
+MCWin32RawClipboardItem* MCWin32RawClipboard::CreateNewItem()
+{
+	MCWin32RawClipboardItem *t_item;
+	t_item = MCWin32RawClipboardCommon::CreateNewItem();
+
+	if (t_item == NULL)
+		return NULL;
+
+	// fetch data object and push it to the clipboard
+	IDataObject * t_contents = t_item->GetDataObject();
+	OleSetClipboard(t_contents);
+
+	return t_item;
+}
+
 bool MCWin32RawClipboardNull::IsOwned() const
 {
 	// This clipboard is non-functional
@@ -782,17 +798,6 @@ bool MCWin32RawClipboardNull::FlushData()
 	return true;
 }
 
-
-MCWin32RawClipboardItem::MCWin32RawClipboardItem(MCWin32RawClipboardCommon* p_clipboard) :
-  MCRawClipboardItem(),
-  m_clipboard(p_clipboard),
-  m_object_is_external(false),
-  m_object(NULL),
-  m_reps()
-{
-	;
-}
-
 MCWin32RawClipboardItem::MCWin32RawClipboardItem(MCWin32RawClipboardCommon* p_clipboard, IDataObject* p_object) :
   MCRawClipboardItem(),
   m_clipboard(p_clipboard),
@@ -802,6 +807,15 @@ MCWin32RawClipboardItem::MCWin32RawClipboardItem(MCWin32RawClipboardCommon* p_cl
 {
 	if (m_object != nil)
 		m_object->AddRef();
+}
+
+MCWin32RawClipboardItem::MCWin32RawClipboardItem(MCWin32RawClipboardCommon* p_clipboard) :
+	MCRawClipboardItem(),
+	m_clipboard(p_clipboard),
+	m_object_is_external(false),
+	m_object(nullptr),
+	m_reps()
+{
 }
 
 MCWin32RawClipboardItem::~MCWin32RawClipboardItem()
@@ -852,8 +866,10 @@ bool MCWin32RawClipboardItem::AddRepresentation(MCStringRef p_type, MCDataRef p_
 	MCWin32RawClipboardItemRep* t_rep = NULL;
 	for (uindex_t i = 0; i < GetRepresentationCount(); i++)
 	{
-		MCAutoStringRef t_type(m_reps[i]->CopyTypeString());
-		if (MCStringIsEqualTo(*t_type, p_type, kMCStringOptionCompareCaseless))
+        MCAutoStringRef t_type;
+        t_type.Give(m_reps[i]->CopyTypeString());
+		if (t_type.IsSet() &&
+            MCStringIsEqualTo(*t_type, p_type, kMCStringOptionCompareCaseless))
 		{
 			// This is the rep we're looking for. Update it.
 			t_rep = m_reps[i];
@@ -1139,29 +1155,43 @@ MCDataRef MCWin32RawClipboardItemRep::CopyData() const
 			// The data is available via an IStream interface
 			IStream* t_stream = p_medium.pstm;
 
+			HRESULT t_stream_hresult = S_OK;
+			if (SUCCEEDED(t_stream_hresult))
+			{
+				// Reset stream cursor to the beginning of the stream
+				LARGE_INTEGER t_seek_position = { 0 };
+				t_stream_hresult = t_stream->Seek(t_seek_position, STREAM_SEEK_SET, NULL);
+			}
+
 			// Find the size of the data represented by the stream
 			STATSTG t_statstg;
-			if (t_stream->Stat(&t_statstg, STATFLAG_NONAME) == S_OK)
+			if (SUCCEEDED(t_stream_hresult))
+				t_stream_hresult = t_stream->Stat(&t_statstg, STATFLAG_NONAME);
+
+			if (SUCCEEDED(t_stream_hresult))
 			{
+				uindex_t t_bytes_read = 0;
 				// Allocate memory for the data
 				MCAutoArray<byte_t> t_bytes;
 				if (t_statstg.cbSize.QuadPart <= UINDEX_MAX && t_bytes.Extend(t_statstg.cbSize.QuadPart))
 				{
 					// Loop until all the data has been read
-					uindex_t t_cursor = 0;
-					while (t_cursor < t_bytes.Size())
+					while (t_bytes_read < t_bytes.Size())
 					{
 						// Read the next block of data
 						ULONG t_read = 0;
-						HRESULT t_result = t_stream->Read(t_bytes.Ptr(), t_bytes.Size()-t_cursor, &t_read);
+						HRESULT t_result = t_stream->Read(t_bytes.Ptr() + t_bytes_read, t_bytes.Size() - t_bytes_read, &t_read);
 
 						// If the result is S_OK, then all data was sucessfully
 						// read. If it was S_FALSE, we only had a partial read.
 						// Otherwise, an error occurred.
 						if (t_result == S_OK)
+						{
+							t_bytes_read += t_read;
 							break;
+						}
 						else if (t_result == S_FALSE)
-							t_cursor += t_read;
+							t_bytes_read += t_read;
 						else
 							break;
 					}
@@ -1169,7 +1199,7 @@ MCDataRef MCWin32RawClipboardItemRep::CopyData() const
 
 				// If all data was read successfully, turn the bytes into a
 				// DataRef.
-				if (t_bytes.Size() == t_statstg.cbSize.QuadPart)
+				if (t_bytes_read == t_statstg.cbSize.QuadPart)
 				{
 					// Take the storage from the autoarray and hand it directly
 					// to the dataref to save a reallocation of (what is likely
@@ -1244,7 +1274,8 @@ MCDataRef MCWin32RawClipboardItemRep::CopyData() const
     }
     
 	// Update the data cache and return it
-	m_bytes = t_data;
+	if (t_data != nil)
+		m_bytes = t_data;
 	return t_data;
 }
 

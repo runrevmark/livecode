@@ -17,6 +17,9 @@ You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 on revLoadLibrary
+    if the target is not me then
+       pass revLoadLibrary
+    end if
 	insert the script of me into back
 	set the lockErrorDialogs to true
 end revLoadLibrary
@@ -135,6 +138,55 @@ private function _TestGetBuiltExtensionsFolder
 end _TestGetBuiltExtensionsFolder
 
 private command _TestLoadExtension pFolder, pPath
+   local tCodeFolder
+   put pFolder & "/code" into tCodeFolder
+   
+   if there is a folder tCodeFolder then
+      local tCodeFolders
+      put folders(tCodeFolder) into tCodeFolders
+      switch the platform
+         case "MacOS"
+            filter tCodeFolders with "*-mac*"
+            break
+         case "Win32"
+            filter tCodeFolders with "*-win*"
+            break
+         default
+            filter tCodeFolders with "*-"& toLower(the platform) & "*"
+            break
+      end switch
+      
+      local tFilteredCodeFolders
+      filter tCodeFolders with the processor & "-*" into tFilteredCodeFolders
+      split tFilteredCodeFolders by return as set
+      if the platform is "MacOS" then
+         -- explicit processor should take precedence over universal builds but
+         -- in the event multiple libraries are included and some are universal
+         -- we must merge
+         local tUniveralFilteredCodeFolders
+         filter tCodeFolders with "universal-*" into tUniveralFilteredCodeFolders
+         split tUniveralFilteredCodeFolders by return as set
+         union tFilteredCodeFolders with tUniveralFilteredCodeFolders
+      end if
+      
+      repeat for each key tFolder in tFilteredCodeFolders
+         local tLibraries
+         put files(tCodeFolder & "/" & tFolder) & return & \
+               folders(tCodeFolder & "/" & tFolder) into tLibraries
+         filter tLibraries without ".*"
+         
+         if tLibraries is not empty then
+            set the itemDelimiter to "."
+            repeat for each line tLibrary in tLibraries
+               -- remove extension
+               delete the last item of tLibrary
+               if tLibrary is not empty then
+                  set the revLibraryMapping[tLibrary] to tCodeFolder & "/" & tFolder & "/" & tLibrary
+               end if
+            end repeat
+         end if
+      end repeat
+   end if
    if there is a folder (pFolder & slash & "resources") then
       do "load extension from file pPath with resource path (pFolder & slash & " & quote & "resources" & quote & ")"
    else
@@ -170,6 +222,12 @@ function TestBuildErrorMap pErrorFile, pErrorPrefix, pZerothError
          if tCode is empty then 
             throw "no error code found for" && tError
          end if
+         if tError begins with (pErrorPrefix & "_UNUSED_") then
+            if tError is not (pErrorPrefix & "_UNUSED_" & tCode) then
+               throw "unused error name" && tError && "does not match code" \
+                     && tCode && "change to" && pErrorPrefix & "_UNUSED_" & tCode
+            end if
+         end if
          if tErrorMap[tCode] is not empty then
             throw "duplicate error code" && tCode && "found for" && tError && \
                "change to" && the number of elements of tErrorMap + 1
@@ -192,19 +250,19 @@ private command __TestEnsureExecErrorMap
    if sExecErrorMap is not empty then
       exit __TestEnsureExecErrorMap
    end if
-   	
+
    put TestBuildErrorMap("executionerrors.h", "EE", "UNDEFINED") \
    	   into sExecErrorMap
 end __TestEnsureExecErrorMap
 
-private function __TestErrorMatches pError, pCode
+function TestErrorMatches pError, pCode
 	__TestEnsureExecErrorMap
-	
+
 	local tErrorNumber
 	put format("%04d", item 1 of line 1 of pError) into tErrorNumber
-	
+
 	return sExecErrorMap[tErrorNumber] is pCode
-end __TestErrorMatches
+end TestErrorMatches
 
 ----------------------------------------------------------------
 -- Unit test library functions
@@ -252,7 +310,7 @@ on TestAssertBroken pDescription, pExpectTrue, pReasonBroken
    _TestOutput pExpectTrue, pDescription, "TODO", pReasonBroken
 end TestAssertBroken
 
-on TestAssertThrow pDescription, pHandler, pTarget, pErrorCodes, pParam
+function _TestHandlerThrows pHandler, pTarget, pErrorCodes, pParam
    local tError
    try
       dispatch pHandler to pTarget with pParam
@@ -264,12 +322,23 @@ on TestAssertThrow pDescription, pHandler, pTarget, pErrorCodes, pParam
    local tSuccess
    put true into tSuccess
    repeat for each item tErrorCode in pErrorCodes
-      put tSuccess and __TestErrorMatches(tError, tErrorCode) into tSuccess
+      put tSuccess and TestErrorMatches(tError, tErrorCode) into tSuccess
       delete the first line of tError
    end repeat
+   return tSuccess
+end _TestHandlerThrows
 
+on TestAssertThrow pDescription, pHandler, pTarget, pErrorCodes, pParam
+   local tSuccess
+   put _TestHandlerThrows(pHandler, pTarget, pErrorCodes, pParam) into tSuccess
    TestAssert pDescription, tSuccess
 end TestAssertThrow
+
+on TestAssertBrokenThrow pDescription, pHandler, pReason, pTarget, pErrorCodes, pParam
+   local tSuccess
+   put _TestHandlerThrows(pHandler, pTarget, pErrorCodes, pParam) into tSuccess
+   TestAssertBroken pDescription, tSuccess, pReason
+end TestAssertBrokenThrow
 
 on TestAssertDoesNotThrow pDescription, pHandler, pTarget, pParam
   local tError
@@ -288,7 +357,7 @@ end ErrorDialog
 
 on TestAssertErrorDialog pDescription, pErrorCode
 	wait for messages
-	TestAssert pDescription, __TestErrorMatches(sError, pErrorCode)
+	TestAssert pDescription, TestErrorMatches(sError, pErrorCode)
 	put empty into sError
 end TestAssertErrorDialog
 
@@ -309,6 +378,10 @@ end TestGetIDERepositoryPath
 function TestGetExtractedDocsFolder
    return _TestGetBuildFolder() & slash & "extracted_docs"
 end TestGetExtractedDocsFolder
+
+function TestGetPackagedExtensionsFolder
+   return _TestGetBuildFolder() & slash & "packaged_extensions"
+end TestGetPackagedExtensionsFolder
 
 on TestLoadExtension pName
    if pName is among the lines of the loadedExtensions then
@@ -394,7 +467,13 @@ on TestLoadExternal pExternal
 end TestLoadExternal 
 
 private function __GetCaller
-   get item 1 to -3 of line -3 of the executionContexts
+   local tLineNum
+   put -1 into tLineNum
+   repeat while item 1 of line tLineNum of the executionContexts \
+      is the long id of this me
+      subtract 1 from tLineNum
+   end repeat
+   get item 1 to -3 of line tLineNum of the executionContexts
    if there is not an it then
       delete item -1 of it
    end if
@@ -409,23 +488,44 @@ end __StackOfObject
 
 -- This loads an extension whose lcb source sits in the same folder as the
 -- current test.
-on TestLoadAuxillaryExtension pName
-	local tBasePath, tExtraPath
-	set the itemDelimiter to slash
-	put item 1 to -2 of the effective filename of __StackOfObject(__GetCaller()) into tBasePath
-	repeat while the last item of tBasePath is not "tests"
-		put item -1 of tBasePath & slash before tExtraPath
-		delete the last item of tBasePath
-	end repeat
+on TestLoadAuxiliaryExtension pName, pResourceFolder
+   local tBytecodeFile
+   put TestGetBuiltBytecodeFile(pName) into tBytecodeFile
+   if pResourceFolder is empty then
+      load extension from data url ("binfile:" & tBytecodeFile)
+   else
+      load extension from data url ("binfile:" & tBytecodeFile) \
+            with resource path pResourceFolder
+   end if
+   
+   if the result is not empty then
+      throw "Failed to load auxiliary extension:" && \
+            the result && tBytecodeFile
+   end if
+end TestLoadAuxiliaryExtension
 
-	local tModuleFile
-	put tBasePath & "/../_tests/_build/" & tExtraPath & pName & ".lcm" into tModuleFile
+constant kTestsBuildPath = "_tests/_build/"
+function TestGetBuiltBytecodeFile pName
+   local tBasePath, tExtraPath
+   set the itemDelimiter to slash
+   put item 1 to -2 of the effective filename of \
+         __StackOfObject(__GetCaller()) into tBasePath
+         
+   local tTestsOffset
+   set the wholematches to true
+   put itemOffset("tests", tBasePath) into tTestsOffset
+   put item tTestsOffset + 1 to -1 of tBasePath into tExtraPath
+   put item 1 to tTestsOffset - 1 of tBasePath into tBasePath
+   
+   local tModuleFile
+   put tBasePath & "/" & kTestsBuildPath & tExtraPath & slash & \ 
+      pName & ".lcm" into tModuleFile
+   return tModuleFile
+end TestGetBuiltBytecodeFile
 
-	load extension from data url ("binfile:" & tModuleFile)
-	if the result is not empty then
-		throw "Failed to load auxillary extension:" && the result && tModuleFile
-	end if
-end TestLoadAuxillaryExtension
+function TestGetTestBuildFolder
+	return TestGetEngineRepositoryPath() & slash & kTestsBuildPath
+end TestGetTestBuildFolder
 
 on TestLoadAllExtensions
    local tExtFolder
@@ -516,18 +616,21 @@ on TestRepeat pDesc, pHandler, pTarget, pTimeOut, pParamsArray
 	end if
 end TestRepeat
 
-on TestRunStack pOptions, pStackFilePath
+command TestRunStack pOptions, pStackFilePath, pArgs
 	local tEnginePath
 	set the itemDelimiter to ":"
 	put item 2 of the address into tEnginePath
 
 	local tCommand
-	put format("\"%s\" %s \"%s\"", tEnginePath, pOptions, pStackFilePath) into tCommand
+	put format("\"%s\" %s \"%s\" %s", tEnginePath, pOptions, pStackFilePath, pArgs) into tCommand
 
 	local tOutput
 	put shell(tCommand) into tOutput
-
-	return the result
+   if the result is not empty then
+      return the result for error
+   else
+      return tOutput for value
+   end if
 end TestRunStack
 
 function TestIsInStandalone
@@ -558,6 +661,9 @@ private function __MeetsRequirements pRequirement, pOptions
       case "docs"
       case "lcb"
          return not TestIsInStandalone()
+         break
+      case "standalone"
+         return TestIsInStandalone()
          break
       case "securitypermissions"
          if "set" is among the items of pOptions then
@@ -598,6 +704,11 @@ private function __MeetsRequirements pRequirement, pOptions
          if TestIsInStandalone() then
             return false
          end if
+         
+         if "revpdfprinter" is among the items of pOptions \
+         	and the environment is "server" then
+         	return false
+         end if
          return the platform is not "HTML5"
       case "database"
          if not __MeetsRequirements("external", "revdb") then
@@ -608,6 +719,70 @@ private function __MeetsRequirements pRequirement, pOptions
             return __MeetsRequirements("desktop")
          end if  
          return the platform is not "HTML5"
+      case "jvm"
+         return __MeetsRequirements("platform", "MacOS,Linux")
    end switch
    return true
 end __MeetsRequirements
+
+command TestEnsureJVM
+   TestSkipIfNot "jvm"
+
+   if $JAVA_HOME is empty then
+      local tPath
+      switch the platform
+         case "MacOS"
+            put word 1 to -1 of shell("/usr/libexec/java_home") into tPath
+            break
+         case "Linux"
+            local tJAVAC
+            put "/bin/javac" into tJAVAC
+            put word 1 to -1 of shell("/usr/bin/env readlink -f /usr" & tJAVAC) into tPath
+            if there is a file tPath and tPath ends with tJAVAC then
+               set the itemDelimiter to slash
+               delete item -2 to -1 of tPath
+            end if
+            break
+      end switch
+      if there is a folder tPath then
+         put tPath into $JAVA_HOME
+      end if
+   end if
+end TestEnsureJVM
+
+command TestPropRoundTrip pObjectType, pProperty, pValues
+   local tStack
+   put "TestRoundTrip" & pProperty into tStack
+   create stack tStack
+   set the defaultStack to tStack
+
+   set the filename of stack tStack to the tempname
+
+   local tObject
+   if pObjectType is not "stack" then
+      do "create" && pObjectType
+      put it into tObject
+   else
+      put the long id of stack tStack into tObject
+   end if
+
+   repeat for each element tValue in pValues
+      _TestPropRoundTrip tStack, tObject, pProperty, tValue
+   end repeat
+
+   delete file the filename of stack tStack
+   delete stack tStack
+end TestPropRoundTrip
+
+private command _TestPropRoundTrip pStack, pObject, pProperty, pValue
+	set the pProperty of pObject to pValue
+	TestAssert format("round trip %s '%s'", pProperty, pValue), \
+			the pProperty of pObject is pValue
+	TestDiagnostic format("%s is '%s'", pProperty, the pProperty of pObject)
+
+	save stack pStack
+	delete stack pStack
+	TestAssert format("round trip to disk %s '%s'", pProperty, pValue), \
+			the pProperty of pObject is pValue
+	TestDiagnostic format("%s is '%s'", pProperty, the pProperty of pObject)
+end _TestPropRoundTrip

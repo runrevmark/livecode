@@ -252,8 +252,18 @@ MCExternal *MCExternal::Load(MCStringRef p_filename)
 	if (t_success)
 	{
         &t_module = MCU_library_load(p_filename);
-		if (!t_module.IsSet())
-			t_success = false;
+        if (!t_module.IsSet())
+        {
+            // try a relative path
+            MCAutoStringRef t_relative_filename;
+            if (MCStringFormat(&t_relative_filename, "./%@", p_filename))
+            {
+                &t_module = MCU_library_load(*t_relative_filename);
+            }
+        }
+        
+        if (!t_module.IsSet())
+            t_success = false;
 	}
 
 	// Now loop through the loaded externals to see if we are already loaded.
@@ -281,7 +291,7 @@ MCExternal *MCExternal::Load(MCStringRef p_filename)
 			s_externals = t_external;
 
 			t_external -> m_references = 0;
-			t_external -> m_module = t_module.Take();
+            t_external -> m_module.Give(t_module.Take());
 			t_external -> m_name = nil;
 			
 			t_success = t_external -> Prepare();

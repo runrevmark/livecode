@@ -28,32 +28,27 @@
 	<string>${BUNDLE_BUILD}</string>
 	<key>CFBundleShortVersionString</key>
 	<string>${BUNDLE_VERSION}</string>
-	<key>CFBundleIconFiles</key>
-	<array>
-		${BUNDLE_ICONS}
-	</array>
-	<key>UILaunchImages</key>
-	<array>
-		${SPLASHSCREENS}
-	</array>
+	${BUNDLE_ICONS}
 	<key>DTCompiler</key>
 	<string>com.apple.compilers.llvm.clang.1_0</string>
 	<key>DTPlatformBuild</key>
-	<string>12B411</string>
+		${DT_PLATFORM_BUILD}
 	<key>DTPlatformName</key>
 	<string>iphoneos</string>
 	<key>DTPlatformVersion</key>
-	<string>8.1</string>
+		${DT_PLATFORM_VERSION}
 	<key>DTSDKBuild</key>
-	<string>12B411</string>
+		${DT_SDK_BUILD}
 	<key>DTSDKName</key>
-	<string>iphoneos8.1</string>
+		${DT_SDK_NAME}
 	<key>DTXcode</key>
-	<string>0610</string>
+		${DT_XCODE}
 	<key>DTXcodeBuild</key>
-	<string>6A1052c</string>
+		${DT_XCODE_BUILD}
 	<key>CFBundleDisplayName</key>
 		${BUNDLE_DISPLAY_NAME_SUPPORT}
+	<key>UIRequiresFullScreen</key>
+    	<true/>
 	<key>MinimumOSVersion</key>
 		${MINIMUM_OS_SUPPORT}
 	<key>UIDeviceFamily</key>
@@ -65,10 +60,10 @@
 	<dict>
 		${DEVICE_CAPABILITY}
 	</dict>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>UIRequiresPersistentWiFi</key>
 		${PERSISTENT_WIFI}
-	<key>UIApplicationExitsOnSuspend</key>
-		${APPLICATION_EXITS_ON_SUSPEND}
 	<key>UIInitialInterfaceOrientation</key>
 		${IPHONE_INITIAL_ORIENTATION}
 	<key>UISupportedInterfaceOrientations</key>
@@ -130,13 +125,16 @@
 	<string>This application requires access to your Reminders</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This application requires access to Photo Library</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>This application requires access to read the user's health data</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>This application requires access to update the user's health data</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This application requires access to Photo Library</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This application requires access to Bluetooth always</string>
+	${HEALTHKIT}
+	${APP_TRACKING_TRANSPARENCY}
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		${APP_URL_WHITELIST}
 	</array>
+	${UI_STYLE}
 </dict>
 </plist>

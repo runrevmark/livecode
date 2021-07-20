@@ -58,11 +58,25 @@ void MCSystemSensorFinalize(void)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+extern bool MCAndroidCheckRuntimePermission(MCStringRef p_permission);
 
 bool MCSystemGetSensorAvailable(MCSensorType p_sensor, bool& r_available)
-{    
+{
+    if (p_sensor == kMCSensorTypeLocation)
+    {
+        bool t_success = MCAndroidCheckRuntimePermission(MCSTR("android.permission.ACCESS_COARSE_LOCATION")) && \
+        MCAndroidCheckRuntimePermission(MCSTR("android.permission.ACCESS_FINE_LOCATION"));
+        if (!t_success)
+            return false;
+    }
+    
     MCAndroidEngineRemoteCall("isSensorAvailable", "bi", &r_available, (int32_t)p_sensor);
     return true;
+}
+
+void MCSystemAllowBackgroundLocationUpdates(bool p_allow)
+{
+    // not implemented
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -148,7 +148,7 @@ typedef float natural_float_t;
 #elif defined(__64_BIT__)
 typedef uint64_t natural_uint_t;
 typedef int64_t natural_sint_t;
-typedef float natural_float_t;
+typedef double natural_float_t;
 #else
 #error Bitness of target not defined
 #endif
@@ -1294,9 +1294,16 @@ static bool _aggregate_export(const MCForeignTypeDescriptor* desc, MCValueRef p_
             const MCForeignTypeDescriptor *t_field_desc = MCForeignTypeInfoGetDescriptor(t_field_type);
             if (t_element_type == t_field_desc->bridgetype)
             {
-                if (!t_field_desc->doexport(t_field_desc, t_element, false, t_ptr))
+                if (t_element_type == kMCNullTypeInfo)
                 {
-                    t_success = false;
+                     MCMemoryClear(t_ptr, t_size);
+                }
+                else
+                {
+                    if (!t_field_desc->doexport(t_field_desc, t_element, false, t_ptr))
+                    {
+                        t_success = false;
+                    }
                 }
             }
             else if (MCTypeInfoIsForeign(t_element_type))

@@ -40,8 +40,10 @@
 #include "notify.h"
 
 #include "module-engine.h"
-
+#include "widget.h"
 #include "libscript/script.h"
+#include "filepath.h"
+#include "osspec.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -226,10 +228,28 @@ static Properties parse_property_name(MCStringRef p_name)
 	const LT *t_literal;
 	if (t_sp . next(t_type) &&
 		t_sp . lookup(SP_FACTOR, t_literal) == PS_NORMAL &&
-		t_literal -> type == TT_PROPERTY &&
-		t_sp . next(t_type) == PS_EOF)
-		return (Properties)t_literal -> which;
-	
+		t_literal -> type == TT_PROPERTY)
+    {
+        Properties t_which = (Properties)t_literal -> which;
+        
+        // check for object property modifiers
+        if (t_which == P_SHORT || t_which == P_LONG || t_which == P_ABBREVIATE)
+        {
+            if (t_sp . next(t_type) &&
+                t_sp . lookup(SP_FACTOR, t_literal) == PS_NORMAL &&
+                t_literal -> type == TT_PROPERTY)
+            {
+                if (t_literal->which == P_ID || t_literal->which == P_NAME || t_literal->which == P_OWNER)
+                {
+                    t_which = (Properties)(t_literal->which + t_which - P_SHORT + 1);
+                }
+            }
+        }
+        
+        if (t_sp . next(t_type) == PS_EOF)
+            return t_which;
+    }
+    
 	return P_CUSTOM;
 }
 
@@ -451,7 +471,11 @@ bool MCEngineConvertToScriptParameters(MCExecContext& ctxt, MCProperListRef p_ar
         
 		MCParameter *t_param;
 		t_param = new (nothrow) MCParameter;
+        
+        /* setvalueref_argument retains its argument so set then release the
+         * value */
 		t_param -> setvalueref_argument(t_value);
+        MCValueRelease(t_value);
         
 		if (t_last_param == nil)
 			&t_params = t_param;
@@ -516,6 +540,47 @@ extern "C" MC_DLLEXPORT_DEF MCValueRef MCEngineExecSendToScriptObject(bool p_is_
     return MCEngineExecSendToScriptObjectWithArguments(p_is_function, p_message, p_object, kMCEmptyProperList);
 }
 
+extern MCWidgetRef MCcurrentwidget;
+extern void MCWidgetExecPostToParentWithArguments(MCStringRef p_message, MCProperListRef p_arguments);
+
+MCObject* MCEngineCurrentContextObject(void)
+{
+    MCObject *t_object = nullptr;
+    if (MCcurrentwidget)
+    {
+        t_object = MCWidgetGetHost(MCcurrentwidget);
+    }
+    else if (MCdefaultstackptr)
+    {
+        t_object = MCdefaultstackptr->getcurcard();
+    }
+    
+    if (t_object == nullptr)
+    {
+        MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("no default stack"), nil);
+        return nullptr;
+    }
+    
+    return t_object;
+}
+
+extern "C" MC_DLLEXPORT_DEF MCValueRef MCEngineExecSendWithArguments(bool p_is_function, MCStringRef p_message, MCProperListRef p_arguments)
+{
+    MCObject *t_target = MCEngineCurrentContextObject();
+    
+    if (t_target == nullptr)
+    {
+        return nullptr;
+    }
+    
+    return MCEngineDoSendToObjectWithArguments(p_is_function, p_message, t_target, p_arguments);
+}
+
+extern "C" MC_DLLEXPORT_DEF MCValueRef MCEngineExecSend(bool p_is_function, MCStringRef p_message)
+{
+    return MCEngineExecSendWithArguments(p_is_function, p_message, kMCEmptyProperList);
+}
+
 void MCEngineDoPostToObjectWithArguments(MCStringRef p_message, MCObject *p_object, MCProperListRef p_arguments)
 {
     MCNewAutoNameRef t_message_as_name;
@@ -532,6 +597,8 @@ void MCEngineDoPostToObjectWithArguments(MCStringRef p_message, MCObject *p_obje
         return;
     
     MCscreen -> addmessage(p_object, *t_message_as_name, 0.0f, t_params);
+    
+    MCEngineRunloopBreakWait();
 }
 
 extern "C" MC_DLLEXPORT_DEF void MCEngineExecPostToScriptObjectWithArguments(MCStringRef p_message, MCScriptObjectRef p_object, MCProperListRef p_arguments)
@@ -552,6 +619,27 @@ extern "C" MC_DLLEXPORT_DEF void MCEngineExecPostToScriptObject(MCStringRef p_me
     MCEngineExecPostToScriptObjectWithArguments(p_message, p_object, kMCEmptyProperList);
 }
 
+extern "C" MC_DLLEXPORT_DEF void MCEngineExecPostWithArguments(MCStringRef p_message, MCProperListRef p_arguments)
+{
+    if (MCcurrentwidget && !MCWidgetIsRoot(MCcurrentwidget))
+    {
+        MCWidgetExecPostToParentWithArguments(p_message, p_arguments);
+        return;
+    }
+    
+    MCObject *t_target = MCEngineCurrentContextObject();
+    
+    if (t_target != nullptr)
+    {
+        MCEngineDoPostToObjectWithArguments(p_message, t_target, p_arguments);
+    }
+}
+
+extern "C" MC_DLLEXPORT_DEF void MCEngineExecPost(MCStringRef p_message)
+{
+    MCEngineExecPostWithArguments(p_message, kMCEmptyProperList);
+}
+
 extern "C" MC_DLLEXPORT_DEF void MCEngineEvalMessageWasHandled(bool& r_handled)
 {
     r_handled = s_last_message_was_handled;
@@ -564,6 +652,12 @@ extern "C" MC_DLLEXPORT_DEF void MCEngineEvalMessageWasNotHandled(bool& r_not_ha
     r_not_handled = !t_handled;
 }
 
+extern MCExecContext *MCECptr;
+extern "C" MC_DLLEXPORT_DEF void MCEngineEvalCaller(MCScriptObjectRef& r_script_object)
+{
+    if (!MCEngineScriptObjectCreate(MCECptr->GetObject(), 0, r_script_object))
+        return;
+}
 ////////////////////////////////////////////////////////////////////////////////
 
 static MCValueRef
@@ -571,13 +665,12 @@ MCEngineDoExecuteScriptInObjectWithArguments(MCStringRef p_script, MCObject *p_o
 {
 	if (p_object == nil)
 	{
-		if (!MCdefaultstackptr)
-		{
-			MCErrorCreateAndThrow(kMCGenericErrorTypeInfo, "reason", MCSTR("no default stack"), nil);
-			return nullptr;
+        p_object = MCEngineCurrentContextObject();
+        
+        if (p_object == nullptr)
+        {
+        	return nullptr;
 		}
-		
-		p_object = MCdefaultstackptr->getcurcard();
 	}
 	
 	MCExecContext ctxt(p_object, nil, nil);
@@ -841,9 +934,11 @@ static void break_no_op(void*)
 
 extern "C" MC_DLLEXPORT_DEF void MCEngineRunloopBreakWait()
 {
+#if defined(FEATURE_NOTIFY)
 	// IM-2016-07-21: [[ Bug 17633 ]] Need to give notify dispatch something
 	//    to do as just pinging the queue doesn't break out of the wait loop.
 	MCNotifyPush(break_no_op, nil, false, true);
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -907,7 +1002,7 @@ MCEngineEvalMyResourcesFolder(MCStringRef& r_folder)
         return;
     }
 }
-    
+
 ////////////////////////////////////////////////////////////////////////////////
     
 static bool
@@ -1203,6 +1298,109 @@ extern "C" MC_DLLEXPORT_DEF MCArrayRef MCEngineExecDescribeScriptOfScriptObject(
     }
     
     return t_description.Take();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+extern "C" MC_DLLEXPORT_DEF void
+MCEngineEvalKeyIsDown(uint8_t p_key, bool p_event, bool& r_down)
+{
+    uint8_t t_modifier = 0;
+    switch (p_key)
+    {
+        case 0:
+            t_modifier = MS_SHIFT;
+            break;
+        case 1:
+            t_modifier = MS_CONTROL;
+            break;
+        case 2:
+            t_modifier = MS_MAC_CONTROL;
+            break;
+        case 3:
+            t_modifier = MS_MOD1;
+            break;
+        case 4:
+            t_modifier = MS_CAPS_LOCK;
+            break;
+        default:
+            r_down = false;
+            MCUnreachable();
+            break;
+    }
+    
+    if (p_event)
+    {
+        r_down = (MCmodifierstate & t_modifier) != 0;
+    }
+    else
+    {
+        r_down = (MCscreen->querymods() & t_modifier) != 0;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+static MCStringRef
+MCEngineDoResolveFilePathRelativeToStack(MCStringRef p_filepath, MCStack *p_stack)
+{
+    if (!MCPathIsAbsolute(p_filepath))
+    {
+        if (p_stack == nullptr)
+        {
+            MCObject *t_target = MCEngineCurrentContextObject();
+            
+            if (t_target == nullptr)
+            {
+                return nullptr;
+            }
+            
+            p_stack = t_target->getstack();
+        }
+        
+        // else try to resolve from stack file location
+        MCAutoStringRef t_resolved;
+        if (p_stack->resolve_relative_path(p_filepath, &t_resolved))
+        {
+            return t_resolved.Take();
+        }
+        
+        // else try to resolve from current folder
+        if (MCS_resolvepath(p_filepath, &t_resolved))
+        {
+            return t_resolved.Take();
+        }
+    }
+            
+    return MCValueRetain(p_filepath);;
+}
+
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEngineExecResolveFilePathRelativeToObject(MCStringRef p_filepath, MCScriptObjectRef p_object)
+{
+    if (!MCEngineEnsureScriptObjectAccessIsAllowed())
+        return nullptr;
+    
+    MCStack *t_stack = nullptr;
+    if (p_object != nullptr)
+    {
+        MCObject *t_object = nullptr;
+        uint32_t t_part_id = 0;
+        if (!MCEngineEvalObjectOfScriptObject(p_object, t_object, t_part_id))
+            return nullptr;
+        
+        t_stack = t_object->getstack();
+    }
+    
+    return MCEngineDoResolveFilePathRelativeToStack(p_filepath, t_stack);
+}
+
+extern "C" MC_DLLEXPORT_DEF MCStringRef MCEngineExecResolveFilePath(MCStringRef p_filepath)
+{
+    if (!MCEngineEnsureScriptObjectAccessIsAllowed())
+        return nullptr;
+    
+    return MCEngineDoResolveFilePathRelativeToStack(p_filepath, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

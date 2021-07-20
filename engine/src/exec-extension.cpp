@@ -124,7 +124,10 @@ bool MCEngineAddExtensionFromModule(MCScriptModuleRef p_module)
     }
     
     MCLoadedExtension *t_ext;
-    /* UNCHECKED */ MCMemoryNew(t_ext);
+    if (!MCMemoryNew(t_ext))
+    {
+      return false;
+    }
     
     t_ext -> module_name = MCValueRetain(MCScriptGetNameOfModule(p_module));
     t_ext -> module = MCScriptRetainModule(p_module);
@@ -185,8 +188,49 @@ MCEngineCheckModulesHaveNamePrefix(MCNameRef p_prefix,
     return true;
 }
 
+void MCEngineAddExtensionsFromModulesArray(MCAutoScriptModuleRefArray& p_modules, MCStringRef p_resource_path, MCStringRef& r_error)
+{
+    MCScriptModuleRef t_main = p_modules[0];
+    
+    /* Check that the 2nd to Nth modules have names that have the
+     * appropriate prefix */
+    if (!MCEngineCheckModulesHaveNamePrefix(MCScriptGetNameOfModule(t_main),
+                                            p_modules.Span().subspan(1)))
+    {
+        MCAutoStringRef t_message;
+        /* It's probably okay not to check this; failures will be
+         * dealt with by the following MCErrorCatch(). */
+        /*UNCHECKED*/ MCStringFormat(&t_message,
+                                     "failed to load modules: support modules' names did not begin with '%@'",
+                                     MCScriptGetNameOfModule(t_main));
+        
+        MCAutoErrorRef t_error;
+        if (MCErrorCatch(&t_error))
+        {
+            r_error = MCValueRetain(MCErrorGetMessage(*t_error));
+        }
+        else
+        {
+            r_error = MCValueRetain(*t_message);
+        }
+        return;
+    }
+    
+    /* Only the head module is registered as an extension */
+    MCEngineAddExtensionFromModule(t_main);
+    
+    if (p_resource_path != nullptr)
+        MCEngineAddResourcePathForModule(t_main, p_resource_path);
+}
+
 void MCEngineLoadExtensionFromData(MCExecContext& ctxt, MCDataRef p_extension_data, MCStringRef p_resource_path)
 {
+    if (!MCSecureModeCanAccessExtension())
+    {
+        ctxt . SetTheResultToStaticCString("no permission to load module");
+        return;
+    }
+    
     MCAutoScriptModuleRefArray t_modules;
     if (!MCScriptCreateModulesFromData(p_extension_data, t_modules))
     {
@@ -198,95 +242,63 @@ void MCEngineLoadExtensionFromData(MCExecContext& ctxt, MCDataRef p_extension_da
         return;
     }
 
-    MCScriptModuleRef t_main = t_modules[0];
-
-    /* Check that the 2nd to Nth modules have names that have the
-     * appropriate prefix */
-    if (!MCEngineCheckModulesHaveNamePrefix(MCScriptGetNameOfModule(t_main),
-                                            t_modules.Span().subspan(1)))
+    MCAutoStringRef t_error;
+    MCEngineAddExtensionsFromModulesArray(t_modules, p_resource_path, &t_error);
+    if (*t_error != nullptr)
     {
-        MCAutoStringRef t_message;
-        /* It's probably okay not to check this; failures will be
-         * dealt with by the following MCErrorCatch(). */
-        /*UNCHECKED*/ MCStringFormat(&t_message,
-                                     "failed to load modules: support modules' names did not begin with '%@'",
-                                     MCScriptGetNameOfModule(t_main));
-
-        MCAutoErrorRef t_error;
-        if (MCErrorCatch(&t_error))
-            ctxt.SetTheResultToValue(MCErrorGetMessage(*t_error));
-        else
-            ctxt.SetTheResultToValue(*t_message);
+        ctxt.SetTheResultToValue(*t_error);
     }
-
-    /* Only the head module is registered as an extension */
-    MCEngineAddExtensionFromModule(t_main);
-
-    if (p_resource_path != nil)
-        MCEngineAddResourcePathForModule(t_main, p_resource_path);
-
-    return;
 }
 
 // This is the callback given to libscript so that it can resolve the absolute
-// path of native code libraries used by foreign handlers in the module. At
-// the moment we use the resources path of the module, however it will need to be
-// changed to a separate location at some point with explicit declaration so that
-// iOS linkage and Android placement issues can be resolved.
-//
-// Currently it expects:
-//   <resources>
-//     code/
-//       mac/<name>.dylib
-//       linux-x86/<name>.so
-//       linux-x86_64/<name>.so
-//       win-x86/<name>.dll
-//
+// path of native code libraries used by foreign handlers in the module.
+
 static bool MCEngineLoadLibrary(MCScriptModuleRef p_module, MCStringRef p_name, MCSLibraryRef& r_library)
 {
-    // If the module has no resource path, then it has no code.
-    MCAutoStringRef t_resource_path;
-    if (!MCEngineLookupResourcePathForModule(p_module, Out(t_resource_path)))
+    // Extension libraries should be mapped by the IDE or deploy params
+    // We first check <module_name>/<lib_name> so that two modules
+    // can use distinct code resources with the same name
+    MCNameRef t_module_name = MCScriptGetNameOfModule(p_module);
+    MCAutoStringRef t_module_lib_name;
+    if (!MCStringFormat(&t_module_lib_name, "%@/%@", t_module_name, p_name))
         return false;
     
-    MCSLibraryRef t_library = nullptr;
-    if (t_resource_path.IsSet() &&
-        !MCStringIsEmpty(*t_resource_path))
+    MCAutoStringRef t_map_name;
+    bool t_has_mapping = false;
+    if (MCdispatcher->haslibrarymapping(*t_module_lib_name))
     {
-#if defined(__MAC__)
-        static const char *kLibraryFormat = "%@/code/mac/%@";
-#elif defined(__LINUX__) && defined(__32_BIT__)
-        static const char *kLibraryFormat = "%@/code/linux-x86/%@";
-#elif defined(__LINUX__) && defined(__64_BIT__)
-        static const char *kLibraryFormat = "%@/code/linux-x86_64/%@";
-#elif defined(__WINDOWS__)
-        static const char *kLibraryFormat = "%@/code/win-x86/%@";
-#elif defined(__ANDROID__)
-        static const char *kLibraryFormat = "%@/code/android-armv6/%@";
-#elif defined(__IOS__)
-        static const char *kLibraryFormat = "%@/code/ios/%@";
-#elif defined(__EMSCRIPTEN__)
-        static const char *kLibraryFormat = "%@/code/emscripten/%@";
-#else
-#error No default code path set for this platform
-#endif
-        MCAutoStringRef t_ext_path;
-        if (!MCStringFormat(&t_ext_path,
-                            kLibraryFormat,
-                            *t_resource_path,
-                            p_name))
-        {
+        t_has_mapping = true;
+        if (!MCStringFormat(&t_map_name, "./%@", *t_module_lib_name))
             return false;
-        }
-        
-        t_library = MCU_library_load(*t_ext_path);
+    }
+    else if (MCdispatcher->haslibrarymapping(p_name))
+    {
+        t_has_mapping = true;
+        if (!MCStringFormat(&t_map_name, "./%@", p_name))
+            return false;
+    }
+    else
+    {
+        t_map_name = p_name;
     }
     
+    MCSLibraryRef t_library = MCU_library_load(*t_map_name);
+        
+    // there was a mapping and it failed to load
+    if (t_has_mapping && t_library == nullptr)
+    {
+        return false;
+    }
+    
+#if defined(__IOS__)
+    // On iOS we fallback to the engine because with the exception of
+    // dynamic frameworks libraries will be static linked
     if (t_library == nullptr)
     {
-        t_library = MCU_library_load(p_name);
+        t_library = MCValueRetain(MCScriptGetLibrary());
     }
-    
+#endif
+
     if (t_library == nullptr)
     {
         return false;
@@ -308,10 +320,6 @@ void MCEngineExecLoadExtension(MCExecContext& ctxt, MCStringRef p_filename, MCSt
     MCAutoDataRef t_data;
     if (!MCS_loadbinaryfile(*t_resolved_filename, &t_data))
         return;
-    
-    // Make sure we set the shared library callback - this should be done in
-    // module init for 'extension' when we have such a mechanism.
-    MCScriptSetLoadLibraryCallback(MCEngineLoadLibrary);
     
     MCEngineLoadExtensionFromData(ctxt, *t_data, p_resource_path);
  }
@@ -459,7 +467,7 @@ Exec_stat MCEngineHandleLibraryMessage(MCNameRef p_message, MCParameter *p_param
         if (MCHandlerTypeInfoGetParameterMode(t_signature, i) != kMCHandlerTypeFieldModeOut)
         {
             MCValueRef t_value;
-            if (!t_param -> eval(*MCECptr, t_value))
+            if (!t_param -> eval_argument(*MCECptr, t_value))
             {
                 t_success = false;
                 break;
@@ -478,6 +486,7 @@ Exec_stat MCEngineHandleLibraryMessage(MCNameRef p_message, MCParameter *p_param
             
             if (!t_arguments . Push(t_value))
             {
+                MCValueRelease(t_value);
                 t_success = false;
                 break;
             }
@@ -781,8 +790,8 @@ bool MCExtensionConvertToScriptType(MCExecContext& ctxt, MCValueRef& x_value)
                 MCValueRelease(t_imported);
                 return false;
             }
-
-            MCValueAssign(x_value, t_imported);
+            
+            MCValueAssignAndRelease(x_value, t_imported);
         }
         return true;
 
@@ -1449,6 +1458,13 @@ static bool __script_try_to_convert_to_foreign(MCExecContext& ctxt, MCTypeInfoRe
 bool
 MCExtensionInitialize(void)
 {
+	// Initialize static variables
+	MCextensions = nil;
+	MCextensionschanged = false;
+	MCextensionshandlermap = nil;
+
+    MCScriptSetLoadLibraryCallback(MCEngineLoadLibrary);
+    
     return MCScriptForEachBuiltinModule([](void *p_context, MCScriptModuleRef p_module) {
         if (MCScriptIsModuleALibrary(p_module) ||
             MCScriptIsModuleAWidget(p_module))
@@ -1472,6 +1488,10 @@ MCExtensionFinalize(void)
         /* Free the extensions */
         __MCEngineFreeExtension(t_ext);
     }
+    
+    if (MCextensionshandlermap != nil)
+		MCValueRelease(MCextensionshandlermap);
+	MCextensionshandlermap = nil;
 }
 
 

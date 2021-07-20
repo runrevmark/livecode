@@ -894,6 +894,10 @@ Boolean MCButton::mfocus(int2 x, int2 y)
 						bptr->message_with_args(MCM_mouse_down, menubutton);
                         MCRedrawUnlockScreen();
 						bptr->findmenu();
+                        if (menudepth == 0)
+                        {
+                            MCmenuobjectptr = nullptr;
+                        }
 						bptr->openmenu(False);
 						return True;
 					}
@@ -1373,7 +1377,7 @@ Boolean MCButton::mup(uint2 which, bool p_release)
                 // We also need to close the menu if the button release happened
                 // outside of the menu tree.
                 bool t_outside = true;
-                MCObject* t_menu = this;
+                MCObject* t_menu = menu;
                 while (t_outside && t_menu != NULL)
                 {
                     // Check whether the click was inside the menu (the rect
@@ -1384,7 +1388,9 @@ Boolean MCButton::mup(uint2 which, bool p_release)
                     
                     // Move to the parent menu, if it exists
                     if (t_menu->getstack()->getparent()    // Stack's parent
-                        && t_menu->getstack()->getparent()->gettype() == CT_BUTTON)
+                        && t_menu->getstack()->getparent()->gettype() == CT_BUTTON
+						&& t_menu->getstack()->getparent()->getstack()->getparent()
+						&& t_menu->getstack()->getparent()->getstack()->getparent()->gettype() == CT_BUTTON)
                     {
                         // This is a submenu
                         t_menu = t_menu->getstack()->getparent();
@@ -2236,7 +2242,7 @@ void MCButton::makemenu(sublist *bstack, int2 &stackdepth, uint2 menuflags, MCFo
 
 	uint2 ty;
 	uint2 menuwidth, menuheight;
-	if (isxp && MCmajorosversion >= 0x0600)
+	if (isxp && MCmajorosversion >= MCOSVersionMake(6,0,0))
 	{
 		ty = 3;
 		m -> maxwidth += 22 + 4 + 2 + 4 + 17; // Icon - pad - Gutter - pad - ... - Submenu
@@ -2722,20 +2728,19 @@ void MCButton::openmenu(Boolean grab)
 			
 			uindex_t t_offset = 0;
             uindex_t t_new_offset = 0;
-			for (uindex_t i = 0; i < t_chosen_option; i++)
-            {
-                if (i != 0)
-                    t_offset = t_new_offset + 1;
-				/* UNCHECKED */ MCStringFirstIndexOfChar(t_menustring, '\n', t_offset, kMCStringOptionCompareExact, t_new_offset);
-            }
+			bool t_success = true;
 			
-			MCAutoStringRef t_label;
-			/* UNCHECKED */ MCStringCopySubstring(t_menustring, 
-												  MCRangeMakeMinMax(t_offset, t_new_offset),
-												  &t_label);
-			MCValueAssign(label, *t_label);
+			MCAutoProperListRef t_options;
+			
+			if (t_success)
+				t_success = MCStringSplitByDelimiter(t_menustring, kMCLineEndString, kMCStringOptionCompareExact, &t_options);
+			
+			MCStringRef t_label = static_cast<MCStringRef>(MCProperListFetchElementAtIndex(*t_options, t_chosen_option - 1));
+			
+			MCValueAssign(label, t_label);
+			
 			flags |= F_LABEL;
-			handlemenupick(*t_label, nil);
+			handlemenupick(t_label, nil);
 		}
 		return;
 	}
@@ -2855,11 +2860,19 @@ void MCButton::freemenu(Boolean force)
 		else
 		{
 			if (!MCStringIsEmpty(menustring) || force)
-			{
-				closemenu(False, True);
+            {
+                closemenu(False, True);
+                
+                /* In this case the button owns the menu so after removing
+                 * any references to it that might exist in the environment
+                 * it must be explicitly deleted. */
 				MCdispatcher->removepanel(menu);
 				MCstacks->deleteaccelerator(this, NULL);
 				menu->removeneed(this);
+                
+                /* Schedule deletion of the menu stack. */
+                menu->scheduledelete();
+                
 				menu = nil;
 			}
 		}

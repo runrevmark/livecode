@@ -599,6 +599,39 @@ void MCPlayer::setloudness()
 {
 }
 
+double MCPlayer::getleftbalance()
+{
+	/* UNSUPPORTED */
+	return 1.0;
+}
+
+void MCPlayer::setleftbalance(double p_left_balance)
+{
+	/* UNSUPPORTED */
+}
+
+double MCPlayer::getrightbalance()
+{
+	/* UNSUPPORTED */
+	return 1.0;
+}
+
+void MCPlayer::setrightbalance(double p_right_balance)
+{
+	/* UNSUPPORTED */
+}
+
+double MCPlayer::getaudiopan()
+{
+	/* UNSUPPORTED */
+	return 0.0;
+}
+
+void MCPlayer::setaudiopan(double p_pan)
+{
+	/* UNSUPPORTED */
+}
+
 void MCPlayer::setenabledtracks(uindex_t p_count, uint32_t *p_tracks_id)
 {
 }
@@ -772,12 +805,8 @@ void MCPlayer::draw(MCDC *dc, const MCRectangle& p_dirty, bool p_isolated, bool 
 	
 	if (!p_isolated)
 	{
-		if (getstate(CS_SELECTED))
-			drawselected(dc);
-	}
-    
-	if (!p_isolated)
 		dc -> end();
+	}
 }
 
 //  Redraw Management

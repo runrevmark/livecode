@@ -22,116 +22,51 @@
 	'targets':
 	[
 		{
-			'target_name': 'extract_docs',
+			'target_name': 'host-server',
 			'type': 'none',
-			
-			'all_dependent_settings':
-			{
-				'variables':
-				{
-					'dist_aux_files':
-					[
-						# Gyp will only use a recursive xcopy on Windows if the path ends with '/'
-						'<(PRODUCT_DIR)/extracted_docs/',
-					],
-				},
-			},
-			
-			'variables':
-			{
-				'conditions':
+
+			'toolsets': ['host', 'target'],
+
+			'conditions':
+			[
 				[
-					[
-						'host_os == "linux"',
+					'cross_compile != 0',
+					{
+						'dependencies':
+						[
+							'server#host',
+						],
+
+						'direct_dependent_settings':
 						{
-							'engine': '<(PRODUCT_DIR)/server-community',
+							'variables':
+							{
+								'engine': '<(PRODUCT_DIR)/server-community-host>(exe_suffix)'
+							},
 						},
-					],
-					[
-						'host_os == "mac"',
+					},
+					{
+						'dependencies':
+						[
+							'server#target',
+						],
+
+						'direct_dependent_settings':
 						{
-							'engine': '<(PRODUCT_DIR)/server-community',
+							'variables':
+							{
+								'engine': '<(PRODUCT_DIR)/server-community>(exe_suffix)',
+							},
 						},
-					],
-					[
-						'host_os == "win"',
-						{
-							'engine': '<(PRODUCT_DIR)/server-community.exe',
-						},
-					],
+					},
 				],
-			},
-			
-			'dependencies':
-			[
-				# Requires a working LiveCode engine
-				'server',
-			],
-			
-			'sources':
-			[
-				'../extensions/script-libraries/oauth2/oauth2.livecodescript',
-				'../extensions/script-libraries/getopt/getopt.livecodescript',
-				'../extensions/script-libraries/mime/mime.livecodescript',
-				'../extensions/script-libraries/dropbox/dropbox.livecodescript',
-				'../extensions/script-libraries/diff/diff.livecodescript',
-				'../extensions/script-libraries/messageauthentication/messageauthentication.livecodescript',
-				'../extensions/script-libraries/httpd/httpd.livecodescript',
-				'../extensions/script-libraries/qr/qr.livecodescript',
-			],
-            
-            'rules':
-			[
-				{
-					'rule_name': 'extract-docs-from-stack',
-					'extension': 'livecodescript',
-					'message': 'Extracting docs from script-only stack <(RULE_INPUT_NAME)',
-					
-					'outputs':
-					[
-						'<(PRODUCT_DIR)/extracted_docs/com.livecode.script-library.<(RULE_INPUT_ROOT).lcdoc',
-					],
-					
-					'action':
-					[
-						'<(engine)',
-						'../util/extract-docs.livecodescript',
-						'../ide-support/revdocsparser.livecodescript',
-						'<(PRODUCT_DIR)/extracted_docs',
-						'<(RULE_INPUT_PATH)',
-					],
-				},
 			],
 		},
+
 		
 		{
 			'target_name': 'descriptify_environment_stack',
 			'type': 'none',
-			
-			'variables':
-			{
-				'conditions':
-				[
-					[
-						'host_os == "linux"',
-						{
-							'engine': '<(PRODUCT_DIR)/server-community',
-						},
-					],
-					[
-						'host_os == "mac"',
-						{
-							'engine': '<(PRODUCT_DIR)/server-community',
-						},
-					],
-					[
-						'host_os == "win"',
-						{
-							'engine': '<(PRODUCT_DIR)/server-community.exe',
-						},
-					],
-				],
-			},
 			
 			'sources':
 			[
@@ -155,7 +90,7 @@
 			'dependencies':
 			[
 				# Requires a working LiveCode engine
-				'server',
+				'host-server',
 			],
 			
 			'actions':
@@ -177,7 +112,7 @@
 					
 					'action':
 					[
-						'<(engine)',
+						'>(engine)',
 						'../util/descriptify_stack.livecodescript',
 						'<(SHARED_INTERMEDIATE_DIR)/src/environment_descriptified.livecode',
 						'<@(_sources)',
@@ -228,17 +163,22 @@
 			'type': 'executable',
 			'product_name': 'server-community',
 			
+			'toolsets': ['host', 'target'],
+
 			'dependencies':
 			[
 				'kernel-server.gyp:kernel-server',
 				
 				'../libfoundation/libfoundation.gyp:libFoundation',
 				'../libgraphics/libgraphics.gyp:libGraphics',
+
+				'lcb-modules.gyp:engine_lcb_modules',
 			],
 			
 			'sources':
 			[
 				'<@(engine_security_source_files)',
+				'>@(builtin_lcb_modules)',
 				'src/main.cpp',
 			],
 
@@ -254,6 +194,16 @@
 					{
 						'type': 'none',
 						'mac_bundle': 0,
+					},
+				],
+			],
+
+			'target_conditions':
+			[
+				[
+					'_toolset == "host"',
+					{
+						'product_name': 'server-community-host',
 					},
 				],
 			],
@@ -278,7 +228,7 @@
 		{
 			'target_name': 'standalone',
 			'product_name': 'standalone-community',
-			
+
 			'includes':
 			[
 				'app-bundle-template.gypi',
@@ -293,10 +243,12 @@
 			[
 				'kernel-standalone.gyp:kernel-standalone',
 				'engine-common.gyp:security-community',
+				'lcb-modules.gyp:engine_lcb_modules',
 			],
 			
 			'sources':
 			[
+				'>@(builtin_lcb_modules)',
 				'src/dummy.cpp',
 				'rsrc/standalone.rc',
 			],
@@ -337,12 +289,26 @@
 						
 						# Forces all dependencies to be linked properly
 						'type': 'shared_library',
+                        
+						'conditions':
+						[
+							[
+								'("11" not in target_sdk) and ("12" not in target_sdk) and ("13" not in target_sdk)',
+								{
+									'variables':
+									{
+										'deps_file': '${SRCROOT}/standalone14.ios',
+									},
+								},
+								{
+									'variables':
+									{
+										'deps_file': '${SRCROOT}/standalone.ios',
+									},
+								}
+							],
+						],
 						
-						'variables':
-						{
-							'deps_file': '${SRCROOT}/standalone.ios',
-						},
-
 						'xcode_settings':
 						{
 							'DEAD_CODE_STRIPPING': 'NO',
@@ -397,13 +363,13 @@
 						[
 							{
 								'action_name': 'copy_manifest',
-								'message': 'Copying manifest file',
+								'message': 'Copying and update debuggable in manifest file',
 								
 								'inputs':
 								[
 									'rsrc/android-manifest.xml',
 								],
-								
+
 								'outputs':
 								[
 									'<(PRODUCT_DIR)/Manifest.xml',
@@ -411,7 +377,9 @@
 								
 								'action':
 								[
-									'cp', '<@(_inputs)', '<@(_outputs)',
+									'../util/set_android_debuggable.sh',
+									'<@(_inputs)',
+									'<@(_outputs)',
 								],
 							},
 							{
@@ -471,6 +439,25 @@
 									'cp', '<@(_inputs)', '<@(_outputs)',
 								],
 							},
+                            {
+                                'action_name': 'copy_file_provider_paths',
+                                'message': 'Copying file provider paths file',
+                                
+                                'inputs':
+                                [
+                                'rsrc/android-file_provider_paths.xml',
+                                ],
+                                
+                                'outputs':
+                                [
+                                '<(PRODUCT_DIR)/file_provider_paths.xml',
+                                ],
+                                
+                                'action':
+                                [
+                                'cp', '<@(_inputs)', '<@(_outputs)',
+                                ],
+                            },
 						],
 						
 						'all_dependent_settings':
@@ -483,6 +470,7 @@
 									'<(PRODUCT_DIR)/livecode_inputcontrol.xml',
 									'<(PRODUCT_DIR)/notify_icon.png',
 									'<(PRODUCT_DIR)/nfc_tech_filter.xml',
+                                    '<(PRODUCT_DIR)/file_provider_paths.xml',
 								],
 							},
 						},
@@ -514,11 +502,9 @@
 							{
 								'dist_aux_files':
 								[
-									'rsrc/Default-568h@2x.png',
 									'rsrc/fontmap',
 									'rsrc/mobile-device-template.plist',
 									'rsrc/mobile-remote-notification-template.plist',
-									'rsrc/mobile-splashscreen-template.plist',
 									'rsrc/mobile-template.plist',
 									'rsrc/mobile-url-scheme-template.plist',
 									'rsrc/mobile-disable-ats-template.plist',
@@ -526,6 +512,7 @@
 									'rsrc/template-beta-report-entitlement.xcent',
 									'rsrc/template-remote-notification-entitlements.xcent',
 									'rsrc/template-remote-notification-store-entitlements.xcent',
+									'rsrc/template.storyboard',
 								],
 							},
 						},
@@ -548,11 +535,6 @@
 								],
 							},
 						},
-
-						'sources':
-						[
-							'<(PRODUCT_DIR)/obj.target/engine_lcb_modules/geni/engine_lcb_modules.o',
-						],
 
 						'sources!':
 						[
@@ -615,12 +597,14 @@
 			[
 				'kernel-installer.gyp:kernel-installer',
 				'engine-common.gyp:security-community',
+				'lcb-modules.gyp:engine_lcb_modules',
 			],
 			
 			'sources':
 			[
 				'src/dummy.cpp',
 				'rsrc/installer.rc',
+				'>@(builtin_lcb_modules)',
 			],
 
 			'conditions':
@@ -705,13 +689,14 @@
 				'kernel-development.gyp:kernel-development',
 				'encode_environment_stack',
 				'engine-common.gyp:security-community',
-				'extract_docs',
+				'lcb-modules.gyp:engine_lcb_modules',
 			],
 			
 			'sources':
 			[
 				'<(SHARED_INTERMEDIATE_DIR)/src/startupstack.cpp',
 				'rsrc/development.rc',
+				'>@(builtin_lcb_modules)',
 			],
 
 			'conditions':
@@ -883,46 +868,6 @@
 			}
 		],
 		[
-			'OS == "ios"',
-			{
-				'targets':
-				[
-					{
-						'target_name': 'standalone-app-bundle',
-						'product_name': 'Standalone-Community-App',
-			
-						'includes':
-						[
-							'app-bundle-template.gypi',
-						],
-			
-						'variables':
-						{
-							'app_plist': 'rsrc/standalone-mobile-Info.plist',
-						},
-			
-						'dependencies':
-						[
-							'kernel-standalone.gyp:kernel-standalone',
-							'engine-common.gyp:security-community',
-						],
-			
-						'sources':
-						[
-							'src/dummy.cpp',
-							'src/main.cpp',
-						],
-
-						'include_dirs':
-						[
-							'../libfoundation/include',
-						],
-
-					},
-				],
-			},
-		],
-		[
 			'OS == "emscripten"',
 			{
 				'targets':
@@ -996,6 +941,7 @@
 									'src/em-url.js',
 									'src/em-standalone.js',
 									'src/em-liburl.js',
+									'src/em-dc.js',
 								],
 
 								'outputs':
@@ -1029,6 +975,7 @@
 									'src/em-url.js',
 									'src/em-standalone.js',
 									'src/em-liburl.js',
+									'src/em-dc.js',
 								],
 							},
 						],

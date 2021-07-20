@@ -44,6 +44,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "bitmapeffect.h"
 #include "graphicscontext.h"
 #include "graphics_util.h"
+#include "widget.h"
 
 #include "exec.h"
 
@@ -64,6 +65,7 @@ MCPropertyInfo MCControl::kProperties[] =
     DEFINE_RW_OBJ_CUSTOM_PROPERTY(P_MARGINS, InterfaceMargins, MCControl, Margins)
 	DEFINE_RW_OBJ_PROPERTY(P_TOOL_TIP, String, MCControl, ToolTip)
 	DEFINE_RW_OBJ_PROPERTY(P_UNICODE_TOOL_TIP, BinaryString, MCControl, UnicodeToolTip)
+    DEFINE_RW_OBJ_PROPERTY(P_LAYER_CLIP_RECT, OptionalRectangle, MCControl, LayerClipRect)
 	DEFINE_RW_OBJ_NON_EFFECTIVE_ENUM_PROPERTY(P_LAYER_MODE, InterfaceLayerMode, MCControl, LayerMode)
 	DEFINE_RO_OBJ_EFFECTIVE_ENUM_PROPERTY(P_LAYER_MODE, InterfaceLayerMode, MCControl, LayerMode)
     
@@ -100,6 +102,8 @@ MCControl::MCControl()
 	layer_resetattrs();
 	// MW-2011-09-21: [[ Layers ]] The layer starts off as static.
 	m_layer_mode_hint = kMCLayerModeHintStatic;
+    m_layer_has_clip_rect = false;
+    m_layer_clip_rect = kMCEmptyRectangle;
 }
 
 MCControl::MCControl(const MCControl &cref) : MCObject(cref)
@@ -122,6 +126,8 @@ MCControl::MCControl(const MCControl &cref) : MCObject(cref)
 	layer_resetattrs();
 	// MW-2011-09-21: [[ Layers ]] The layer takes its layer hint from the source.
 	m_layer_mode_hint = cref . m_layer_mode_hint;
+    m_layer_has_clip_rect = cref.m_layer_has_clip_rect;
+    m_layer_clip_rect = cref.m_layer_clip_rect;
 }
 
 MCControl::~MCControl()
@@ -428,13 +434,6 @@ void MCControl::select()
 	state |= CS_SELECTED;
 	kunfocus();
 
-	// MW-2011-09-23: [[ Layers ]] Mark the layer attrs as having changed - the selection
-	//   setting can influence the layer type.
-	m_layer_attr_changed = true;
-
-	// MW-2011-08-18: [[ Layers ]] Invalidate the whole object.
-	layer_redrawall();
-	
 	getcard()->dirtyselection(rect);
 }
 
@@ -442,13 +441,6 @@ void MCControl::deselect()
 {
 	if (state & CS_SELECTED)
 	{
-		// MW-2011-09-23: [[ Layers ]] Mark the layer attrs as having changed - the selection
-		//   setting can influence the layer type.
-		m_layer_attr_changed = true;
-
-		// MW-2011-08-18: [[ Layers ]] Invalidate the whole object.
-		layer_redrawall();
-        
 		getcard()->dirtyselection(rect);
 
         state &= ~(CS_SELECTED | CS_MOVE | CS_SIZE | CS_CREATE);
@@ -561,6 +553,44 @@ void MCControl::paste(void)
 	}
 }
 
+/* The MCRereferenceChildrenVisitor visits each of a control's descendents
+ * recursively and makes sure they have a weak-proxy and that the parent is
+ * updated. */
+class MCRereferenceChildrenVisitor: public MCObjectVisitor
+{
+public:
+    static void Visit(MCControl *p_control)
+    {
+        MCRereferenceChildrenVisitor t_visitor(p_control);
+        
+        /* Make sure the control has a weak proxy (needed to set the parent of
+         * its children!). */
+        p_control->ensure_weak_proxy();
+        
+        /* Now visit the controls children. */
+        p_control->visit_children(0, 0, &t_visitor);
+    }
+
+private:
+    MCRereferenceChildrenVisitor(MCObject *p_new_parent)
+        : m_new_parent(p_new_parent)
+    {
+    }
+
+    bool OnControl(MCControl* p_control)
+    {
+        /* Update the control's parent */
+        p_control->setparent(m_new_parent);
+        
+        /* Update its children */
+        MCRereferenceChildrenVisitor::Visit(p_control);
+        
+        return true;
+    }
+    
+    MCObject *m_new_parent;
+};
+
 void MCControl::undo(Ustruct *us)
 {
 	MCRectangle newrect = rect;
@@ -583,7 +613,11 @@ void MCControl::undo(Ustruct *us)
 		{
 			MCCard *card = (MCCard *)parent->getcard();
 			getstack()->appendcontrol(this);
-			this->MCObject::m_weak_proxy = new MCObjectProxyBase(this);
+            
+            /* Visit the control and its children, creating weak_proxys and
+             * reparenting as we go. */
+            MCRereferenceChildrenVisitor::Visit(this);
+            
 			card->newcontrol(this, False);
 			Boolean oldrlg = MCrelayergrouped;
 			MCrelayergrouped = True;
@@ -598,7 +632,14 @@ void MCControl::undo(Ustruct *us)
 		}
 		return;
 	case UT_REPLACE:
-		del(true);
+        if (gettype() == CT_WIDGET)
+        {
+            static_cast<MCWidget*>(this)->delforundo(true);
+        }
+        else
+        {
+            del(true);
+        }
 		us->type = UT_DELETE;
 		return;
 	default:
@@ -789,6 +830,13 @@ void MCControl::redraw(MCDC *dc, const MCRectangle &dirty)
 		
 		dc -> setopacity(255);
 		dc -> setfunction(GXcopy);
+        
+        /* Apply the layerClipRect property, if set. */
+        if (m_layer_has_clip_rect)
+        {
+            trect = MCU_intersect_rect(trect, m_layer_clip_rect);
+        }
+        
 		dc->cliprect(trect);
         
 		// MW-2011-09-06: [[ Redraw ] Make sure we draw the control normally (not
@@ -827,10 +875,14 @@ void MCControl::sizerects(const MCRectangle &p_object_rect, MCRectangle r_rects[
 			}
 }
 
-void MCControl::drawselected(MCDC *dc)
+void MCControl::drawselection(MCDC *dc, const MCRectangle& p_dirty)
 {
-    if (!opened || !(getflag(F_VISIBLE) || showinvisible()))
+    MCAssert(getopened() != 0 && (getflag(F_VISIBLE) || showinvisible()));
+    
+    if (!getselected())
+    {
         return;
+    }
     
 	if (MCdragging)
 		return;
@@ -1359,9 +1411,16 @@ void MCControl::newmessage()
 
 void MCControl::enter()
 {
+    MCControlHandle t_this(this);
+    
     if (focused.IsValid() && !focused.IsBoundTo(this))
     {
-    	leave();
+        leave();
+    }
+    
+    if (!t_this.IsValid())
+    {
+        return;
     }
     
 	if (MCdispatcher -> isdragtarget())
@@ -1387,7 +1446,11 @@ void MCControl::enter()
 	else
 		message(MCM_mouse_enter);
     // AL-2013-01-14: [[ Bug 11343 ]] Add timer if the object handles mouseWithin in the behavior chain.
-	if (handlesmessage(MCM_mouse_within) && !(hashandlers & HH_IDLE))
+    if(!t_this.IsValid())
+    {
+        return;
+    }
+    if (handlesmessage(MCM_mouse_within) && !(hashandlers & HH_IDLE))
 		MCscreen->addtimer(this, MCM_idle, MCidleRate);
 	if (getstack()->gettool(this) == T_BROWSE)
 		MCtooltip->settip(tooltip);
@@ -1429,9 +1492,9 @@ Boolean MCControl::sbfocus(int2 x, int2 y, MCScrollbar *hsb, MCScrollbar *vsb)
 {
 	if (state & (CS_HSCROLL | CS_VSCROLL))
 	{
-		if (state & CS_HSCROLL)
+		if (state & CS_HSCROLL && hsb != nil)
 			hsb->mfocus(x, y);
-		else
+		else if (vsb != nil)
 			vsb->mfocus(x, y);
 		readscrollbars();
 		MCscreen->sync(getw());

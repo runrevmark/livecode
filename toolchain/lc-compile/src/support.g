@@ -21,6 +21,7 @@
 
 'export'
     IsBootstrapCompile
+    IsNotBytecodeOutput
 
     NegateReal
 
@@ -356,6 +357,7 @@
     Error_InvalidNameForNamespace
     Error_VariadicParametersOnlyAllowedInForeignHandlers
     Error_VariadicParameterMustBeLast
+    Error_VariadicArgumentNotExplicitlyTyped
 
     Warning_MetadataClausesShouldComeAfterUseClauses
     Warning_DeprecatedTypeName
@@ -366,6 +368,7 @@
 --------------------------------------------------------------------------------
 
 'condition' IsBootstrapCompile()
+'condition' IsNotBytecodeOutput()
 
 --------------------------------------------------------------------------------
 
@@ -786,6 +789,7 @@
 
 'action' Error_VariadicParametersOnlyAllowedInForeignHandlers(Position: POS)
 'action' Error_VariadicParameterMustBeLast(Position: POS)
+'action' Error_VariadicArgumentNotExplicitlyTyped(Position: POS)
 
 'action' Warning_MetadataClausesShouldComeAfterUseClauses(Position: POS)
 'action' Warning_DeprecatedTypeName(Position: POS, NewType: STRING)

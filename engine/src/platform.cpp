@@ -29,6 +29,7 @@ void MCPlatformHandleApplicationResume(void);
 void MCPlatformHandleApplicationRun(bool& r_continue);
 
 void MCPlatformHandleScreenParametersChanged(void);
+void MCPlatformHandleSystemAppearanceChanged(void);
 
 void MCPlatformHandleWindowCloseRequest(MCPlatformWindowRef window);
 void MCPlatformHandleWindowClose(MCPlatformWindowRef window);
@@ -125,6 +126,13 @@ void MCPlatformCallbackSendScreenParametersChanged(void)
 {
     //MCLog("Application -> ScreenParametersChanged()", 0);
 	MCPlatformHandleScreenParametersChanged();
+}
+
+//////////
+
+void MCPlatformCallbackSendSystemAppearanceChanged(void)
+{
+	MCPlatformHandleSystemAppearanceChanged();
 }
 
 //////////
@@ -389,31 +397,50 @@ void MCPlatformCallbackSendViewFocusSwitched(MCPlatformWindowRef p_window, uint3
 
 #if defined(FEATURE_PLATFORM_PLAYER)
 
+#ifdef TARGET_PLATFORM_WINDOWS
+
+#define MCPlatformAssertOnMainThread()
+
+#else
+
+#ifndef _PTHREAD_H
+#include <pthread.h>
+#endif
+
+#define MCPlatformAssertOnMainThread() do { MCAssert(pthread_main_np() != 0); } while(0)
+
+#endif
+
 void MCPlatformCallbackSendPlayerFrameChanged(MCPlatformPlayerRef p_player)
 {
+    MCPlatformAssertOnMainThread();
 	MCPlatformHandlePlayerFrameChanged(p_player);
 }
 
 void MCPlatformCallbackSendPlayerMarkerChanged(MCPlatformPlayerRef p_player, MCPlatformPlayerDuration p_time)
 {
+    MCPlatformAssertOnMainThread();
     //MCLog("Player(%p) -> MarkerChanged(%d)", p_player, p_time);
     MCPlatformHandlePlayerMarkerChanged(p_player, p_time);
 }
 
 void MCPlatformCallbackSendPlayerCurrentTimeChanged(MCPlatformPlayerRef p_player)
 {
+    MCPlatformAssertOnMainThread();
     //MCLog("Player(%p) -> CurrentTimeChanged()", p_player);
     MCPlatformHandlePlayerCurrentTimeChanged(p_player);
 }
 
 void MCPlatformCallbackSendPlayerFinished(MCPlatformPlayerRef p_player)
 {
+    MCPlatformAssertOnMainThread();
     //MCLog("Player(%p) -> Finished()", p_player);
     MCPlatformHandlePlayerFinished(p_player);
 }
 
 void MCPlatformCallbackSendPlayerBufferUpdated(MCPlatformPlayerRef p_player)
 {
+    MCPlatformAssertOnMainThread();
     // MCLog("Player(%p) -> BufferUpdated()", p_player);
     MCPlatformHandlePlayerBufferUpdated(p_player);
 }

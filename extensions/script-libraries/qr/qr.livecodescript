@@ -1,4 +1,4 @@
-﻿script "com.livecode.script-library.qr"
+﻿script "com.livecode.library.qr"
 /*
 
 This library is in the public domain.
@@ -8,9 +8,9 @@ Original Author - John Craig
 
 */
 
-on revLoadLibrary
+on extensionInitialize
    if the target is not me then
-      pass revLoadLibrary
+      pass extensionInitialize
    end if
    
    insert the script of me into back
@@ -18,20 +18,25 @@ on revLoadLibrary
    
    if the environment contains "development" then
       set the _ideoverride of me to true
-      revSBAddAvailableLibrary the short name of me, "QR Code Generator"
    end if
-end revLoadLibrary
+end extensionInitialize
 
-on revUnloadLibrary
+on extensionFinalize
    if the target is not me then
-      pass revUnloadLibrary
+      pass extensionFinalize
    end if
    
    remove the script of me from back
-end revUnloadLibrary
+end extensionFinalize
 
 /**
+Title: QR Code Generator
 
+Version: 2.0.0
+
+Author: LiveCode
+
+Description:
 The QR Code Generator library for LiveCode generates QR codes
 according to the ISO international standard (ISO/IEC18004).
 
@@ -40,7 +45,7 @@ according to the ISO international standard (ISO/IEC18004).
 All versions (1 - 40) and all error correction levels
 (L, M, Q, H) are supported.
 
-Version 2.0.0
+SVGIcon: M384 1024L384 1152 256 1152 256 1024 384 1024ZM384 256L384 384 256 384 256 256 384 256ZM1152 256L1152 384 1024 384 1024 256 1152 256ZM128 1279L512 1279 512 896 128 896 128 1279ZM128 512L512 512 512 128 128 128 128 512ZM896 512L1280 512 1280 128 896 128 896 512ZM640 768L640 1408 0 1408 0 768 640 768ZM1152 1280L1152 1408 1024 1408 1024 1280 1152 1280ZM1408 1280L1408 1408 1280 1408 1280 1280 1408 1280ZM1408 768L1408 1152 1024 1152 1024 1024 896 1024 896 1408 768 1408 768 768 1152 768 1152 896 1280 896 1280 768 1408 768ZM640 0L640 640 0 640 0 0 640 0ZM1408 0L1408 640 768 640 768 0 1408 0Z
 
 Tags:
 barcode
@@ -1431,6 +1436,35 @@ Create a QR code
 Example:
 qrCreate "MyImage", "QR data", "M", 3
 
+Example: 
+--creating QR Code with ECC level M, Size 3, Mask 7 and version 14
+qrCreate "MyImage", "QR data", "M", 3, 7, 14, 14
+
+Example:
+-- example how to use qrCreate with LiveCode server
+qrCreate "!", tData, tECC, tSize
+put the result into tData
+if tData begins with "Error" then
+   put tData
+else
+   # line 1 of the result contains some info
+   # the remaining lines contain the png image data
+   put line 1 of tData into tInfo
+   delete line 1 of tData
+
+   put "&lt;b&gt;Qr code info&lt;/b&gt;&lt;br/&gt;" & LF
+   put "Version: " & item 1 of tInfo & "&lt;br/&gt;" & LF
+   put "ECC: " & item 2 of tInfo & "&lt;br/&gt;" & LF
+   put "Mode: " & item 3 of tInfo & "&lt;br/&gt;" & LF
+   put "Mask: " & item 4 of tInfo & "&lt;br/&gt;" & LF
+
+   # show the image
+   put base64Encode(tData) into tData
+   replace LF with empty in tData
+   put "&lt;img src='data:image/png;base64," & tData & "'/&gt;&lt;br/&gt;" & LF
+end if
+
+
 Description:
 Set the text of an image to a QR code or get the PMG data of the QR code image.
 
@@ -1461,6 +1495,14 @@ Each mask pattern changes the bits according to their coordinates in
 the QR matrix. The purpose of a mask pattern is to make the QR code
 easier for a QR scanner to read.
 
+pMinVersion:
+An integer value between 1 and 40. It must be lower or equal to pMaxVersion.
+If pMinVersion is not specified then the default value of 1 is used.
+
+pMaxVersion:
+An integer value between 1 and 40. It must be higher or equal to pMinVersion.
+If pMaxVersion is not specified then the default value of 40 is used.
+
 The result:
 If successful, the first line of the result will be the following values: 
 - QR version
@@ -1478,7 +1520,7 @@ with LiveCode server to generate QR codes on web pages.
 
 */
 
-command qrCreate pImg, pData, pECC, pSize, pMask
+command qrCreate pImg, pData, pECC, pSize, pMask, pMinVersion, pMaxVersion
    lock screen
    
    try
@@ -1517,7 +1559,24 @@ command qrCreate pImg, pData, pECC, pSize, pMask
       # calculate minimum version required
       local tMinVersion
       put 0 into tMinVersion
-      repeat with tVersion = 1 to 40
+      
+      if pMinVersion is empty then 
+         put 1 into pMinVersion
+      end if
+      
+      if pMaxVersion is empty then 
+         put 40 into pMaxVersion
+      end if
+      
+      if pMaxVersion > 40 or pMaxVersion < 1 or pMinVersion < 1 or pMinVersion > 40 then
+         throw "allowed values for pMinVersion to pMaxVersion are 1 to 40"
+      end if
+      
+      if pMinVersion > pMaxVersion then 
+         throw "pMinversion must be lower or equal to pMaxVersion"
+      end if
+     
+      repeat with tVersion = pMinVersion to pMaxVersion
          local tCCIBits, tBitStreamLength, tErrorWords, tTotalWords, tBitStreamMax, tRemBits
          put 0 into tCCIBits -- character count indicator
          put 0 into tBitStreamLength

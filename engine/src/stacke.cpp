@@ -783,7 +783,7 @@ Boolean scrolleffect_step(const MCRectangle &drect, MCStackSurface *p_target, MC
 	
 	t_end_dst.origin.x += drect.x;
 	t_end_dst.origin.y += drect.y;
-	
+    
 	p_target->Composite(t_start_dst, p_start, t_start_src, 1.0, kMCGBlendModeCopy);
 	p_target->Composite(t_end_dst, p_end, t_end_src, 1.0, kMCGBlendModeCopy);
 	

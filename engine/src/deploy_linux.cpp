@@ -194,8 +194,10 @@ typedef struct
 #define EM_860		 7		/* Intel 80860 */
 #define EM_MIPS		 8		/* MIPS R3000 big-endian */
 #define EM_S370		 9		/* IBM System/370 */
-#define EM_MIPS_RS3_LE	10		/* MIPS R3000 little-endian */
-#define EM_ARM		40
+#define EM_MIPS_RS3_LE	10	/* MIPS R3000 little-endian */
+#define EM_ARM		40      /* ARM */
+#define EM_X86_64   62      /* AMD x86-64 */
+#define EM_AARCH64  183     /* ARM AArch64 */
 
 /* Legal values for e_version (version).  */
 
@@ -452,6 +454,17 @@ static void swap_ElfX_Phdr(Elf64_Phdr& x)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static bool MCDeployIsValidAndroidArch(uint16_t p_machine)
+{
+    if (p_machine == EM_ARM ||
+        p_machine == EM_AARCH64 ||
+        p_machine == EM_386 ||
+        p_machine == EM_X86_64)
+        return true;
+    
+    return false;
+}
+
 template<typename T>
 static bool MCDeployToLinuxReadHeader(MCDeployFileRef p_file, bool p_is_android, typename T::Ehdr& r_header)
 {
@@ -487,7 +500,7 @@ static bool MCDeployToLinuxReadHeader(MCDeployFileRef p_file, bool p_is_android,
 	else
 	{
 		if (r_header . e_type != ET_DYN ||
-			r_header . e_machine != EM_ARM ||
+			!MCDeployIsValidAndroidArch(r_header.e_machine) ||
 			r_header . e_version != EV_CURRENT)
 			return MCDeployThrow(kMCDeployErrorLinuxBadImage);
 	}
@@ -548,8 +561,7 @@ static bool MCDeployToLinuxReadProgramHeaders(MCDeployFileRef p_file, typename T
 template<typename T>
 static bool MCDeployToLinuxReadString(MCDeployFileRef p_file, typename T::Shdr& p_string_header, uint32_t p_index, char*& r_string)
 {
-	bool t_success;
-	t_success = true;
+	bool t_success = true;
 
 	// First check that the index is valid
 	if (p_index >= p_string_header . sh_size)
@@ -558,11 +570,9 @@ static bool MCDeployToLinuxReadString(MCDeployFileRef p_file, typename T::Shdr& 
 	// As the string table does not contain any string lengths and they are
 	// just NUL terminated, we must gradually load portions until a NUL is
 	// reached.
-	char *t_buffer;
-	uint32_t t_length;
-	t_buffer = NULL;
-	t_length = 0;
-
+	char *t_buffer = nullptr;
+	uint32_t t_length = 0;
+    
 	while(t_success)
 	{
 		// Compute how much data to read - this is either the fixed chunk
@@ -688,17 +698,15 @@ Exec_stat MCDeployToELF(const MCDeployParameters& p_params, bool p_is_android)
 	t_payload_section = NULL;
 	for(uint32_t i = 0; t_success && i < t_header . e_shnum && t_project_section == NULL; i++)
 	{
-		char *t_section_name;
-		t_success = MCDeployToLinuxReadString<T>(t_engine, t_section_headers[t_header . e_shstrndx], t_section_headers[i] . sh_name, t_section_name);
+        MCAutoPointer<char> t_section_name;
+		t_success = MCDeployToLinuxReadString<T>(t_engine, t_section_headers[t_header . e_shstrndx], t_section_headers[i] . sh_name, &t_section_name);
 
 		// Notice that we compare 9 bytes, this is to ensure we match .project
 		// only and not .project<otherchar> (i.e. we match the NUL char).
-		if (t_success && memcmp(t_section_name, ".project", 9) == 0)
+		if (t_success && memcmp(*t_section_name, ".project", 9) == 0)
 			t_project_section = &t_section_headers[i];
-		if (t_success && memcmp(t_section_name, ".payload", 9) == 0)
+		if (t_success && memcmp(*t_section_name, ".payload", 9) == 0)
 			t_payload_section = &t_section_headers[i];
-		
-		delete t_section_name;
 	}
 
 	if (t_success && t_project_section == NULL)
@@ -923,36 +931,41 @@ Exec_stat MCDeployToELF(const MCDeployParameters& p_params, bool p_is_android)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+Exec_stat MCDeployToELF(const MCDeployParameters& p_params, bool p_is_android)
+{
+    bool t_success;
+    t_success = true;
+    
+    // MW-2013-05-03: [[ Linux64 ]] Snoop the engine type from the ident field.
+    
+    MCDeployFileRef t_engine;
+    t_engine = NULL;
+    if (t_success && !MCDeployFileOpen(p_params . engine, kMCOpenFileModeRead, t_engine))
+        t_success = MCDeployThrow(kMCDeployErrorNoEngine);
+    
+    char t_ident[EI_NIDENT];
+    if (t_success && !MCDeployFileRead(t_engine, t_ident, EI_NIDENT))
+        t_success = MCDeployThrow(kMCDeployErrorLinuxNoHeader);
+    
+    if (t_success)
+    {
+        if (t_ident[EI_CLASS] == ELFCLASS32)
+            return MCDeployToELF<MCLinuxELF32Traits>(p_params, p_is_android);
+        else if (t_ident[EI_CLASS] == ELFCLASS64)
+            return MCDeployToELF<MCLinuxELF64Traits>(p_params, p_is_android);
+        
+        t_success = MCDeployThrow(kMCDeployErrorLinuxBadHeaderType);
+    }
+    
+    return t_success ? ES_NORMAL : ES_ERROR;
+}
+
 // This method attempts to build a Linux standalone using the given deployment
 // parameters.
 //
 Exec_stat MCDeployToLinux(const MCDeployParameters& p_params)
 {
-	bool t_success;
-	t_success = true;
-
-	// MW-2013-05-03: [[ Linux64 ]] Snoop the engine type from the ident field.
-	
-	MCDeployFileRef t_engine;
-	t_engine = NULL;
-	if (t_success && !MCDeployFileOpen(p_params . engine, kMCOpenFileModeRead, t_engine))
-		t_success = MCDeployThrow(kMCDeployErrorNoEngine);
-		
-	char t_ident[EI_NIDENT];
-	if (t_success && !MCDeployFileRead(t_engine, t_ident, EI_NIDENT))
-		t_success = MCDeployThrow(kMCDeployErrorLinuxNoHeader);
-		
-	if (t_success)
-	{
-		if (t_ident[EI_CLASS] == ELFCLASS32)
-			return MCDeployToELF<MCLinuxELF32Traits>(p_params, false);
-		else if (t_ident[EI_CLASS] == ELFCLASS64)
-			return MCDeployToELF<MCLinuxELF64Traits>(p_params, false);
-	
-		t_success = MCDeployThrow(kMCDeployErrorLinuxBadHeaderType);
-	}
-	
-	return t_success ? ES_NORMAL : ES_ERROR;
+    return MCDeployToELF(p_params, false);
 }
 
 // This method attempts to build an Android standalone using the given deployment
@@ -960,7 +973,7 @@ Exec_stat MCDeployToLinux(const MCDeployParameters& p_params)
 //
 Exec_stat MCDeployToAndroid(const MCDeployParameters& p_params)
 {
-	return MCDeployToELF<MCLinuxELF32Traits>(p_params, true);
+	return MCDeployToELF(p_params, true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

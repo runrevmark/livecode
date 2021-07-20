@@ -974,7 +974,7 @@ bool MCParagraph::layout(bool p_force, bool p_check_redraw)
 	if (!needs_layout && !p_force)
 		return false;
 
-    uindex_t t_count;
+    uindex_t t_count = 0;
     if (p_check_redraw)
         t_count = countlines();
     
@@ -3903,7 +3903,7 @@ Boolean MCParagraph::pageheight(uint2 fixedheight, uint2 &theight,
     // SN-2014-09-17: [[ Bug 13462 ]] Added the space above and below each paragraph
     // FG-2014-11-03: [[ Bug 11688 ]] Take all of the top margin into account
     if (attrs != nil)
-        theight -= computetopmargin();
+        theight = MCU_max(((int32_t)theight) - computetopmargin(), 0);
     
 	do
 	{
@@ -3943,7 +3943,7 @@ Boolean MCParagraph::pagerange(uint2 fixedheight, uint2 &theight,
     
     // FG-2014-11-03: [[ Bug 11688 ]] Take all of the top margin into account
     if (attrs != nil)
-        theight -= computetopmargin();
+        theight = MCU_max(((int32_t)theight) - computetopmargin(), 0);
     
 	do
 	{

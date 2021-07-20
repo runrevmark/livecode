@@ -24,6 +24,8 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "image.h"
 #include "image_rep.h"
 
+#include "graphics_util.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
 MCImageRep::MCImageRep()
@@ -767,7 +769,7 @@ bool MCImageRepGetResident(const void *p_data, uindex_t p_size, MCImageRep *&r_r
 	return t_success;
 }
 
-bool MCImageRepGetVector(void *p_data, uindex_t p_size, MCImageRep *&r_rep)
+bool MCImageRepGetVector(const void *p_data, uindex_t p_size, MCImageRep *&r_rep)
 {
 	bool t_success = true;
 	
@@ -864,6 +866,12 @@ bool MCImageRepCreateWithPath(MCStringRef p_path, MCImageRep *&r_image_rep)
 
 bool MCImageRepCreateWithData(MCDataRef p_data, MCImageRep *&r_image_rep)
 {
+    if (MCDataGetLength(p_data) >= 3 &&
+        memcmp(MCDataGetBytePtr(p_data), "LCD", 3) == 0)
+    {
+        return MCImageRepGetVector(MCDataGetBytePtr(p_data), MCDataGetLength(p_data), r_image_rep);
+    }
+    
 	return MCImageRepGetResident(MCDataGetBytePtr(p_data), MCDataGetLength(p_data), r_image_rep);
 }
 
@@ -883,6 +891,42 @@ bool MCImageRepGetFrameDuration(MCImageRep *p_image_rep, uint32_t p_frame, uint3
 		return false;
 	
 	return p_image_rep->GetFrameDuration(p_frame, r_duration);
+}
+
+bool MCImageRepGetMetadata(MCImageRep *p_image_rep, MCArrayRef &r_metadata)
+{
+	MCImageMetadata t_metadata;
+	if (!p_image_rep->GetMetadata(t_metadata))
+		return false;
+	
+	MCAutoArrayRef t_metadata_array;
+	if (!MCArrayCreateMutable(&t_metadata_array))
+		return false;
+	
+	if (t_metadata.has_density)
+	{
+		MCAutoNumberRef t_density;
+		if (!MCNumberCreateWithReal(t_metadata.density, &t_density))
+			return false;
+		if (!MCArrayStoreValue(*t_metadata_array, false, MCNAME("density"), *t_density))
+			return false;
+	}
+	/* TODO - support other metadata fields */
+	
+	return MCArrayCopy(*t_metadata_array, r_metadata);
+}
+
+bool MCImageRepGetDensity(MCImageRep *p_image_rep, double &r_density)
+{
+	MCImageMetadata t_metadata;
+	if (!p_image_rep->GetMetadata(t_metadata) || !t_metadata.has_density)
+	{
+		r_density = 72.0;
+		return true;
+	}
+	
+	r_density = t_metadata.density;
+	return true;
 }
 
 bool MCImageRepLock(MCImageRep *p_image_rep, uint32_t p_index, MCGFloat p_density, MCGImageFrame &r_frame)
@@ -905,6 +949,37 @@ void MCImageRepUnlockRaster(MCImageRep *p_image_rep, uint32_t p_index, MCImageBi
 	p_image_rep->UnlockBitmap(p_index, p_raster);
 }
 
+void MCImageRepRender(MCImageRep *p_image_rep, MCGContextRef p_gcontext, uint32_t p_index, MCGRectangle p_src_rect, MCGRectangle p_dst_rect, MCGImageFilter p_filter, MCGPaintRef p_current_color)
+{
+    if (p_image_rep->GetType() == kMCImageRepVector)
+    {
+        auto t_vector_rep = static_cast<MCVectorImageRep *>(p_image_rep);
+        
+        void* t_data;
+        uindex_t t_data_size;
+        t_vector_rep->GetData(t_data, t_data_size);
+        
+        MCGContextPlaybackRectOfDrawing(p_gcontext, MCMakeSpan((const byte_t*)t_data, t_data_size), p_src_rect, p_dst_rect, p_current_color);
+    }
+    else
+    {
+        MCGFloat t_scale;
+        t_scale = MCGAffineTransformGetEffectiveScale(MCGContextGetDeviceTransform(p_gcontext));
+        
+        MCGImageFrame t_frame;
+        if (MCImageRepLock(p_image_rep, p_index, t_scale, t_frame))
+        {
+            MCGAffineTransform t_transform;
+            t_transform = MCGAffineTransformMakeScale(1.0 / t_frame.x_scale, 1.0 / t_frame.y_scale);
+            
+            MCGRectangle t_src_rect;
+            t_src_rect = MCGRectangleScale(p_src_rect, t_frame.x_scale, t_frame.y_scale);
+            
+            MCGContextDrawRectOfImage(p_gcontext, t_frame.image, t_src_rect, p_dst_rect, p_filter);
+            
+            MCImageRepUnlock(p_image_rep, 0, t_frame);
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
-

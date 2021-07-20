@@ -34,17 +34,17 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include <CoreGraphics/CoreGraphics.h>
 #import <OpenGLES/ES1/gl.h>
 #import <OpenGLES/ES1/glext.h>
-extern void MCIPhoneSwitchToUIKit(void);
-extern void MCIPhoneSwitchToOpenGL(void);
 #elif defined(TARGET_SUBPLATFORM_ANDROID)
 #define GL_GLEXT_PROTOTYPES
 #include <GLES/gl.h>
 #include <GLES/glext.h>
-extern void MCAndroidEnableOpenGLMode(void);
-extern void MCAndroidDisableOpenGLMode(void);
+#include <EGL/egl.h>
 #else
 #error tilecachegl.cpp not supported on this platform
 #endif
+
+extern void MCPlatformEnableOpenGLMode(void);
+extern void MCPlatformDisableOpenGLMode(void);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -390,7 +390,17 @@ void MCTileCacheOpenGLCompositor_DeallocateTile(void *p_context, void *p_tile)
 
 static void MCTileCacheOpenGLCompositor_PrepareFrame(MCTileCacheOpenGLCompositorContext *self)
 {
-	self -> viewport_height = MCTileCacheGetViewport(self -> tilecache) . height;
+#if defined(_ANDROID_MOBILE)
+    EGLint t_height;
+    eglQuerySurface(eglGetCurrentDisplay(),
+                    eglGetCurrentSurface(EGL_DRAW),
+                    EGL_HEIGHT,
+                    &t_height);
+    
+    self -> viewport_height = t_height;
+#else
+    self -> viewport_height = MCTileCacheGetViewport(self -> tilecache) . height;
+#endif
 	self -> current_texture = 0;
 	self -> current_color = 0xffffffff;
 	self -> current_opacity = 255;
@@ -575,6 +585,9 @@ bool MCTileCacheOpenGLCompositor_EndLayer(void *p_context)
 
 bool MCTileCacheOpenGLCompositor_CompositeTile(void *p_context, int32_t p_x, int32_t p_y, void *p_tile)
 {
+    if (p_tile == nil)
+        return false;
+    
 	MCTileCacheOpenGLCompositorContext *self;
 	self = (MCTileCacheOpenGLCompositorContext *)p_context;
 
@@ -678,11 +691,7 @@ void MCTileCacheOpenGLCompositor_Cleanup(void *p_context)
 	MCMemoryDeleteArray(self -> super_tiles);
 	MCMemoryDelete(self);
 	
-#ifdef _IOS_MOBILE
-	MCIPhoneSwitchToUIKit();
-#else
-	MCAndroidDisableOpenGLMode();
-#endif
+	MCPlatformDisableOpenGLMode();
 }
 
 void MCTileCacheOpenGLCompositor_Flush(void *p_context)
@@ -719,11 +728,7 @@ bool MCTileCacheOpenGLCompositorConfigure(MCTileCacheRef p_tilecache, MCTileCach
 	r_compositor . begin_snapshot = MCTileCacheOpenGLCompositor_BeginSnapshot;
 	r_compositor . end_snapshot = MCTileCacheOpenGLCompositor_EndSnapshot;
 	
-#ifdef _IOS_MOBILE
-	MCIPhoneSwitchToOpenGL();
-#else
-	MCAndroidEnableOpenGLMode();
-#endif
+	MCPlatformEnableOpenGLMode();
 	
 	return true;
 }

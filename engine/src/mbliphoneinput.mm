@@ -36,8 +36,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import <MediaPlayer/MPMoviePlayerController.h>
-
 #include "mbliphonecontrol.h"
 #include "mbliphone.h"
 
@@ -847,7 +845,7 @@ void MCiOSInputControl::GetText(MCExecContext& ctxt, MCStringRef& r_string)
     
     if (t_field)
     {
-        if (MCStringCreateWithCFString((CFStringRef)[t_field text], r_string))
+        if (MCStringCreateWithCFStringRef((CFStringRef)[t_field text], r_string))
             return;
     }
     else
@@ -872,7 +870,7 @@ void MCiOSInputControl::GetFontName(MCExecContext& ctxt, MCStringRef& r_font)
     
     if (t_field)
     {
-        if (MCStringCreateWithCFString((CFStringRef)[[t_field font] fontName], r_font))
+        if (MCStringCreateWithCFStringRef((CFStringRef)[[t_field font] fontName], r_font))
             return;
     }
     else

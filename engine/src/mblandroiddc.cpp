@@ -46,15 +46,18 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include "graphics.h"
 #include "resolution.h"
+#include "exec-interface.h"
 
 #include <jni.h>
 #include "mcmanagedpthread.h"
 #include <android/log.h>
 #include <android/bitmap.h>
-#include <GLES/gl.h>
+#include <GLES3/gl3.h>
 #include <unistd.h>
 
 #include "libscript/script.h"
+
+#include "glcontext.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -127,6 +130,7 @@ static MCRectangle s_android_bitmap_dirty;
 static bool s_android_opengl_enabled = false;
 static bool s_android_opengl_visible = false;
 static jobject s_android_opengl_view = nullptr;
+static MCGLContextRef s_android_opengl_context = nil;
 
 // This is the JNI reference to our display/view instance.
 static jobject s_android_activity = nullptr;
@@ -406,7 +410,7 @@ bool MCScreenDC::platform_getdisplays(bool p_effective, MCDisplay *&r_displays, 
 // IM-2014-01-31: [[ HiDPI ]] Display info updating not yet implemented on Android
 bool MCScreenDC::platform_displayinfocacheable(void)
 {
-	return false;
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -538,12 +542,17 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 
 	do
 	{
+		s_java_env->PushLocalFrame(0);
+
 		// IM-2014-03-06: [[ revBrowserCEF ]] Call additional runloop callbacks
 		DoRunloopActions();
 
         // MM-2015-06-05: [[ MobileSockets ]] Dispatch any waiting notifications.
         if (MCNotifyDispatch(dispatch == True) && anyevent)
+        {
+			s_java_env->PopLocalFrame(nullptr);
             break;
+        }
 
 		real8 eventtime = exittime;
 		if (handlepending(curtime, eventtime, dispatch))
@@ -553,6 +562,7 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 
 			if (MCquit)
 			{
+			s_java_env->PopLocalFrame(nullptr);
 				abort = True;
 				break;
 			}
@@ -562,12 +572,14 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		{
 			if (anyevent)
 			{
+				s_java_env->PopLocalFrame(nullptr);
 				done = True;
 				break;
 			}
 
 			if (MCquit)
 			{
+				s_java_env->PopLocalFrame(nullptr);
 				abort = True;
 				break;
 			}
@@ -576,6 +588,8 @@ Boolean MCScreenDC::wait(real8 duration, Boolean dispatch, Boolean anyevent)
 		// MW-2012-09-19: [[ Bug 10218 ]] Make sure we update the screen in case
 		//   any engine event handling methods need us to.
 		MCRedrawUpdateScreen();
+
+		s_java_env->PopLocalFrame(nullptr);
 
 		// Get the time now
 		curtime = MCS_time();
@@ -632,9 +646,33 @@ void MCScreenDC::openIME()
 {
 }
 
+extern int32_t MCInterfaceAndroidKeyboardEnumFromMCExecEnum(MCInterfaceKeyboardType p_type);
+extern int32_t MCInterfaceAndroidReturnKeyTypeEnumFromMCExecEnum(MCInterfaceReturnKeyType p_type);
 void MCScreenDC::activateIME(Boolean activate)
 {
-	MCAndroidEngineRemoteCall("setTextInputVisible", "vb", nil, activate);
+    int32_t t_keyboard_type = 0;
+    intenum_t t_field_keyboard_type = kMCInterfaceKeyboardTypeNone;
+    
+    int32_t t_return_key_type = 0;
+    intenum_t t_field_return_key_type = kMCInterfaceReturnKeyTypeNone;
+    
+    if (MCactivefield.IsValid())
+    {
+        t_field_keyboard_type = MCactivefield->getkeyboardtype();
+        t_field_return_key_type = MCactivefield->getreturnkeytype();
+    }
+    
+    if (t_field_keyboard_type != kMCInterfaceKeyboardTypeNone)
+    {
+        t_keyboard_type = MCInterfaceAndroidKeyboardEnumFromMCExecEnum(static_cast<MCInterfaceKeyboardType>(t_field_keyboard_type));
+    }
+    
+    if (t_field_return_key_type != kMCInterfaceReturnKeyTypeNone)
+    {
+        t_return_key_type = MCInterfaceAndroidReturnKeyTypeEnumFromMCExecEnum(static_cast<MCInterfaceReturnKeyType>(t_field_return_key_type));
+    }
+    
+    MCAndroidEngineRemoteCall("setTextInputVisible", "vbii", nil, activate, t_keyboard_type, t_return_key_type);
 }
 
 void MCScreenDC::closeIME()
@@ -685,9 +723,29 @@ void MCScreenDC::do_fit_window(bool p_immediate_resize, bool p_post_message)
 	}
 }
 
+void MCScreenDC::refresh_current_window(void)
+{
+    if (m_current_window == nil)
+        return;
+    
+    MCStack *t_stack = (MCStack *)m_current_window;
+    
+    t_stack -> dirtyrect(t_stack -> view_getstackvisiblerect());
+}
+
 Window MCScreenDC::get_current_window(void)
 {
 	return m_current_window;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCScreenDC::getsystemappearance(MCSystemAppearance &r_appearance)
+{
+	int t_system_appearance;
+	MCAndroidEngineRemoteCall("getSystemAppearance", "i", &t_system_appearance);
+	
+	r_appearance = static_cast<MCSystemAppearance>(t_system_appearance);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -894,7 +952,8 @@ public:
 		{
             MCGContextRef t_context;
             if (MCGContextCreateWithRaster(t_raster, t_context))
-			{
+            {
+                r_context = t_context;
                 r_raster = t_raster;
 				return true;
 			}
@@ -986,8 +1045,9 @@ public:
 	}
 
 protected:
-	static void FlushBits(void *p_bits, uint32_t p_stride)
+	void FlushBits(void *p_bits, uint32_t p_stride)
 	{
+		MCAssert(s_android_opengl_context != nil);
 		GLuint t_texture;
 		glGenTextures(1, &t_texture);
 		glBindTexture(GL_TEXTURE_2D, t_texture);
@@ -1000,27 +1060,17 @@ protected:
         //   TexImage2D and TexSubImage2D.
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
-		glMatrixMode(GL_TEXTURE);
-		glLoadIdentity();
+		MCGLContextSelectProgram(s_android_opengl_context, kMCGLProgramTypeTexture);
+		MCGLContextSetWorldTransform(s_android_opengl_context, MCGAffineTransformMakeIdentity());
+		MCGLContextSetTextureTransform(s_android_opengl_context, MCGAffineTransformMakeIdentity());
 
-		glEnable(GL_TEXTURE_2D);
 		glDisable(GL_BLEND);
-		glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
-		GLfloat t_vertices[8];
-
-		GLfloat t_coords[8] =
-		{
-			0, 0,
-			1.0, 0.0,
-			0.0, 1.0,
-			1.0, 1.0
-		};
-
-		glVertexPointer(2, GL_FLOAT, 0, t_vertices);
-		glTexCoordPointer(2, GL_FLOAT, 0, t_coords);
+		MCGLTextureVertex t_vertices[4];
+		t_vertices[0].texture_position[0] = 0.0; t_vertices[0].texture_position[1] = 0.0;
+		t_vertices[1].texture_position[0] = 1.0; t_vertices[1].texture_position[1] = 0.0;
+		t_vertices[2].texture_position[0] = 0.0; t_vertices[2].texture_position[1] = 1.0;
+		t_vertices[3].texture_position[0] = 1.0; t_vertices[3].texture_position[1] = 1.0;
 
 		for(int32_t y = 0; y < (s_android_bitmap_height + 255) / 256; y++)
 			for(int32_t x = 0; x < (s_android_bitmap_width + 255) / 256; x++)
@@ -1038,11 +1088,12 @@ protected:
 				t_py = s_android_bitmap_height - y * 256 - 256;
 
 				// Setup co-ords.
-				t_vertices[0] = t_px, t_vertices[1] = t_py + 256;
-				t_vertices[2] = t_px + 256, t_vertices[3] = t_py + 256;
-				t_vertices[4] = t_px, t_vertices[5] = t_py;
-				t_vertices[6] = t_px + 256, t_vertices[7] = t_py;
+				t_vertices[0].position[0] = t_px; t_vertices[0].position[1] = t_py + 256;
+				t_vertices[1].position[0] = t_px + 256; t_vertices[1].position[1] = t_py + 256;
+				t_vertices[2].position[0] = t_px; t_vertices[2].position[1] = t_py;
+				t_vertices[3].position[0] = t_px + 256; t_vertices[3].position[1] = t_py;
 
+				glBufferData(GL_ARRAY_BUFFER, sizeof(MCGLTextureVertex) * 4, t_vertices, GL_STREAM_DRAW);
 				glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 			}
 
@@ -1052,6 +1103,10 @@ protected:
 
 void MCStack::view_device_updatewindow(MCRegionRef p_region)
 {
+	// Check if stack should be drawn before rendering
+	if (getextendedstate(ECS_DONTDRAW))
+		return;
+
 	// IM-2014-01-31: [[ HiDPI ]] If using a callback, render to the Android bitmap view
 	if (s_updatewindow_callback != nil || !s_android_opengl_enabled)
 	{
@@ -1086,17 +1141,14 @@ void MCStack::view_device_updatewindow(MCRegionRef p_region)
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glViewport(0, 0, s_android_bitmap_width, s_android_bitmap_height);
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		glOrthof(0, (GLfloat)s_android_bitmap_width, 0, (GLfloat)s_android_bitmap_height, 0, 1);
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
+		// create transform from {0, 0, surface_width, surface_height} to GL normaized coords
+		MCGAffineTransform t_projection;
+		t_projection = MCGAffineTransformFromRectangles(MCGRectangleMake(0, 0, s_android_bitmap_width, s_android_bitmap_height), MCGRectangleMake(-1,-1,2,2));
+		MCGLContextSetProjectionTransform(s_android_opengl_context, t_projection);
+		MCGLContextSetWorldTransform(s_android_opengl_context, MCGAffineTransformMakeIdentity());
+		MCGLContextSetTextureTransform(s_android_opengl_context, MCGAffineTransformMakeIdentity());
 
 		glDisable(GL_DEPTH_TEST);
-		glDisableClientState(GL_COLOR_ARRAY);
-		glEnable(GL_TEXTURE_2D);
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
 		MCGRegionRef t_dirty_rgn;
 		MCGRegionCreate(t_dirty_rgn);
@@ -1119,7 +1171,7 @@ void MCStack::view_device_updatewindow(MCRegionRef p_region)
 
 			// MW-2011-12-12: [[ Bug 9908 ]] Make sure both front and back buffers hold the same image
 			//   to prevent a flicker back to an old frame when making the opengl layer visible.
-			view_device_updatewindow(p_region);
+			dirtyall();
 
             // MW-2015-05-06: [[ Bug 15232 ]] Prevent black flash when enabling setting acceleratedRendering to true
 			MCAndroidEngineRemoteCall("hideBitmapViewInTime", "v", nil);
@@ -1304,7 +1356,7 @@ static void *mobile_main(void *arg)
     t_options.app_code_path = nullptr;
 	if (!X_init(t_options))
 	{
-		MCLog("X_init failed");
+		MCLog("X_init failed %@", MCresult->getvalueref());
 
 		// IM-2013-05-01: [[ BZ 10586 ]] signal java ui thread to exit
 		// finish LiveCodeActivity
@@ -1661,6 +1713,28 @@ static void MCAndroidEngineCallThreadCallback(void *p_context)
 			t_env -> DeleteLocalRef(t_java_string);
 		}
 		break;
+		case kMCJavaTypeUtf8CString:
+		{
+			jstring t_java_string;
+			if (context->is_static)
+				t_java_string = (jstring)t_env -> CallStaticObjectMethodA(t_class, t_method_id, t_params->params);
+			else
+				t_java_string = (jstring)t_env -> CallObjectMethodA(context->object, t_method_id, t_params->params);
+			if (t_cleanup_java_refs && t_env -> ExceptionCheck())
+			{
+				t_exception_thrown = true;
+				t_success = false;
+			}
+
+            char *t_utf8_string = nil;
+			if (t_success)
+                t_success = MCJavaStringToUTF8(t_env, t_java_string, t_utf8_string);
+            if (t_success)
+                *(char **)(context -> return_value) = t_utf8_string;
+
+			t_env -> DeleteLocalRef(t_java_string);
+		}
+		break;
 		case kMCJavaTypeMCString:
 			{
 				jstring t_java_string;
@@ -1986,12 +2060,14 @@ extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doBackPressed(J
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doMenuKey(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doSearchKey(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doOrientationChanged(JNIEnv *env, jobject object, jint orientation) __attribute__((visibility("default")));
+extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doSystemAppearanceChanged(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doTextDone(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doTextCanceled(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doMediaDone(JNIEnv *env, jobject object, jstring p_media_content) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doMediaCanceled(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doKeyboardShown(JNIEnv *env, jobject object, int height) __attribute__((visibility("default")));
 extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doKeyboardHidden(JNIEnv *env, jobject object) __attribute__((visibility("default")));
+extern "C" JNIEXPORT jobject JNICALL Java_com_runrev_android_Engine_doGetFocusedRect(JNIEnv *env, jobject object) __attribute__((visibility("default")));
 
 JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doCreate(JNIEnv *env, jobject object, jobject activity, jobject container, jobject view)
 {
@@ -2203,6 +2279,9 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doReconfigure(JNIEnv *env,
 	
 	s_android_bitmap_loc_x = x;
 	s_android_bitmap_loc_y = y;
+    
+    bool t_updated;
+    static_cast<MCScreenDC *>(MCscreen) -> updatedisplayinfo(t_updated);
 
 	// MW-2011-10-01: [[ Bug 9772 ]] If we are resizing, we do a 'fit window', else
 	//   we yield to engine.
@@ -2325,6 +2404,13 @@ JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doOrientationChanged(JNIEn
 
 //////////
 
+JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doSystemAppearanceChanged(JNIEnv *env, jobject object)
+{
+	MCNotificationPostSystemAppearanceChanged();
+}
+
+//////////
+
 struct MCKeyboardActivatedEvent: public MCCustomEvent
 {
 	MCKeyboardActivatedEvent(float p_height)
@@ -2339,7 +2425,8 @@ struct MCKeyboardActivatedEvent: public MCCustomEvent
 	
 	void Dispatch(void)
 	{
-		MCdefaultstackptr -> getcurcard() -> message(MCM_keyboard_activated);
+        MCscreen -> cleardisplayinfocache();
+        MCdefaultstackptr -> getcurcard() -> message(MCM_keyboard_activated);
 	}
 	
 private:
@@ -2355,7 +2442,8 @@ struct MCKeyboardDeactivatedEvent: public MCCustomEvent
 	
 	void Dispatch(void)
 	{
-		MCdefaultstackptr -> getcurcard() -> message(MCM_keyboard_deactivated);
+        MCscreen -> cleardisplayinfocache();
+        MCdefaultstackptr -> getcurcard() -> message(MCM_keyboard_deactivated);
 	}
 };
 
@@ -2457,7 +2545,8 @@ bool revandroid_getAssetOffsetAndLength(JNIEnv *env, jobject object, const char 
 bool revandroid_loadExternalLibrary(MCStringRef p_external, MCStringRef &r_path)
 {
 	MCAndroidEngineRemoteCall("loadExternalLibrary", "xx", &r_path, p_external);
-	return r_path != nil;
+	
+    return !MCStringIsEmpty(r_path);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2466,10 +2555,7 @@ bool MCAndroidGetBuildInfo(MCStringRef p_key, MCStringRef& r_value)
 {
 	MCAndroidEngineCall("getBuildInfo", "xx", &r_value, p_key);
 
-	if (r_value == nil)
-		return false;
-
-    return true;
+    return !MCStringIsEmpty(r_value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2722,6 +2808,10 @@ static void doSurfaceDestroyedCallback(void *)
 	if (s_android_opengl_enabled)
 		MCRedrawDirtyScreen();
 
+	// Reset OpenGL context
+	if (s_android_opengl_context != nil)
+		MCGLContextReset(s_android_opengl_context);
+
 	// Discard all the OpenGL state.
 	s_java_env -> CallVoidMethod(s_android_opengl_view, s_openglview_finish_method);
 
@@ -2755,8 +2845,19 @@ static void doSurfaceChangedCallback(void *p_is_init)
 	// We can now re-enable screen updates.
 	MCRedrawEnableScreenUpdates();
 
-	// Force a screen redraw
-	MCRedrawUpdateScreen();
+	if (s_android_opengl_context != nil)
+	{
+		// Reset & re-initialize the OpenGL context
+		MCGLContextReset(s_android_opengl_context);
+		/* UNCHECKED */ MCGLContextInit(s_android_opengl_context);
+	}
+
+	// Force a redraw of the current window. If this is an initializing change,
+	// re-render the whole screen.
+	if (t_is_init)
+		MCRedrawUpdateScreen();
+	else
+		static_cast<MCScreenDC *>(MCscreen) -> refresh_current_window();
 }
 
 JNIEXPORT void JNICALL Java_com_runrev_android_OpenGLView_doSurfaceChanged(JNIEnv *env, jobject object, jobject p_view)
@@ -2775,12 +2876,15 @@ JNIEXPORT void JNICALL Java_com_runrev_android_OpenGLView_doSurfaceChanged(JNIEn
 	co_yield_to_engine_and_call(doSurfaceChangedCallback, (void *)t_is_init);
 }
 
-void MCAndroidEnableOpenGLMode(void)
+void MCPlatformEnableOpenGLMode(void)
 {
 	if (s_android_opengl_enabled)
 		return;
 
 	MCRedrawDisableScreenUpdates();
+
+	// Create new OpenGL context to manage shader setup, etc.
+	/* UNCHECKED */ MCGLContextCreate(s_android_opengl_context);
 
 	MCAndroidEngineRemoteCall("enableOpenGLView", "v", nil);
 
@@ -2788,7 +2892,7 @@ void MCAndroidEnableOpenGLMode(void)
 	s_android_opengl_visible = false;
 }
 
-void MCAndroidDisableOpenGLMode(void)
+void MCPlatformDisableOpenGLMode(void)
 {
 	if (!s_android_opengl_enabled)
 		return;
@@ -2798,10 +2902,63 @@ void MCAndroidDisableOpenGLMode(void)
 
 	MCAndroidEngineRemoteCall("disableOpenGLView", "v", nil);
 
+	// Release OpenGL context
+	MCGLContextDestroy(s_android_opengl_context);
+	s_android_opengl_context = nil;
+
 	MCRedrawEnableScreenUpdates();
 }
 
+MCGLContextRef MCPlatformGetOpenGLContext(void)
+{
+	return s_android_opengl_context;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
+
+static bool s_in_permission_dialog = false;
+static bool s_permission_granted = false;
+
+MC_DLLEXPORT_DEF
+bool MCAndroidCheckRuntimePermission(MCStringRef p_permission)
+{
+    bool t_result;
+    s_in_permission_dialog = true;
+    MCAndroidEngineRemoteCall("askPermission", "bx", &t_result, p_permission);
+    
+    while (s_in_permission_dialog)
+        MCscreen -> wait(60.0, False, True);
+
+    return s_permission_granted;
+}
+
+MC_DLLEXPORT_DEF
+bool MCAndroidCheckPermissionExists(MCStringRef p_permission)
+{
+    bool t_result;
+    MCAndroidEngineRemoteCall("checkPermissionExists", "bx", &t_result, p_permission);
+    
+    return t_result;
+}
+
+MC_DLLEXPORT_DEF
+bool MCAndroidHasPermission(MCStringRef p_permission)
+{
+    bool t_result;
+    MCAndroidEngineRemoteCall("checkHasPermissionGranted", "bx", &t_result, p_permission);
+    
+    return t_result;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doAskPermissionDone(JNIEnv *env, jobject object, bool granted) __attribute__((visibility("default")));
+JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doAskPermissionDone(JNIEnv *env, jobject object, bool granted)
+{
+    s_in_permission_dialog = false;
+    s_permission_granted = granted;
+    MCAndroidBreakWait();
+}
+
+/////////////////////////////////////////////////////////////////////////////////
 
 bool android_run_on_main_thread(void *p_callback, void *p_callback_state, int p_options);
 
@@ -2893,8 +3050,8 @@ private:
 	int m_options;
 };
 
-extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doNativeNotify(JNIEnv *env, jobject object, int p_callback, int p_context) __attribute__((visibility("default")));
-JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doNativeNotify(JNIEnv *env, jobject object, int p_callback, int p_context)
+extern "C" JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doNativeNotify(JNIEnv *env, jobject object, jlong p_callback, jlong p_context) __attribute__((visibility("default")));
+JNIEXPORT void JNICALL Java_com_runrev_android_Engine_doNativeNotify(JNIEnv *env, jobject object, jlong p_callback, jlong p_context)
 {
 	co_yield_to_engine_and_call((co_yield_callback_t)p_callback, (void *)p_context);
 }
@@ -2939,8 +3096,8 @@ bool android_run_on_main_thread(void *p_callback, void *p_callback_state, int p_
 		
 		MCRunOnMainThreadHelper *t_helper;
 		t_helper = new (nothrow) MCRunOnMainThreadHelper(p_callback, p_callback_state, p_options);
-		MCAndroidEngineCall("nativeNotify", "vii", nil, MCRunOnMainThreadHelper::DispatchThunk, t_helper);
-		return true;
+		MCAndroidEngineCall("nativeNotify", "vjj", nil, reinterpret_cast<jlong>(MCRunOnMainThreadHelper::DispatchThunk), reinterpret_cast<jlong>(t_helper));
+        return true;
 	}
 	
 	// Unsafe and immediate -> queue and perform
@@ -2957,8 +3114,8 @@ bool android_run_on_main_thread(void *p_callback, void *p_callback_state, int p_
 		
 		MCRunOnMainThreadHelper *t_helper;
 		t_helper = new (nothrow) MCRunOnMainThreadHelper(p_callback, p_callback_state, p_options & ~kMCExternalRunOnMainThreadPost);
-		MCAndroidEngineCall("nativeNotify", "vii", nil, MCRunOnMainThreadHelper::DispatchThunk, t_helper);
-		return true;
+		MCAndroidEngineCall("nativeNotify", "vjj", nil, reinterpret_cast<jlong>(MCRunOnMainThreadHelper::DispatchThunk), reinterpret_cast<jlong>(t_helper));
+        return true;
 	}
 	
 	// Safe and immediate -> post to front of event queue
@@ -3013,6 +3170,58 @@ JNIEXPORT jstring JNICALL Java_com_runrev_android_Engine_doGetCustomPropertyValu
     }
 
     return t_js;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+JNIEXPORT jobject JNICALL Java_com_runrev_android_Engine_doGetFocusedRect(JNIEnv *env, jobject object)
+{
+    MCObject *t_object = nullptr;
+    if (MCactivefield.IsValid())
+    {
+        t_object = MCactivefield;
+    }
+    
+    if (t_object == nullptr)
+    {
+        t_object = MCdefaultstackptr->getcard()->getkfocused();
+    }
+    
+    if (t_object == nullptr)
+    {
+        t_object = MCdefaultstackptr->getcard();
+    }
+    
+    if (t_object == nullptr)
+    {
+        return nullptr;
+    }
+    
+    MCRectangle t_object_rect = t_object -> getrect();
+    MCGAffineTransform t_transform = MCdefaultstackptr->getdevicetransform();
+    
+    MCRectangle t_transformed_object_rect =
+            MCRectangleGetTransformedBounds(t_object_rect, t_transform);
+    
+    jclass t_class = env->FindClass("android/graphics/Rect");
+    if (t_class == nullptr)
+    {
+        return nullptr;
+    }
+    
+    jmethodID t_constructor = env->GetMethodID(t_class, "<init>", "(IIII)V");
+    if (t_constructor == nullptr)
+    {
+        return nullptr;
+    }
+    jobject t_rect = env->NewObject(t_class,
+                                    t_constructor,
+                                    t_transformed_object_rect.x,
+                                    t_transformed_object_rect.y,
+                                    t_transformed_object_rect.x + t_transformed_object_rect.width,
+                                    t_transformed_object_rect.y + t_transformed_object_rect.height);
+
+    return t_rect;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

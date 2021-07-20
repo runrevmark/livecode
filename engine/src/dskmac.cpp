@@ -80,6 +80,30 @@
 uint1 *MClowercasingtable = NULL;
 uint1 *MCuppercasingtable = NULL;
 
+static bool GetProcessIsTranslated()
+{
+	static int s_state = -1;
+	if (s_state == -1)
+	{
+		int ret = 0;
+		size_t size = sizeof(ret);
+		if (sysctlbyname("sysctl.proc_translated", &ret, &size, NULL, 0) == -1)
+		{
+			if (errno == ENOENT)
+			{
+				s_state = 0;
+			}
+		}
+		else
+		{
+			s_state = ret;
+		}
+	}
+
+	return s_state == 1;
+}
+
+
 inline FourCharCode FourCharCodeFromString(const char *p_string)
 {
 	return MCSwapInt32HostToNetwork(*(FourCharCode *)p_string);
@@ -87,14 +111,14 @@ inline FourCharCode FourCharCodeFromString(const char *p_string)
 
 bool FourCharCodeFromString(MCStringRef p_string, uindex_t p_start, FourCharCode& r_four_char_code)
 {
-    char *temp;
+    MCAutoStringRefAsCString t_temp;
     uint32_t t_four_char_code;
-    if (!MCStringConvertToCString(p_string, temp))
+    if (!t_temp.Lock(p_string))
         return false;
     
-    memcpy(&t_four_char_code, temp + p_start, 4);
+    memcpy(&t_four_char_code, *t_temp + p_start, 4);
     r_four_char_code = MCSwapInt32HostToNetwork(t_four_char_code);
-    delete temp;
+    
     return true;
 }
 
@@ -109,7 +133,7 @@ inline char *FourCharCodeToString(FourCharCode p_code)
 
 bool FourCharCodeToStringRef(FourCharCode p_code, MCStringRef& r_string)
 {
-    return MCStringCreateWithCString(FourCharCodeToString(p_code), r_string);
+    return MCStringCreateWithCStringAndRelease(FourCharCodeToString(p_code), r_string);
 }
 
 struct triplets
@@ -567,36 +591,7 @@ static void parseSerialControlStr(MCStringRef setting, struct termios *theTermio
         {
             integer_t baudrate;
             /* UNCHECKED */ MCStringToInteger(*t_value, baudrate);
-			if (baudrate == 57600)
-				baud = B57600;
-			else if (baudrate == 38400)
-				baud = B38400;
-			else if (baudrate == 28800)
-				baud = B28800;
-			else if (baudrate == 19200)
-				baud = B19200;
-			else if (baudrate == 16600)
-				baud = B16600;
-			else if (baudrate == 14400)
-				baud = B14400;
-			else if (baudrate == 9600)
-				baud = B9600;
-			else if (baudrate == 7200)
-				baud = B7200;
-			else if (baudrate == 4800)
-				baud = B4800;
-			else if (baudrate == 3600)
-				baud = B4800;
-			else if (baudrate == 2400)
-				baud = B2400;
-			else if (baudrate == 1800)
-				baud = B1800;
-			else if (baudrate == 1200)
-				baud = B1200;
-			else if (baudrate == 600)
-				baud = B600;
-			else if (baudrate == 300)
-				baud = B300;
+            baud = baudrate;
 			cfsetispeed(theTermios, baud);
 			cfsetospeed(theTermios, baud);
             
@@ -888,7 +883,7 @@ static bool MCS_file_exists_at_path(MCStringRef p_path)
 //   the path is taken to be a directory and is always redirected if is within
 //   Contents/MacOS. If p_is_file is true, then the file is only redirected if
 //   the original doesn't exist, and the redirection does.
-static bool MCS_apply_redirect(MCStringRef p_path, bool p_is_file, MCStringRef& r_redirected)
+bool MCS_apply_redirect(MCStringRef p_path, bool p_is_file, MCStringRef& r_redirected)
 {
     // If the original file exists, do nothing.
     if (p_is_file && MCS_file_exists_at_path(p_path))
@@ -1046,7 +1041,7 @@ static bool same_var(const char *p_left, const char *p_right)
 static char **fix_environ(void)
 {
     char **t_new_environ;
-    if (MCmajorosversion > 0x1090)
+    if (MCmajorosversion > MCOSVersionMake(10,9,0))
     {
         // Build a new environ, making sure that each var only takes the
         // first definition in the list. We don't have to care about memory
@@ -1630,6 +1625,11 @@ public:
 	virtual bool Seek(int64_t offset, int p_dir)
 	{
         // TODO Add MCSystemFileHandle::SetStream(char *newptr) ?
+		if (m_is_eof)
+		{
+			clearerr(m_stream);
+			m_is_eof = false;
+		}
 		return fseeko(m_stream, offset, p_dir < 0 ? SEEK_END : (p_dir > 0 ? SEEK_SET : SEEK_CUR)) == 0;
 	}
 	
@@ -2454,7 +2454,7 @@ struct MCMacSystemService: public MCMacSystemServiceInterface//, public MCMacDes
                     
                     // On Snow Leopard check for a coercion to a file list first as otherwise
                     // we get a bad URL!
-                    if (MCmajorosversion >= 0x1060)
+                    if (MCmajorosversion >= MCOSVersionMake(10,6,0))
                     {
                         // SN-2014-10-07: [[ Bug 13587 ]] fetch_as_as_fsref_list updated to return an MCList
                         MCAutoListRef t_list;
@@ -2811,43 +2811,14 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         
         _CurrentRuneLocale->__runetype[202] = _CurrentRuneLocale->__runetype[201];
         
-        // Initialize our case mapping tables. We always use the MacRoman locale.
-        CFStringRef t_raw;
-        CFMutableStringRef t_lower, t_upper;
-        CFIndex t_ignored;
-        MCuppercasingtable = new (nothrow) uint8_t[256];
-        MClowercasingtable = new (nothrow) uint8_t[256];
-        for(uindex_t i = 0; i < 256; ++i)
-            MCuppercasingtable[i] = uint8_t(i);
-        t_raw = CFStringCreateWithBytes(NULL, MCuppercasingtable, 256, kCFStringEncodingMacRoman, false);
-        t_lower = CFStringCreateMutableCopy(NULL, 0, t_raw);
-        t_upper = CFStringCreateMutableCopy(NULL, 0, t_raw);
-        CFStringLowercase(t_lower, NULL);
-        CFStringUppercase(t_upper, NULL);
-        CFStringGetBytes(t_lower, CFRangeMake(0, 256), kCFStringEncodingMacRoman, '?', false, MClowercasingtable, 256, &t_ignored);
-        CFStringGetBytes(t_upper, CFRangeMake(0, 256), kCFStringEncodingMacRoman, '?', false, MCuppercasingtable, 256, &t_ignored);
-        CFRelease(t_raw);
-        CFRelease(t_lower);
-        CFRelease(t_upper);
-        
         MCinfinity = HUGE_VAL;
         
-        // SN-2014-10-08: [[ YosemiteUpdate ]] gestaltSystemVersion stops to 9 after any Minor/Bugfix >= 10
-        //  We want to keep the same way the os version is built, which is 0xMMmb
-        //     - MM reads the decimal major version number
-        //     - m  reads the hexadecimal minor version number
-        //     - b  reads the hexadecimal bugfix number.
         SInt32 t_major, t_minor, t_bugfix;
         if (Gestalt(gestaltSystemVersionMajor, &t_major) == noErr &&
             Gestalt(gestaltSystemVersionMinor, &t_minor) == noErr &&
             Gestalt(gestaltSystemVersionBugFix, &t_bugfix) == noErr)
         {
-            if (t_major < 10)
-                MCmajorosversion = t_major * 0x100;
-            else
-                MCmajorosversion = (t_major / 10) * 0x1000 + (t_major - 10) * 0x100;
-            MCmajorosversion += t_minor * 0x10;
-            MCmajorosversion += t_bugfix * 0x1;
+			MCmajorosversion = MCOSVersionMake(t_major, t_minor, t_bugfix);
         }
 		
         MCaqua = True; // Move to MCScreenDC
@@ -2871,7 +2842,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
             
             // Change the current folder
             MCAutoStringRef t_path;
-            if (MCStringCreateWithCFString(t_fs_path, &t_path))
+            if (MCStringCreateWithCFStringRef(t_fs_path, &t_path))
                 /* UNCHECKED */ SetCurrentFolder(*t_path);
             
             CFRelease(t_bundle_url);
@@ -2920,6 +2891,25 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
             setlinebuf(stderr);
         }
 #endif // _MAC_SERVER
+
+        // Initialize our case mapping tables. We always use the MacRoman locale.
+        CFStringRef t_raw;
+        CFMutableStringRef t_lower, t_upper;
+        CFIndex t_ignored;
+        MCuppercasingtable = new (nothrow) uint8_t[256];
+        MClowercasingtable = new (nothrow) uint8_t[256];
+        for(uindex_t i = 0; i < 256; ++i)
+            MCuppercasingtable[i] = uint8_t(i);
+        t_raw = CFStringCreateWithBytes(NULL, MCuppercasingtable, 256, kCFStringEncodingMacRoman, false);
+        t_lower = CFStringCreateMutableCopy(NULL, 0, t_raw);
+        t_upper = CFStringCreateMutableCopy(NULL, 0, t_raw);
+        CFStringLowercase(t_lower, NULL);
+        CFStringUppercase(t_upper, NULL);
+        CFStringGetBytes(t_lower, CFRangeMake(0, 256), kCFStringEncodingMacRoman, '?', false, MClowercasingtable, 256, &t_ignored);
+        CFStringGetBytes(t_upper, CFRangeMake(0, 256), kCFStringEncodingMacRoman, '?', false, MCuppercasingtable, 256, &t_ignored);
+        CFRelease(t_raw);
+        CFRelease(t_lower);
+        CFRelease(t_upper);
         
         return true;
     }
@@ -2964,7 +2954,10 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
     {
 		CFStringRef t_string;
 		if (MCStringConvertToCFStringRef(p_string, t_string))
+        {
 			NSLog(CFSTR("%@"), t_string);
+            CFRelease(t_string);
+        }
     }
 	
 	virtual real64_t GetCurrentTime(void)
@@ -3014,16 +3007,8 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
 
 		return MCStringCopy(MCNameGetString(MCN_unknown), r_string); //in case model name can't be read
     }
-	virtual MCNameRef GetProcessor(void)
-    {
-//get machine processor
-#ifdef __64_BIT__
-        return MCN_x86_64;
-#else
-        return MCN_x86;
-#endif
-    }
-	virtual bool GetAddress(MCStringRef& r_address)
+
+    virtual bool GetAddress(MCStringRef& r_address)
     {
         static struct utsname u;
         uname(&u);
@@ -4084,6 +4069,7 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         
 		if (fptr != NULL)
         {
+            setbuf(fptr, nullptr);
             int val;
             int t_serial_in;
             
@@ -4665,9 +4651,58 @@ struct MCMacDesktop: public MCSystemInterface, public MCMacSystemService
         if (t_cf_document != NULL)
             CFRelease(t_cf_document);
     }
-    
+
+#define APPLESCRIPT_SCRIPT \
+	"local tTempFolder;" \
+	"put the tempname into tTempFolder;" \
+	"create folder tTempFolder;" \
+	"local tStdout, tStderr, tScript;" \
+	"put tTempFolder & \"/stdout.txt\" into tStdout;" \
+	"put tTempFolder & \"/stderr.txt\" into tStderr;" \
+	"put tTempFolder & \"/script.scpt\" into tScript;" \
+	"put textEncode(param(1), \"utf8\") into url (\"binfile:\" & tScript);" \
+	"get shell(format(\"arch -arm64 osascript %s 2>%s 1>%s\", tScript, tStderr, tStdout));" \
+	"local tResult;" \
+	"put the result into tResult;" \
+	"delete file tScript;" \
+	"local tValue;" \
+	"if tResult is 0 then;" \
+		"put url (\"binfile:\" & tStdout) into tValue;" \
+		"if the last char of tValue is return then;" \
+			"delete the last char of tValue;" \
+		"end if;" \
+	"else;" \
+		"put url (\"binfile:\" & tStderr) into tValue;" \
+		"if tValue contains \"script error\" then;" \
+			"put \"compiler error\" into tValue;" \
+		"else;" \
+			"put \"execution error\" into tValue;" \
+		"end if;" \
+	"end if;" \
+	"delete file tStdout;" \
+	"delete file tStderr;" \
+	"switch tValue;" \
+	"case \"execution error\";" \
+	"case empty;" \
+		"return tValue;" \
+	"default;" \
+		"return \"{\" & tValue & \"}\";" \
+	"end switch"
+
     virtual void DoAlternateLanguage(MCStringRef p_script, MCStringRef p_language)
     {
+		if (MCmajorosversion >= MCOSVersionMake(10,16,0) &&
+			MCStringIsEqualToCString(p_language, "AppleScript", kMCStringOptionCompareCaseless) &&
+			GetProcessIsTranslated())
+		{
+			MCParameter *t_param = new (nothrow) MCParameter;
+			t_param->setvalueref_argument(p_script);
+			MCresult->clear();
+			MCdefaultstackptr->domess(MCSTR(APPLESCRIPT_SCRIPT), t_param, true);
+			delete t_param;
+			return;
+		}
+
         getosacomponents();
         OSAcomponent *posacomp = NULL;
         uint2 i;
@@ -5530,7 +5565,7 @@ static void MCS_startprocess_launch(MCNameRef name, MCStringRef docname, Open_mo
 		FSRef launchedapp;
 		inLaunchSpec.numDocs = 0;
 		inLaunchSpec.itemRefs = NULL;
-		if (MCStringGetLength(docname))
+		if (!MCStringIsEmpty(docname))
 		{
 			if (MCS_mac_pathtoref(docname, t_doc_fsref) != noErr)
 			{
@@ -5549,7 +5584,7 @@ static void MCS_startprocess_launch(MCNameRef name, MCStringRef docname, Open_mo
 	}
     
 	errno = connectionInvalid;
-	if (MCStringGetLength(docname))
+	if (!MCStringIsEmpty(docname))
 	{
 		for (i = 0 ; i < MCnprocesses ; i++)
 			if (MCNameIsEqualTo(name, MCprocesses[i].name, kMCStringOptionCompareExact))
@@ -5944,7 +5979,7 @@ bool MCS_get_browsers(MCStringRef &r_browsers)
             
             MCAutoStringRef t_browser_string;
             if (t_success)
-                t_success = MCStringCreateWithCFString(t_browser_title, &t_browser_string);
+                t_success = MCStringCreateWithCFStringRef(t_browser_title, &t_browser_string);
             
             if (t_success)
                 t_success = MCListAppend(*t_browser_list, *t_browser_string);

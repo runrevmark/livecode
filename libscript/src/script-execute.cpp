@@ -268,7 +268,11 @@ public:
         /* There are different variants of objc_msgSend we need to use
          * depending on architecture and return type:
          *   struct return
-         *     all but arm64: _stret
+         *     arm64: only has objc_msgSend
+         *     arm: _stret if struct size > 4 bytes
+         *     x86-64: _stret if struct size > 16 bytes
+         *     i386: _stret if struct size >= 8 bytes or
+         *           exactly 1, 2, or 4 bytes
          *   float return
          *     arm: no difference
          *     i386: _fpret
@@ -289,22 +293,29 @@ public:
          
         ffi_cif *t_cif = (ffi_cif *)p_handler->objc.function_cif;
         void (*t_objc_msgSend)() = nullptr;
+        size_t t_rsize = t_cif->rtype->size;
 #if defined(__ARM64__)
         t_objc_msgSend = (void(*)())objc_msgSend;
 #elif defined(__ARM__)
-        if (t_cif->rtype->type == FFI_TYPE_STRUCT)
+        if (t_cif->rtype->type == FFI_TYPE_STRUCT &&
+            t_rsize > 4)
             t_objc_msgSend = (void(*)())objc_msgSend_stret;
         else
             t_objc_msgSend = (void(*)())objc_msgSend;
 #elif defined(__X86_64__)
-        if (t_cif->rtype->type == FFI_TYPE_STRUCT)
+        /* TODO: Investigate structs containing long doubles
+         * as they will not work at the moment */
+        if (t_cif->rtype->type == FFI_TYPE_STRUCT &&
+            t_rsize > 16)
             t_objc_msgSend = (void(*)())objc_msgSend_stret;
         else if (t_cif->rtype->type == FFI_TYPE_LONGDOUBLE)
             t_objc_msgSend = (void(*)())objc_msgSend_fpret;
         else
             t_objc_msgSend = (void(*)())objc_msgSend;
-#elif defined(__I386__)
-        if (t_cif->rtype->type == FFI_TYPE_STRUCT)
+#elif defined(__i386__)
+        if (t_cif->rtype->type == FFI_TYPE_STRUCT &&
+            (t_rsize >= 8 ||
+             (t_rsize & (t_rsize - 1)) == 0))
             t_objc_msgSend = (void(*)())objc_msgSend_stret;
         else if (t_cif->rtype->type == FFI_TYPE_FLOAT ||
                  t_cif->rtype->type == FFI_TYPE_DOUBLE ||
@@ -492,7 +503,7 @@ MCScriptExecuteContext::InvokeForeignVarArgument(MCScriptForeignInvocation& p_in
     MCTypeInfoRef t_actual_type = t_resolved_type.type;
     
     // Fetch the promoted type of arg type (sub ints promote to int, and float
-    // promotes to double).
+    // promotes to double) - but only if the actual type is foreign.
     const MCForeignTypeDescriptor *t_desc = nullptr;
     if (MCTypeInfoIsForeign(t_actual_type))
     {
@@ -500,16 +511,19 @@ MCScriptExecuteContext::InvokeForeignVarArgument(MCScriptForeignInvocation& p_in
     }
     
     MCTypeInfoRef t_arg_type = t_actual_type;
-    if (t_desc->promote != nullptr)
+    if (t_desc != nullptr)
     {
-        MCResolvedTypeInfo t_resolved_arg_type;
-        if (!ResolveTypeInfo(t_desc->promotedtype,
-                             t_resolved_arg_type))
+        if (t_desc->promote != nullptr)
         {
-            return false;
+            MCResolvedTypeInfo t_resolved_arg_type;
+            if (!ResolveTypeInfo(t_desc->promotedtype,
+                                 t_resolved_arg_type))
+            {
+                return false;
+            }
+            
+            t_arg_type = t_resolved_arg_type.type;
         }
-        
-        t_arg_type = t_resolved_arg_type.type;
     }
     
     // Compute the slot attributes - using the (potentially) promoted type.
@@ -878,6 +892,47 @@ MCScriptExecuteContext::InvokeForeign(MCScriptInstanceRef p_instance,
 }
 
 bool
+MCScriptExecuteContext::Bridge(MCValueRef p_value,
+                               MCValueRef& r_output_value)
+{
+    // Get resolved typeinfo for the value.
+    MCResolvedTypeInfo t_resolved_type;
+    if (!ResolveTypeInfo(MCValueGetTypeInfo(p_value),
+                         t_resolved_type))
+    {
+        return false;
+    }
+ 
+    // Get the foreign type descriptor for the value's type, if any.
+    const MCForeignTypeDescriptor *t_desc = nullptr;
+    if (MCTypeInfoIsForeign(t_resolved_type.type))
+    {
+        t_desc = MCForeignTypeInfoGetDescriptor(t_resolved_type.type);
+    }
+    
+    // If the type is not foreign or is not bridgeable foreign, just retain;
+    // otherwise use doimport.
+    if (t_desc == nullptr ||
+        t_desc->doimport == nullptr)
+    {
+        r_output_value = MCValueRetain(p_value);
+    }
+    else
+    {
+        if (!t_desc->doimport(t_desc,
+                              MCForeignValueGetContentsPtr(p_value),
+                              false,
+                              r_output_value))
+        {
+            Rethrow();
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+bool
 MCScriptExecuteContext::Convert(MCValueRef p_value,
 								MCTypeInfoRef p_to_type,
 								MCValueRef& r_new_value)
@@ -1169,7 +1224,8 @@ MCScriptExecuteContext::UnboxingConvert(MCValueRef p_value,
         }
 	}
 	else if (MCTypeInfoIsHandler(p_slot_type.type) &&
-			 MCHandlerTypeInfoIsForeign(p_slot_type.type))
+			 MCHandlerTypeInfoIsForeign(p_slot_type.type) &&
+             p_value != kMCNull)
 	{
 		// If the slot type is a foreign handler, then we fetch a closure
 		// from the handler value.

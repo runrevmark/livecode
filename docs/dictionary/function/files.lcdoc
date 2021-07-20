@@ -4,7 +4,7 @@ Type: function
 
 Syntax: the [{ detailed | long }] files
 
-Syntax: files([<targetFolder>])
+Syntax: files([<targetFolder>[, <outputKind>]])
 
 Summary:
 List the files in a folder.
@@ -39,6 +39,12 @@ Parameters:
 targetFolder (String):
 The folder path to search.
 
+outputKind (enum):
+- empty: Use the short form
+- "detailed": Use the long/detailed form (deprecated)
+- "detailed-utf8": Use the long/detailed form encoding file names as UTF8 before
+URL-encoding.
+
 Returns (String):
 A list of file names or file information, with one
 file per line.
@@ -62,8 +68,8 @@ included in the list only if they refer to a <file>.
 
 ### Short form
 
-When the <files> is called as a <function>, or without the `<long>` or
-`<long|detailed>` modifiers, it <return(glossary)|returns> only the <file>
+When the <files> is called as a <function>, or without the `long` or
+`detailed` modifiers, it <return(glossary)|returns> only the <file>
 names as a string with one file name per line.
 
 > *Note:* On some <platform|platforms>, file names are permitted to
@@ -73,17 +79,18 @@ names as a string with one file name per line.
 
 ### Long form
 
-`the <long> files` and `the <long|detailed> files` are synonyms.  When 
+`the long files` and `the detailed files` are synonyms.  When 
 the <files> <function> is called in this form, the <return(glossary)>
 value is a list of files with detailed file attributes.
 
 Each line in the return value is a comma-separated list of file
 attributes, as follows:
 
-1. **Name**.  The file name is URL-encoded.  To obtain the name as
-   plain text, use the <URLDecode> function.
-2. **Size**, in bytes.  On OS X systems, this is the size of the <data
-   fork>.
+1. **Name**.  The file name is URL-encoded. To reliably obtain the name use the
+   `detailed-utf8` <outputKind> and decode using the <URLDecode> function followed
+   by <textDecode>. For example, `textDecode(URLDecode(item 1 of tLine), "utf8")`.
+2. **Size**, in bytes.  On OS X systems, this is the size of the 
+   <data fork>.
 3. **Resource fork size**, in bytes.  (OS X only).
 4. **Creation date**, in seconds.  (OS X and Windows only).
 5. **Last modification date**, in seconds.
@@ -107,13 +114,14 @@ Changes:
 The <long> form was introduced in version 1.1.
 The optional <targetFolder> argument for the function call form was
 introduced in version 8.1.
+The `detailed-utf8` form was introduced in version 9.6.
 
 References: sort (command), return (constant), folders (function),
 specialFolderPath (function), alias (glossary), current folder (glossary),
 data fork (glossary), folder (glossary), function (glossary),
 platform (glossary), return (glossary), resource fork (glossary),
 shortcut (glossary), symbolic link (glossary), defaultFolder (property),
-umask (property), long (keyword)
+umask (property), long (keyword), URLDecode (function), textDecode (function)
 
 Tags: file system
 

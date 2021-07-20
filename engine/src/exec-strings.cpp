@@ -42,73 +42,6 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 ////////////////////////////////////////////////////////////////////////////////
 
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ToLower, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ToUpper, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, NumToChar, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CharToNum, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, NumToByte, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ByteToNum, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TextDecode, 2);
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TextEncode, 2);
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, NormalizeText, 2);
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CodepointProperty, 2);
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, Length, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, MatchText, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, MatchChunk, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ReplaceText, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, Format, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, Merge, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, Concatenate, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ConcatenateWithSpace, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ConcatenateWithComma, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, Contains, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, DoesNotContain, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, BeginsWith, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, EndsWith, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheLinesOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheLinesOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheParagraphsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheParagraphsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheSentencesOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheSentencesOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheItemsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheItemsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheWordsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheWordsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheTrueWordsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheTrueWordsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheTokensOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheTokensOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheCharsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheCharsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheCodepointsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheCodepointsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheCodeunitsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheCodeunitsOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAmongTheBytesOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAmongTheBytesOf, 3)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, LineOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ParagraphOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, SentenceOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ItemOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, WordOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TrueWordOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, TokenOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CodepointOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, CodeunitOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, ByteOffset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, Offset, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsAscii, 2)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, IsNotAscii, 2)
-MC_EXEC_DEFINE_EXEC_METHOD(Strings, Replace, 3)
-MC_EXEC_DEFINE_EXEC_METHOD(Strings, FilterWildcard, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Strings, FilterRegex, 5)
-MC_EXEC_DEFINE_EXEC_METHOD(Strings, FilterWildcardIntoIt, 4)
-MC_EXEC_DEFINE_EXEC_METHOD(Strings, FilterRegexIntoIt, 4)
-MC_EXEC_DEFINE_EVAL_METHOD(Strings, BidiDirection, 2)
-
-////////////////////////////////////////////////////////////////////////////////
-
 bool MCStringsSplit(MCStringRef p_string, codepoint_t p_separator, MCStringRef*&r_strings, uindex_t& r_count)
 {
 	uindex_t t_current = 0;
@@ -834,6 +767,8 @@ void MCStringsEvalMatchText(MCExecContext& ctxt, MCStringRef p_string, MCStringR
             t_match_index = 0;
     }
     
+	delete t_compiled;
+	
     if (t_success)
         return;
     
@@ -883,6 +818,8 @@ void MCStringsEvalMatchChunk(MCExecContext& ctxt, MCStringRef p_string, MCString
             t_match_index = 0;
     }
     
+	delete t_compiled;
+	
     if (t_success)
     {
         if ((p_result_count & 1) == 1)
@@ -907,6 +844,17 @@ void MCStringsEvalReplaceText(MCExecContext& ctxt, MCStringRef p_string, MCStrin
         ctxt.LegacyThrow(EE_REPLACETEXT_BADPATTERN);
         return;
     }
+    
+    /* MCR_exec needs to use a unicode string as we use PCRE compiled with 16-bit
+     * unit support. We copy the string here so that we aren't re-copying each
+     * call to MCR_exec. */
+    MCAutoStringRef t_unicode_string;
+    if (!MCStringUnicodeCopy(p_string, &t_unicode_string))
+    {
+		delete t_compiled;
+        ctxt.Throw();
+        return;
+    }
 
     bool t_success = true;
     
@@ -916,7 +864,7 @@ void MCStringsEvalReplaceText(MCExecContext& ctxt, MCStringRef p_string, MCStrin
     uindex_t t_source_length = MCStringGetLength(p_string);
     uindex_t t_source_offset = 0;
     
-    while (t_success && t_source_offset < t_source_length && MCR_exec(t_compiled, p_string, MCRangeMakeMinMax(t_source_offset, MCStringGetLength(p_string))))
+    while (t_success && t_source_offset < t_source_length && MCR_exec(t_compiled, *t_unicode_string, MCRangeMakeMinMax(t_source_offset, MCStringGetLength(p_string))))
     {
         uindex_t t_start = t_compiled->matchinfo[0].rm_so;
         uindex_t t_end = t_compiled->matchinfo[0].rm_eo;
@@ -941,6 +889,8 @@ void MCStringsEvalReplaceText(MCExecContext& ctxt, MCStringRef p_string, MCStrin
             break;
     }
     
+	delete t_compiled;
+	
     MCAutoStringRef t_post_match;
     if (t_success)
         t_success = MCStringCopySubstring(p_string, MCRangeMakeMinMax(t_source_offset, t_source_length), &t_post_match) &&
@@ -1102,8 +1052,12 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
             uindex_t t_cformat_length;
             const char_t* t_cstart;
 
-            /* UNCHECKED */ MCStringCreateWithChars(t_unicode_start, format - t_start, &t_substring);
-            /* UNCHECKED */ t_auto_native . Lock(*t_substring, t_native_format, t_cformat_length);
+            if (!MCStringCreateWithChars(t_unicode_start, format - t_start, &t_substring) ||
+            			!t_auto_native . Lock(*t_substring, t_native_format, t_cformat_length))
+						{
+							ctxt.LegacyThrow(EE_NO_MEMORY);
+							return;
+						}
             t_cstart = t_native_format;
 
             char newFormat[40];
@@ -1121,6 +1075,7 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
             bool t_zero_pad;
             t_zero_pad = false;
             
+            bool t_is_negative = false;
             *dptr++ = *t_native_format++;
             while (*t_native_format == '-' || *t_native_format == '#' || *t_native_format == '0'
                 || *t_native_format == ' ' || *t_native_format == '+')
@@ -1128,6 +1083,10 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
                 // AL-2014-11-19: [[ Bug 14059 ]] Record position of last zero.
                 if (*t_native_format == '0')
                     prefix_zero = t_native_format;
+                
+                if (*t_native_format == '-')
+                    t_is_negative = true;
+                
                 *dptr++ = *t_native_format++;
             }
             if (isdigit((uint1)*t_native_format))
@@ -1273,9 +1232,19 @@ void MCStringsEvalFormat(MCExecContext& ctxt, MCStringRef p_format, MCValueRef* 
                         {
                             // AL-2014-11-19: [[ Bug 14059 ]] Pad with zeroes if the appropriate specifier flag was used
                             if (t_zero_pad)
-                                t_success = MCStringAppendFormat(*t_result, "%0*s%@", width - t_range . length, "", *t_string);
+                            {
+                                if (!t_is_negative)
+                                    t_success = MCStringAppendFormat(*t_result, "%0*s%@", width - t_range . length, "", *t_string);
+                                else
+                                    t_success = MCStringAppendFormat(*t_result, "%@", *t_string);
+                            }
                             else
-                                t_success = MCStringAppendFormat(*t_result, "%*s%@", width - t_range . length, "", *t_string);
+                            {
+                                if (!t_is_negative)
+                                    t_success = MCStringAppendFormat(*t_result, "%*s%@", width - t_range . length, "", *t_string);
+                                else
+                                    t_success = MCStringAppendFormat(*t_result, "%@%*s", *t_string, width - t_range . length, "");
+                            }
                         }
                         else
                             t_success = MCStringAppendFormat(*t_result, "%@", *t_string);
@@ -1588,13 +1557,12 @@ bool MCStringsEvalIsAmongTheChunksOf(MCExecContext& ctxt, MCStringRef p_chunk, M
     MCChunkType t_type;
     t_type = MCChunkTypeFromChunkTerm(p_chunk_type);
     
-    MCTextChunkIterator *tci;
-    tci = MCStringsTextChunkIteratorCreate(ctxt, p_text, p_chunk_type);
+    MCAutoPointer<MCTextChunkIterator> tci = 
+            MCStringsTextChunkIteratorCreate(ctxt, p_text, p_chunk_type);
 
     bool t_result;
     t_result = tci -> IsAmong(p_chunk);
     
-    delete tci;
     return t_result;
 
 }
@@ -1737,12 +1705,11 @@ __MCStringsEvalChunkOffset(MCExecContext& ctxt,
     MCChunkType t_type;
     t_type = MCChunkTypeFromChunkTerm(p_chunk_type);
     
-    MCTextChunkIterator *tci;
-    tci = MCStringsTextChunkIteratorCreate(ctxt, p_string, p_chunk_type);
+    MCAutoPointer<MCTextChunkIterator> tci =
+            MCStringsTextChunkIteratorCreate(ctxt, p_string, p_chunk_type);
     
     uindex_t t_offset = tci -> ChunkOffset(p_chunk, p_start_offset, nil, ctxt . GetWholeMatches());
     
-    delete tci;
     return t_offset;
 }
 
@@ -1931,8 +1898,8 @@ void MCStringsEvalOffset(MCExecContext& ctxt, MCStringRef p_chunk, MCStringRef p
     MCRange t_char_range, t_cu_range;
     // AL-2015-05-07: [[ Bug 15327 ]] Start offset is grapheme offset not codeunit, so map to grapheme offset first.
     MCStringMapIndices(p_string, kMCCharChunkTypeGrapheme, MCRangeMake(0, p_start_offset), t_cu_range);
-    // AL-2014-05-27: [[ Bug 12517 ]] Offset should be 0 for an empty input string
-	if (MCStringIsEmpty(p_chunk) || !MCStringFirstIndexOf(p_string, p_chunk, p_start_offset, t_options, t_offset))
+	// AL-2014-05-27: [[ Bug 12517 ]] Offset should be 0 for an empty input string
+	if (MCStringIsEmpty(p_chunk) || !MCStringFirstIndexOf(p_string, p_chunk, t_cu_range.length, t_options, t_offset))
 		r_result = 0;
 	else
     {
@@ -1990,7 +1957,7 @@ void MCStringsExecFilterDelimited(MCExecContext& ctxt, MCStringRef p_source, boo
             t_chunk_range . length = t_found_range . offset - t_last_offset;
         }
         
-        if (t_success && (p_matcher -> match(t_chunk_range) != p_without))
+        if (t_success && (p_matcher -> match(ctxt, t_chunk_range) != p_without))
         {
             MCAutoStringRef t_line;
             t_success = MCStringCopySubstring(p_source, t_chunk_range, &t_line) && MCListAppend(*t_output, *t_line);
@@ -2014,53 +1981,32 @@ void MCStringsExecFilterDelimited(MCExecContext& ctxt, MCStringRef p_source, boo
 void MCStringsExecFilterWildcard(MCExecContext& ctxt, MCStringRef p_source, MCStringRef p_pattern, bool p_without, bool p_lines, MCStringRef &r_result)
 {
     // Create the pattern matcher
-	MCPatternMatcher *matcher;
-    matcher = new (nothrow) MCWildcardMatcher(p_pattern, p_source, ctxt . GetStringComparisonType());
+	MCWildcardMatcher t_matcher(p_pattern, p_source, ctxt . GetStringComparisonType());
     
-    MCStringsExecFilterDelimited(ctxt, p_source, p_without, p_lines ? ctxt . GetLineDelimiter() : ctxt . GetItemDelimiter(), matcher, r_result);
-    
-    delete matcher;
+    MCStringsExecFilterDelimited(ctxt, p_source, p_without, p_lines ? ctxt . GetLineDelimiter() : ctxt . GetItemDelimiter(), &t_matcher, r_result);
 }
 
 void MCStringsExecFilterRegex(MCExecContext& ctxt, MCStringRef p_source, MCStringRef p_pattern, bool p_without, bool p_lines, MCStringRef &r_result)
 {
 	// Create the pattern matcher
-	MCPatternMatcher *matcher;
-    matcher = new (nothrow) MCRegexMatcher(p_pattern, p_source, ctxt . GetStringComparisonType());
+	MCRegexMatcher t_matcher(p_pattern, p_source, ctxt . GetStringComparisonType());
     
     MCAutoStringRef t_regex_error;
-    if (!matcher -> compile(&t_regex_error))
+    if (!t_matcher.compile(&t_regex_error))
     {
-        delete matcher;
         ctxt . LegacyThrow(EE_MATCH_BADPATTERN);
         return;
     }
     
-    MCStringsExecFilterDelimited(ctxt, p_source, p_without, p_lines ? ctxt . GetLineDelimiter() : ctxt . GetItemDelimiter(), matcher, r_result);
-    
-    delete matcher;
+    MCStringsExecFilterDelimited(ctxt, p_source, p_without, p_lines ? ctxt . GetLineDelimiter() : ctxt . GetItemDelimiter(), &t_matcher, r_result);
 }
 
-void MCStringsExecFilterWildcardIntoIt(MCExecContext& ctxt, MCStringRef p_source, MCStringRef p_pattern, bool p_without, bool p_lines)
+void MCStringsExecFilterExpression(MCExecContext& ctxt, MCStringRef p_source, MCExpression* p_expression, bool p_without, bool p_lines, MCStringRef &r_result)
 {
-    MCAutoStringRef t_result;
-    MCStringsExecFilterWildcard(ctxt, p_source, p_pattern, p_without, p_lines, &t_result);
+    // Create the pattern matcher
+    MCExpressionMatcher t_matcher(p_expression, p_source, ctxt . GetStringComparisonType());
     
-    if (*t_result != nil)
-        ctxt . SetItToValue(*t_result);
-    else
-        ctxt . SetItToEmpty();
-}
-
-void MCStringsExecFilterRegexIntoIt(MCExecContext& ctxt, MCStringRef p_source, MCStringRef p_pattern, bool p_without, bool p_lines)
-{
-    MCAutoStringRef t_result;
-    MCStringsExecFilterRegex(ctxt, p_source, p_pattern, p_without, p_lines, &t_result);
-
-    if (*t_result != nil)
-        ctxt . SetItToValue(*t_result);
-    else
-        ctxt . SetItToEmpty();
+    MCStringsExecFilterDelimited(ctxt, p_source, p_without, p_lines ? ctxt . GetLineDelimiter() : ctxt . GetItemDelimiter(), &t_matcher, r_result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2309,41 +2255,6 @@ void MCStringsSortAddItem(MCExecContext &ctxt, MCSortnode *items, uint4 &nitems,
             break;
 	}
 	nitems++;
-}
-
-void MCStringsExecSortOld(MCExecContext& ctxt, Sort_type p_dir, Sort_type p_form, MCStringRef *p_strings_array, uindex_t p_count, MCExpression *p_by, MCStringRef*& r_sorted_array, uindex_t& r_sorted_count)
-{
-	// OK-2008-12-11: [[Bug 7503]] - If there are 0 items in the string, don't carry out the search,
-	// this keeps the behavior consistent with previous versions of Revolution.
-	if (p_count < 1)
-	{
-        r_sorted_count = 0;
-        return;
-	}
-    
-	// Now we know the item count, we can allocate an array of MCSortnodes to store them.
-	MCAutoArray<MCSortnode> t_items;
-	t_items.Extend(p_count + 1);
-    uindex_t t_added = 0;
-    
-	// Next, populate the MCSortnodes with all the items to be sorted
-    for (uindex_t i = 0; i < p_count; i++)
-    {
-        MCStringsSortAddItem(ctxt, t_items . Ptr(), t_added, p_form, p_strings_array[i], p_by);
-        t_items[t_added - 1] . data = (void *)p_strings_array[i];
-    }
-
-    MCStringsSort(t_items . Ptr(), t_added, p_dir, p_form, ctxt . GetStringComparisonType());
-
-    MCAutoArray<MCStringRef> t_sorted;
-    
- 	for (uindex_t i = 0; i < t_added; i++)
-    {
-        t_sorted . Push((MCStringRef)t_items[i] . data);
-        MCValueRelease(t_items[i] . svalue);
-    }
-    
-    t_sorted . Take(r_sorted_array, r_sorted_count);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

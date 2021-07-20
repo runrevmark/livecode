@@ -85,7 +85,7 @@ Exec_stat MCField::sort(MCExecContext &ctxt, uint4 parid, Chunk_term type,
         return ES_NORMAL;
 	}
 
-    MCAutoArray<MCSortnode> items;
+    MCAutoArrayZeroedNonPod<MCSortnode> items;
 	uint4 nitems = 0;
 	MCParagraph *pgptr;
     
@@ -706,7 +706,7 @@ Exec_stat MCField::settextindex(uint4 parid, findex_t si, findex_t ei, MCStringR
 	MCParagraph *t_initial_pgptr;
 	t_initial_pgptr = pgptr;
 	
-	int32_t t_initial_height;
+	int32_t t_initial_height = 0;
 	if (opened && fptr == fdata)
 		t_initial_height = t_initial_pgptr -> getheight(fixedheight);
 	
@@ -785,7 +785,7 @@ Exec_stat MCField::settextindex(uint4 parid, findex_t si, findex_t ei, MCStringR
 	// MM-2014-04-09: [[ Bug 12088 ]] Get the width of the paragraph before insertion and layout.
 	//  If as a result of the update the width of the field has changed, we need to recompute.
     // MW-2014-06-06: [[ Bug 12385 ]] Don't do anything layout related if not open.
-	int2 t_initial_width;
+	int2 t_initial_width = 0;
     if (opened != 0)
         t_initial_width = pgptr -> getwidth();
 	
@@ -996,16 +996,12 @@ uint2 MCField::hilitedline()
 	return line;
 }
 
-void MCField::hilitedlines(vector_t<uint32_t> &r_lines)
+void MCField::hilitedlines(MCAutoArray<uint32_t>& r_lines)
 {
-    if (r_lines.elements != nil)
-        delete r_lines.elements;
-    if (r_lines.count != 0)
-        r_lines.count = 0;;
 	if (!opened || !(flags & F_LIST_BEHAVIOR))
 		return;
+    
 	uinteger_t line = 0;
-    MCAutoArray<uint32_t> t_lines;
 
 	MCParagraph *pgptr = paragraphs;
 	do
@@ -1013,13 +1009,11 @@ void MCField::hilitedlines(vector_t<uint32_t> &r_lines)
 		line++;
 		if (pgptr->gethilite())
 		{
-            /* UNCHECKED */ t_lines . Push(line);
+            /* UNCHECKED */ r_lines . Push(line);
 		}
 		pgptr = pgptr->next();
 	}
 	while (pgptr != paragraphs);
-    
-    t_lines . Take(r_lines . elements, r_lines . count);
 }
 
 Exec_stat MCField::sethilitedlines(const uint32_t *p_lines, uint32_t p_line_count, Boolean forcescroll)

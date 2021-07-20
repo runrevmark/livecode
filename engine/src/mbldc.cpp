@@ -214,7 +214,7 @@ void MCScreenDC::handle_key_press(uint32_t p_modifiers, uint32_t p_char_code, ui
 	if (p_char_code >= 32 && p_char_code < 128)
 		p_key_code = p_char_code;
 	
-	MCEventQueuePostKeyPress(t_stack, p_modifiers, p_char_code, p_key_code);
+	MCEventQueuePostKeyPress(t_stack, p_modifiers, p_char_code, p_key_code, kMCEventKeyStatePressed);
 }
 
 void MCScreenDC::handle_key_focus(bool p_gain_focus)
@@ -241,6 +241,13 @@ void MCScreenDC::handle_motion(MCEventMotionType p_type, double p_timestamp)
 
 void MCScreenDC::process_touch(MCEventTouchPhase p_phase, void *p_touch_handle, int32_t p_timestamp, int32_t p_x, int32_t p_y)
 {
+	/* It is possible for the engine to receive touch messages between initial startup and
+	 * there being a stack shown, so ignore the touch if there is no current window. */
+	if (m_current_window == nil)
+	{
+		return;
+	}
+
 	MCActiveTouch *t_touch, *t_previous_touch;
 	t_previous_touch = nil;
 	for(t_touch = m_active_touches; t_touch != nil; t_previous_touch = t_touch, t_touch = t_touch -> next)
@@ -523,7 +530,7 @@ void MCScreenDC::refresh_window(Window p_window)
 		do_fit_window(false, true);
 		
 		if (t_need_redraw)
-			t_new_stack -> view_dirty_all();
+			t_new_stack -> dirtyall();
 	}
 }
 
@@ -532,7 +539,7 @@ void MCScreenDC::redraw_current_window(void)
 	MCStack *t_stack;
 	t_stack = (MCStack *)m_current_window;
 	if (t_stack != nil)
-		t_stack -> view_dirty_all();
+		t_stack -> dirtyall();
 }
 
 void MCScreenDC::unfocus_current_window(void)

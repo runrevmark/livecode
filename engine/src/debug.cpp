@@ -67,6 +67,7 @@ MCExecContext *MCexecutioncontexts[MAX_CONTEXTS];
 uint2 MCnexecutioncontexts = 0;
 uint2 MCdebugcontext = MAXUINT2;
 Boolean MCmessagemessages = False;
+MCNameRef MClogmessage;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -140,18 +141,20 @@ void MCB_setmsg(MCExecContext &ctxt, MCStringRef p_string)
     
     if (t_target != nil)
     {
+		Boolean oldlock = MClockmessages;
+		MClockmessages = False;
+
         MCAutoStringRef t_handler;
         t_handler = MCNameGetString(ctxt.GetHandler()->getname());
-        MCParameter *t_handler_parameter = new (nothrow) MCParameter;
-        t_handler_parameter -> setvalueref_argument(*t_handler);
+        MCParameter t_handler_parameter;
+        t_handler_parameter.setvalueref_argument(*t_handler);
         
         MCAutoNumberRef t_line;
-        MCParameter *t_line_parameter;
+        MCParameter t_line_parameter;
         if (MCNumberCreateWithUnsignedInteger(ctxt.GetLine(), &t_line))
         {
-            t_line_parameter = new (nothrow) MCParameter;
-            t_line_parameter -> setvalueref_argument(*t_line);
-            t_handler_parameter -> setnext(t_line_parameter);
+            t_line_parameter.setvalueref_argument(*t_line);
+            t_handler_parameter.setnext(&t_line_parameter);
         }
         
         bool t_added = false;
@@ -161,10 +164,12 @@ void MCB_setmsg(MCExecContext &ctxt, MCStringRef p_string)
             t_added = true;
         }
         
-        t_stat = t_target -> message(MCM_msgchanged, t_handler_parameter, True, True, False);
+        t_stat = t_target -> message(MCM_msgchanged, &t_handler_parameter, True, True, False);
         
         if (t_added)
             MCnexecutioncontexts--;
+
+		MClockmessages = oldlock;
     }
     
     if (t_stat == ES_NOT_HANDLED || t_stat == ES_PASS)
@@ -187,8 +192,10 @@ void MCB_setmsg(MCExecContext &ctxt, MCStringRef p_string)
     
 }
 
-void MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
+Exec_stat MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
 {
+	Exec_stat t_stat = ES_NOT_HANDLED;
+
 	Boolean exitall = MCexitall;
 	MCSaveprops sp;
 	MCU_saveprops(sp);
@@ -204,6 +211,8 @@ void MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
 	MCtracereturn = False;
 	MCtraceabort = False;
 
+	MCExecResultMode t_oldresultmode = MCresultmode;
+
 	Boolean oldcheck;
 	oldcheck = MCcheckstack;
 	MCcheckstack = False;
@@ -213,19 +222,21 @@ void MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
 
 	// OK-2008-11-28: [[Bug 7491]] - It seems that using the "send" parameter causes problems with the MetaCard debugger
 	// So instead of doing that, I've added a new optional parameter to MCObject::send, called p_force, and used this instead.
-	if (ctxt.GetObject() -> message(mess, p, True, False, True) == ES_NORMAL)
+
+	t_stat = ctxt.GetObject() -> message(mess, p, True, False, True);
+	if (t_stat == ES_NORMAL)
 	{
 		MCcheckstack = oldcheck;
 		
-        while (!MCtracereturn)
+		while (!MCtracereturn)
 		{
 			MCU_resetprops(True);
 			MCscreen->wait(REFRESH_INTERVAL, True, True);
 		}
 		
-        if (!MCtracedobject)
+		if (!MCtracedobject)
 			MCtracedobject = ctxt.GetObject();
-        
+
 		if (MCtraceabort)
 		{
 			MCtraceabort = False;
@@ -234,17 +245,22 @@ void MCB_message(MCExecContext &ctxt, MCNameRef mess, MCParameter *p)
 		else
 			if (MCtracestackptr)
 				MCtrace = True;
-	 }
-	 MCcheckstack = oldcheck;
-	 MCtracewindow = NULL;
-	 delete MCresult;
-	 MCresult = oldresult;
-	 MCU_restoreprops(sp);
-	 MCexitall = exitall;
+	}
+	MCcheckstack = oldcheck;
+	MCtracewindow = NULL;
+	delete MCresult;
+	MCresult = oldresult;
+	MCU_restoreprops(sp);
+	MCexitall = exitall;
+	MCresultmode = t_oldresultmode;
+
+	return t_stat;
 }
 
-void MCB_prepmessage(MCExecContext &ctxt, MCNameRef mess, uint2 line, uint2 pos, uint2 id, MCStringRef p_info)
+Exec_stat MCB_prepmessage(MCExecContext &ctxt, MCNameRef mess, uint2 line, uint2 pos, uint2 id, MCStringRef p_info)
 {
+	Exec_stat t_stat = ES_NOT_HANDLED;
+
 	Boolean added = False;
 	if (MCnexecutioncontexts < MAX_CONTEXTS)
 	{
@@ -267,20 +283,26 @@ void MCB_prepmessage(MCExecContext &ctxt, MCNameRef mess, uint2 line, uint2 pos,
 		ctxt.GetObject()->names(P_LONG_ID, &t_val);
 		MCeerror->add(EE_OBJECT_NAME, 0, 0, *t_val);
 
-        MCAutoStringRef t_error;
-        MCeerror -> copyasstringref(&t_error);
-        p4.setvalueref_argument(*t_error);
+		MCAutoStringRef t_error;
+		MCeerror -> copyasstringref(&t_error);
+		p4.setvalueref_argument(*t_error);
 	}
 	else if (!MCStringIsEmpty(p_info))
 	{
 		p3.setnext(&p4);
 		p4.setvalueref_argument(p_info);
 	}
-	MCB_message(ctxt, mess, &p1);
+
+	MCDeletedObjectsFreezePool();
+	t_stat = MCB_message(ctxt, mess, &p1);
+	MCDeletedObjectsThawPool();
+
 	if (id != 0)
 		MCeerror->clear();
 	if (added)
 		MCnexecutioncontexts--;
+
+	return t_stat;
 }
 
 void MCB_trace(MCExecContext &ctxt, uint2 line, uint2 pos)
@@ -326,19 +348,23 @@ bool s_in_trace_error = false;
 
 bool MCB_error(MCExecContext &ctxt, uint2 line, uint2 pos, uint2 id)
 {
-    // An unhandled error has been thrown - end all modal loops
-    MCscreen->breakModalLoops();
-    
-    // OK-2009-03-25: [[Bug 7517]] - The crash described in this bug report is probably caused by a stack overflow. This overflow is due to
+	// An unhandled error has been thrown - end all modal loops
+	MCscreen->breakModalLoops();
+
+	// OK-2009-03-25: [[Bug 7517]] - The crash described in this bug report is probably caused by a stack overflow. This overflow is due to
 	// errors being thrown in the IDE (or in this case GLX2) component of the debugger. This should prevent traceError from recursing.
 	if (s_in_trace_error)
 		return false;
-	
+
+
+	// MCB_error should not be called again if 'traceError' was not handled
+	bool t_handled;
 	s_in_trace_error = true;
-	MCB_prepmessage(ctxt, MCM_trace_error, line, pos, id);
-	MCerrorlock++; // suppress errors as stack unwinds
+	t_handled = MCB_prepmessage(ctxt, MCM_trace_error, line, pos, id) == ES_NORMAL;
 	s_in_trace_error = false;
-    return true;
+	MCerrorlock++; // suppress errors as stack unwinds
+
+	return t_handled;
 }
 
 void MCB_done(MCExecContext &ctxt)

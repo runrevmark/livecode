@@ -26,149 +26,7 @@
 
 #include "libbrowser_internal.h"
 #include "libbrowser_uiwebview.h"
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool MCNSNumberToBrowserValue(NSNumber *p_number, MCBrowserValue &r_value);
-bool MCNSDictionaryToBrowserValue(NSDictionary *p_dictionary, MCBrowserValue &r_value);
-bool MCNSArrayToBrowserValue(NSArray * p_array, MCBrowserValue &r_value);
-
-bool MCNSObjectToBrowserValue(id p_obj, MCBrowserValue &r_value)
-{
-	if ([p_obj isKindOfClass: [NSString class]])
-		return MCBrowserValueSetUTF8String(r_value, [(NSString*)p_obj cStringUsingEncoding: NSUTF8StringEncoding]);
-	else if ([p_obj isKindOfClass: [NSNumber class]])
-		return MCNSNumberToBrowserValue((NSNumber*)p_obj, r_value);
-	else if ([p_obj isKindOfClass: [NSDictionary class]])
-		return MCNSDictionaryToBrowserValue((NSDictionary*)p_obj, r_value);
-	else if ([p_obj isKindOfClass: [NSArray class]])
-		return MCNSArrayToBrowserValue((NSArray*)p_obj, r_value);
-	
-	return false;
-}
-
-bool MCNSDictionaryToBrowserDictionary(NSDictionary *p_dictionary, MCBrowserDictionaryRef &r_dict)
-{
-	__block bool t_success;
-	t_success = true;
-	
-	__block MCBrowserDictionaryRef t_dict;
-	t_dict = nil;
-	
-	if (t_success)
-		t_success = MCBrowserDictionaryCreate(t_dict, [p_dictionary count]);
-	
-	if (t_success)
-		[p_dictionary enumerateKeysAndObjectsUsingBlock: ^(id p_key, id p_obj, BOOL *r_stop) {
-			MCBrowserValue t_value;
-			MCBrowserMemoryClear(&t_value, sizeof(MCBrowserValue));
-			
-			t_success = [p_key isKindOfClass: [NSString class]];
-			
-			if (t_success)
-				t_success = MCNSObjectToBrowserValue(p_obj, t_value);
-			
-			if (t_success)
-				t_success = MCBrowserDictionarySetValue(t_dict, [(NSString*)p_key cStringUsingEncoding: NSUTF8StringEncoding], t_value);
-			
-			if (!t_success)
-				*r_stop = YES;
-			
-			MCBrowserValueClear(t_value);
-		}];
-	
-	if (t_success)
-		r_dict = t_dict;
-	else
-		MCBrowserDictionaryRelease(t_dict);
-	
-	return t_success;
-}
-
-bool MCNSArrayToBrowserList(NSArray *p_array, MCBrowserListRef &r_list)
-{
-	__block bool t_success;
-	t_success = true;
-	
-	__block MCBrowserListRef t_list;
-	t_list = nil;
-	
-	if (t_success)
-		t_success = MCBrowserListCreate(t_list, [p_array count]);
-	
-	if (t_success)
-		[p_array enumerateObjectsUsingBlock: ^(id p_obj, NSUInteger p_index, BOOL *r_stop) {
-			MCBrowserValue t_value;
-			MCBrowserMemoryClear(&t_value, sizeof(MCBrowserValue));
-			
-			t_success = MCNSObjectToBrowserValue(p_obj, t_value);
-			
-			if (t_success)
-				t_success = MCBrowserListSetValue(t_list, p_index, t_value);
-			
-			if (!t_success)
-				*r_stop = YES;
-			
-			MCBrowserValueClear(t_value);
-		}];
-	
-	if (t_success)
-		r_list = t_list;
-	else
-		MCBrowserListRelease(t_list);
-	
-	return t_success;
-}
-
-bool MCNSNumberToBrowserValue(NSNumber *p_number, MCBrowserValue &r_value)
-{
-	if (p_number == @(YES))
-		return MCBrowserValueSetBoolean(r_value, true);
-	else if (p_number == @(NO))
-		return MCBrowserValueSetBoolean(r_value, false);
-	else if (MCCStringEqual([p_number objCType], @encode(int)))
-		return MCBrowserValueSetInteger(r_value, [p_number intValue]);
-	else
-		return MCBrowserValueSetDouble(r_value, [p_number doubleValue]);
-}
-
-//////////
-
-bool MCNSDictionaryToBrowserValue(NSDictionary *p_dictionary, MCBrowserValue &r_value)
-{
-	bool t_success;
-	t_success = true;
-	
-	MCBrowserDictionaryRef t_dict;
-	t_dict = nil;
-
-	t_success = MCNSDictionaryToBrowserDictionary(p_dictionary, t_dict);
-	
-	if (t_success)
-		t_success = MCBrowserValueSetDictionary(r_value, t_dict);
-	
-	MCBrowserDictionaryRelease(t_dict);
-	
-	return t_success;
-}
-
-bool MCNSArrayToBrowserValue(NSArray *p_array, MCBrowserValue &r_value)
-{
-	bool t_success;
-	t_success = true;
-	
-	MCBrowserListRef t_list;
-	t_list = nil;
-	
-	t_success = MCNSArrayToBrowserList(p_array, t_list);
-	
-	if (t_success)
-		t_success = MCBrowserValueSetList(r_value, t_list);
-	
-	MCBrowserListRelease(t_list);
-	
-	return t_success;
-}
+#include "libbrowser_nsvalue.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -233,7 +91,10 @@ MCUIWebViewBrowser::~MCUIWebViewBrowser(void)
 		
 		if (m_delegate != nil)
 			[m_delegate release];
-		
+        
+        if (m_js_handlers != nil)
+            MCCStringFree(m_js_handlers);
+        
 		if (m_js_handler_list != nil)
 			[m_js_handler_list release];
 	});
@@ -416,9 +277,6 @@ bool MCUIWebViewBrowser::SyncJavaScriptHandlers(NSArray *p_handlers)
 				OnJavaScriptCall([p_handler cStringUsingEncoding: NSUTF8StringEncoding], t_args);
 
 				MCBrowserListRelease(t_args);
-				
-				// IM-2016-09-30: [[ Bug 18406 ]] Wake main thread to process handler call
-				MCBrowserRunloopBreakWait();
 			}
 		};
 	}
@@ -438,6 +296,38 @@ bool MCUIWebViewBrowser::SyncJavaScriptHandlers(NSArray *p_handlers)
 	return t_success;
 }
 
+bool MCUIWebViewBrowser::GetIsSecure(bool &r_value)
+{
+	r_value = false;
+	return true;
+}
+
+bool MCUIWebViewBrowser::GetAllowUserInteraction(bool &r_value)
+{
+	UIWebView *t_view;
+	if (!GetView(t_view))
+		return false;
+
+	MCBrowserRunBlockOnMainFiber(^{
+		r_value = [t_view isUserInteractionEnabled] == YES;
+	});
+
+	return true;
+}
+
+bool MCUIWebViewBrowser::SetAllowUserInteraction(bool p_value)
+{
+	UIWebView *t_view;
+	if (!GetView(t_view))
+		return false;
+
+	MCBrowserRunBlockOnMainFiber(^{
+		[t_view setUserInteractionEnabled: (p_value) ? YES : NO];
+	});
+
+	return true;
+}
+
 //////////
 
 bool MCUIWebViewBrowser::SetBoolProperty(MCBrowserProperty p_property, bool p_value)
@@ -449,7 +339,10 @@ bool MCUIWebViewBrowser::SetBoolProperty(MCBrowserProperty p_property, bool p_va
 			
 		case kMCBrowserHorizontalScrollbarEnabled:
 			return SetHorizontalScrollbarEnabled(p_value);
-			
+
+		case kMCBrowserAllowUserInteraction:
+			return SetAllowUserInteraction(p_value);
+
 		default:
 			break;
 	}
@@ -467,6 +360,12 @@ bool MCUIWebViewBrowser::GetBoolProperty(MCBrowserProperty p_property, bool &r_v
 		case kMCBrowserHorizontalScrollbarEnabled:
 			return GetHorizontalScrollbarEnabled(r_value);
 			
+		case kMCBrowserIsSecure:
+			return GetIsSecure(r_value);
+
+		case kMCBrowserAllowUserInteraction:
+			return GetAllowUserInteraction(r_value);
+
 		default:
 			break;
 	}

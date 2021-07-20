@@ -206,7 +206,7 @@ Boolean MCScreenDC::open()
 	background_pixel.red = background_pixel.green = background_pixel.blue = 0xC0C0;
     MCStringRef t_key2;
 
-	if (MCmajorosversion > 400)
+	if (MCmajorosversion > MCOSVersionMake(4,0,0))
 		t_key2 = MCSTR("HKEY_CURRENT_USER\\Control Panel\\Colors\\MenuBar");
 	else
 		t_key2 = MCSTR("HKEY_CURRENT_USER\\Control Panel\\Colors\\Menu");
@@ -247,6 +247,10 @@ Boolean MCScreenDC::open()
 	MCblinkrate = GetCaretBlinkTime();
 	MCdoubletime = GetDoubleClickTime();
 	opened++;
+
+	/* Fetch any system metrics we need which are updated on WM_SETTINGCHANGE or 
+	 * WM_DISPLAYCHANGE. */
+	updatemetrics();
 
 	MCDisplay const *t_displays;
 	getdisplays(t_displays, false);
@@ -830,7 +834,7 @@ static DwmIsCompositionEnabledPtr s_dwm_is_composition_enabled = NULL;
 
 static bool WindowsIsCompositionEnabled(void)
 {
-	if (MCmajorosversion < 0x0600)
+	if (MCmajorosversion < MCOSVersionMake(6,0,0))
 		return false;
 
 	if (s_dwmapi_library == NULL)
@@ -880,7 +884,14 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &r, uint4 window, MCStringRef di
 	MCRectangle t_device_viewport;
 	t_device_viewport = logicaltoscreenrect(t_virtual_viewport);
 
-	HWND hwndsnap = CreateWindowExA(WS_EX_TRANSPARENT | WS_EX_TOPMOST,
+	DWORD t_ex_options = WS_EX_TRANSPARENT | WS_EX_TOPMOST;
+	// use layered if we don't need to select the snapshot area via cursor
+	if (window != 0 || r.x != -32768)
+	{
+		t_ex_options |= WS_EX_LAYERED;
+	}
+
+	HWND hwndsnap = CreateWindowExA(t_ex_options,
 	                               MC_SNAPSHOT_WIN_CLASS_NAME,"", WS_POPUP, t_device_viewport . x, t_device_viewport . y,
 	                               t_device_viewport . width, t_device_viewport . height, invisiblehwnd,
 	                               NULL, MChInst, NULL);
@@ -1099,7 +1110,7 @@ void MCScreenDC::settaskbarstate(bool p_visible)
 	HWND taskbarwnd = FindWindowA("Shell_traywnd", "");
 	SetWindowPos(taskbarwnd, 0, 0, 0, 0, 0, SWP_NOACTIVATE | (p_visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 
-	if (MCmajorosversion >= 0x0600)
+	if (MCmajorosversion >= MCOSVersionMake(6,0,0))
 	{
 		HWND t_start_window;
 		t_start_window = FindWindowExA(NULL, NULL, "Button", "Start");
@@ -1120,6 +1131,9 @@ void MCScreenDC::processdesktopchanged(bool p_notify, bool p_update_fonts)
 	// IM-2014-01-28: [[ HiDPI ]] Use updatedisplayinfo() method to update & compare display details
 	bool t_changed;
 	t_changed = false;
+
+	/* Update any system metrics which are used often and are cached. */
+	updatemetrics();
 
 	updatedisplayinfo(t_changed);
 

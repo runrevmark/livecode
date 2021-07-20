@@ -19,7 +19,6 @@ class MCMacPlatformSurface;
 - (id)initWithEvent: (const AppleEvent *)event andReply: (AppleEvent *)reply;
 - (void)dealloc;
 
-- (OSErr)process;
 @end
 
 @compatibility_alias MCPendingAppleEvent com_runrev_livecode_MCPendingAppleEvent;
@@ -506,6 +505,8 @@ public:
 	// IM-2015-01-30: [[ Bug 14140 ]] Locking the frame will prevent the window from being moved or resized
 	void SetFrameLocked(bool p_locked);
 	
+	void DrawSync(void);
+	
 protected:
 	virtual void DoRealize(void);
 	virtual void DoSynchronize(void);
@@ -543,7 +544,7 @@ private:
 	
     // The window's content view.
     MCWindowView *m_view;
-    
+	
 	struct
 	{
 		// When the mask changes and the window has a shadow we have to
@@ -560,6 +561,10 @@ private:
 		
 		// When the frame is locked, any changes to the window rect will be prevented.
 		bool m_frame_locked : 1;
+
+		// This is used to signal to DoUpdate that a redraw has been performed
+		// in response to an update request.
+		bool m_waiting_for_draw : 1;
 	};
 	
 	// A window might map to one of several different classes, so we use a
@@ -575,6 +580,11 @@ private:
 	MCPlatformWindowRef m_parent;
 	
 	friend class MCMacPlatformSurface;
+	
+	static bool s_hiding;
+	static MCMacPlatformWindow *s_hiding_focused;
+	static MCMacPlatformWindow *s_hiding_unfocused;
+	static bool s_showing_sheet;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -589,6 +599,7 @@ void MCMacPlatformHandleMousePress(uint32_t p_button, bool p_is_down);
 void MCMacPlatformHandleMouseMove(MCPoint p_screen_location);
 void MCMacPlatformHandleMouseScroll(CGFloat dx, CGFloat dy);
 void MCMacPlatformHandleMouseSync(void);
+void MCMacPlatformHandleDrawSync(NSWindow *window);
 void MCMacPlatformHandleMouseAfterWindowHidden(void);
 
 void MCMacPlatformHandleMouseForResizeStart(void);
@@ -596,6 +607,9 @@ void MCMacPlatformHandleMouseForResizeEnd(void);
 
 void MCMacPlatformSyncMouseBeforeDragging(void);
 void MCMacPlatformSyncMouseAfterTracking(void);
+
+void MCMacPlatformSyncUpdateAfterDraw(NSInteger windowNumber);
+bool MCMacPlatformIsDrawSyncEvent(NSEvent *event);
 
 void MCMacPlatformHandleModifiersChanged(MCPlatformModifiers modifiers);
 
@@ -613,7 +627,9 @@ void MCMacPlatformMapScreenNSRectToMCRectangle(NSRect rect, MCRectangle& r_rect)
 
 MCPlatformModifiers MCMacPlatformMapNSModifiersToModifiers(NSUInteger p_modifiers);
 
+void MCMacPlatformSetLastMouseEvent(NSEvent *p_event);
 NSEvent *MCMacPlatformGetLastMouseEvent(void);
+void MCMacPlatformClearLastMouseEvent(void);
 
 NSMenu *MCMacPlatformGetIconMenu(void);
 
@@ -674,22 +690,6 @@ struct MCMacPlatformWindowMask
 void MCMacPlatformEnableEventChecking(void);
 void MCMacPlatformDisableEventChecking(void);
 bool MCMacPlatformIsEventCheckingEnabled(void);
-
-////////////////////////////////////////////////////////////////////////////////
-
-// The function pointer for objc_msgSend_fpret needs to be cast in order
-// to get the correct return type, otherwise we can get strange results
-// on x86_64 because "long double" return values are returned in
-// different registers to "float" or "double".
-extern "C" void objc_msgSend_fpret(void);
-template <class R, class... Types> R objc_msgSend_fpret_type(id p_id, SEL p_sel, Types... p_params)
-{
-    // Cast the obj_msgSend_fpret function to the correct type
-    R (*t_send)(id, SEL, ...) = reinterpret_cast<R (*)(id, SEL, ...)> (&objc_msgSend_fpret);
-    
-    // Perform the call
-    return t_send(p_id, p_sel, p_params...);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

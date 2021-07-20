@@ -27,13 +27,13 @@ Example:
 put the customProperties["mySet"] of me into myArray
 
 Value:
-The <customProperties> of an <object(glossary)> is an <array> of <custom
-property|custom properties> and their <value|values>. The name of each
-<custom property> is the <array> <key>.
+The <customProperties> of an <object(glossary)> is an <array> of 
+<custom property|custom properties> and their <value|values>. The name 
+of each <custom property> is the <array> <key>.
 
 Description:
-Use the <customProperties> <property> to set or retrieve all the <custom
-property|custom properties> of an <object(glossary)> at once.
+Use the <customProperties> <property> to set or retrieve all the 
+<custom property|custom properties> of an <object(glossary)> at once.
 
 The <customProperties> specifies the <property|properties> in the
 <object|object's> current <customPropertySet>. (The <object(glossary)>
@@ -65,8 +65,8 @@ following:
 References: set (command), command (glossary), setProp (control structure),
 propertyNames (function), object (glossary), property (glossary),
 key (glossary), value (glossary), custom property (glossary),
-statement (glossary), customPropertySet (glossary),
-custom property set (glossary), array (glossary), properties (property)
+statement (glossary), custom property set (glossary), array (glossary), 
+customPropertySet (property), properties (property)
 
 Tags: properties
 

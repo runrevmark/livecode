@@ -25,9 +25,11 @@ EMMAKE ?= emmake
 
 # Some magic to control which versions of iOS we try to build.  N.b. you may
 # also need to modify the buildbot configuration
-IPHONEOS_VERSIONS ?= 9.2 10.2 11.0
-IPHONESIMULATOR_VERSIONS ?= 8.2 9.2 10.2 11.0
-SKIP_IPHONESIMULATOR_VERSIONS ?= 6.1 7.1
+IPHONEOS_VERSIONS ?= 11.2 12.1 13.2 14.4 14.5
+IPHONESIMULATOR_VERSIONS ?= 11.2 12.1 13.2 14.4 14.5
+SKIP_IPHONEOS_VERSIONS ?= 9.2 10.2
+SKIP_IPHONESIMULATOR_VERSIONS ?= 6.1 7.1 8.2 9.2 10.2
+
 
 IOS_SDKS ?= \
 	$(addprefix iphoneos,$(IPHONEOS_VERSIONS)) \
@@ -91,7 +93,7 @@ endif
 # Linux rules
 ################################################################
 
-LINUX_ARCHS = x86_64 x86
+LINUX_ARCHS = x86_64 x86 armv6hf armv7
 
 config-linux-%:
 ifneq ($(TRAVIS),undefined)
@@ -134,7 +136,7 @@ $(addsuffix -linux,all config compile check): %: %-$(guess_linux_arch)
 # Android rules
 ################################################################
 
-ANDROID_ARCHS = armv6
+ANDROID_ARCHS = armv6 armv7 arm64 x86 x86_64
 
 config-android-%:
 	./config.sh --platform android-$*
@@ -210,12 +212,19 @@ compile-ios-%:
 check-ios-%:
 	$(XCODEBUILD) -project "build-ios-$*$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target check
 
-# Dummy targets to prevent our build system from building old iOS simulators
+# Dummy targets to prevent our build system from building old iOS simulators+devices
 $(addprefix config-ios-iphonesimulator,$(SKIP_IPHONESIMULATOR_VERSIONS)):
 	@echo "Skipping $@ (no longer supported)"
 $(addprefix compile-ios-iphonesimulator,$(SKIP_IPHONESIMULATOR_VERSIONS)):
 	@echo "Skipping $@ (no longer supported)"
 $(addprefix check-ios-iphonesimulator,$(SKIP_IPHONESIMULATOR_VERSIONS)):
+	@echo "Skipping $@ (no longer supported)"
+	
+$(addprefix config-ios-iphonesimulator,$(SKIP_IPHONEOS_VERSIONS)):
+	@echo "Skipping $@ (no longer supported)"
+$(addprefix compile-ios-iphonesimulator,$(SKIP_IPHONEOS_VERSIONS)):
+	@echo "Skipping $@ (no longer supported)"
+$(addprefix check-ios-iphonesimulator,$(SKIP_IPHONEOS_VERSIONS)):
 	@echo "Skipping $@ (no longer supported)"
 
 # Provide some synonyms for "latest iOS SDK"

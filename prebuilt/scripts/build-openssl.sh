@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 source "${BASEDIR}/scripts/platform.inc"
 source "${BASEDIR}/scripts/lib_versions.inc"
 source "${BASEDIR}/scripts/util.inc"
@@ -33,6 +35,9 @@ function buildOpenSSL {
 	local ARCH=$2
 	local SUBPLATFORM=$3
 	
+	# Boolean flag: if non-zero then configure CC/LD/CFLAGS/LDFLAGS etc.
+	local CONFIGURE_CC_FOR_TARGET=1
+
 	# Each target type in OpenSSL is given a name
 	case "${PLATFORM}" in
 		mac)
@@ -43,17 +48,46 @@ function buildOpenSSL {
 			fi
 			;;
 		linux)
-	if [ "${ARCH}" == "x86_64" ] ; then
-	  SPEC="linux-x86_64"
+			if [ "${ARCH}" == "x86_64" ] ; then
+				SPEC="linux-x86_64"
+			elif [[ "${ARCH}" =~ (x|i[3-6])86 ]] ; then
+				SPEC="linux-x86"
+			elif [ "${ARCH}" == "arm64" ] ; then
+				SPEC="linux-aarch64"
+			elif [[ "${ARCH}" =~ .*64 ]] ; then
+				SPEC="linux-generic64"
 			else
-		  SPEC="linux-generic32"
+				SPEC="linux-generic32"
 			fi
 			;;
 		android)
-			if [ "${ARCH}" == "armv6" ] ; then
-				SPEC="android"
+			configureAndroidToolchain "${ARCH}"
+			export ANDROID_NDK_HOME="${ANDROID_TOOLCHAIN_BASE}"
+			export PATH="${ANDROID_NDK_HOME}/bin:${PATH}"
+			CONFIGURE_CC_FOR_TARGET=0
+
+			if [ "${ARCH}" == "x86_64" ] ; then
+				SPEC="android-x86_64"
+			elif [[ "${ARCH}" =~ (x|i[3-6])86 ]] ; then
+				# Work around a linker crash using the i686 gold linker in Android NDK r14
+				export CFLAGS="-fuse-ld=bfd"
+				SPEC="android-x86"
+			elif [ "${ARCH}" == "arm64" ] ; then
+				# Clang's integrated assembler is a bit broken so we need to force the use of GAS instead
+				export CFLAGS="-fno-integrated-as"
+				SPEC="android-arm64"
+			elif [[ "${ARCH}" =~ armv(6|7) ]] ; then
+				# Clang's integrated assembler is a bit broken so we need to force the use of GAS instead
+				export CFLAGS="-fno-integrated-as"
+
+				# When compiling with -mthumb, we need to link to libatomic
+				EXTRA_OPTIONS="-latomic"
+
+				SPEC="android-arm"
+			elif [[ "${ARCH}" =~ .*64 ]] ; then
+				SPEC="android64"
 			else
-				SPEC="android-armv7"
+				SPEC="android"
 			fi
 			;;
 		ios)
@@ -67,17 +101,19 @@ function buildOpenSSL {
 
 	# Utility for displaying platform name
 	if [ ! -z "${SUBPLATFORM}" ] ; then
-		local NAME="${PLATFORM}/${SUBPLATFORM}/${ARCH}"
+		local NAME="${PLATFORM}/${ARCH}/${SUBPLATFORM}"
 		local PLATFORM_NAME=${SUBPLATFORM}
 	else
 		local NAME="${PLATFORM}/${ARCH}"
 		local PLATFORM_NAME=${PLATFORM}
 	fi
 	
-	CUSTOM_SPEC="${SPEC}-livecode"
+	# The android-* targets derive the arch from the last portion of the target name
+	# so this needs to be a prefix instead of suffix.
+	CUSTOM_SPEC="livecode_${SPEC}"
 
 	OPENSSL_ARCH_SRC="${OPENSSL_SRC}-${PLATFORM_NAME}-${ARCH}"
-	OPENSSL_ARCH_CONFIG="no-rc5 no-hw shared -DOPENSSL_NO_ASYNC=1 --prefix=${INSTALL_DIR}/${NAME} ${CUSTOM_SPEC}"
+	OPENSSL_ARCH_CONFIG="no-rc5 no-hw no-threads shared -DOPENSSL_NO_ASYNC=1 --prefix=${INSTALL_DIR}/${NAME} ${CUSTOM_SPEC} ${EXTRA_OPTIONS}"
 
 	# Copy the source to a target-specific directory
 	if [ ! -d "${OPENSSL_ARCH_SRC}" ] ; then
@@ -98,17 +134,19 @@ function buildOpenSSL {
 
 		# Customise the OpenSSL configuration to ensure variables are exported as functions
 		cat > Configurations/99-livecode.conf << EOF
-%targets = (
+my %targets = (
 "${CUSTOM_SPEC}" => {
 	inherit_from => [ "${SPEC}" ],
-	bn_ops => sub { join(" ",(@_,"EXPORT_VAR_AS_FN")) },
+	bn_ops => add("EXPORT_VAR_AS_FN"),
 },
 );
 EOF
 
+		if [ $CONFIGURE_CC_FOR_TARGET != 0 ] ; then
+			setCCForTarget "${PLATFORM}" "${ARCH}" "${SUBPLATFORM}"
+		fi
+
 		echo "Configuring OpenSSL for ${NAME}"
-		
-		setCCForTarget "${PLATFORM}" "${ARCH}" "${SUBPLATFORM}"
 		./Configure ${OPENSSL_ARCH_CONFIG}
 		
 		# iOS requires some tweaks to the source when building for devices

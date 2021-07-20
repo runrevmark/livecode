@@ -34,9 +34,21 @@ extern int OutputFileAsC;
 extern int OutputFileAsAuxC;
 extern int OutputFileAsBytecode;
 
+static int s_force_c_builtins = 0;
+
+int ForceCBindingsAsBuiltins(void)
+{
+    return s_force_c_builtins;
+}
+
 int IsBootstrapCompile(void)
 {
     return s_is_bootstrap;
+}
+
+int IsNotBytecodeOutput(void)
+{
+    return OutputFileAsBytecode == 0;
 }
 
 int IsDependencyCompile(void)
@@ -96,7 +108,7 @@ static void
 usage(int status)
 {
     fprintf(stderr,
-"Usage: lc-compile [OPTION ...] --output OUTFILE [--] LCBFILE\n"
+"Usage: lc-compile [OPTION ...] --output OUTFILE [--] LCBFILE ... LCBFILE\n"
 "       lc-compile [OPTION ...] --outputc OUTFILE [--] LCBFILE ... LCBFILE\n"
 "       lc-compile [OPTION ...] --deps DEPTYPE [--] LCBFILE ... LCBFILE\n"
 "\n"
@@ -118,6 +130,7 @@ usage(int status)
 "                             compiled in, but only if they need recompiling.\n"
 "      --manifest MANIFEST    Filename for generated manifest.\n"
 "      --interface INTERFACE  Filename for generated interface.\n"
+"      --forcebuiltins        Generate c bindings as builtin shims for auxc output.\n"
 "      -Werror                Turn all warnings into errors.\n"
 "  -v, --verbose              Output extra debugging information.\n"
 "  -h, --help                 Print this message.\n"
@@ -235,6 +248,11 @@ static void full_main(int argc, char *argv[])
                 usage(0);
                 continue;
             }
+            if (0 == strcmp(opt, "--forcebuiltins"))
+            {
+                s_force_c_builtins = 1;
+                continue;
+            }
             if (0 == strcmp(opt, "--"))
             {
                 end_of_args = 1;
@@ -250,27 +268,9 @@ static void full_main(int argc, char *argv[])
             }
         }
 
-        /* Accept any number of input files for dependency or output-c
-		   modes; only a single file in all other cases */
-		if (DependencyMode != kDependencyModeNone ||
-			(OutputFileAsC == 1 &&
-				have_interface_file == 0 &&
-				have_manifest_file == 0))
-		{
-			AddFile(opt);
-			have_input_file = 1;
-		}
-		else
-		{
-			if (have_input_file == 1)
-			{
-				fprintf(stderr, "WARNING: Ignoring multiple input filenames.\n");
-				continue;
-			}
-			
-			AddFile(opt);
-			have_input_file = 1;
-		}
+        /* Accept any number of input files */
+        AddFile(opt);
+        have_input_file = 1;
     }
 
 	// If there is no filename, error.

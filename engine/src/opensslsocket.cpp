@@ -114,7 +114,7 @@ volatile sig_atomic_t s_socket_poll_thread_enabled;
 static int s_socket_poll_signal_pipe[2];
 #endif
 
-#if !defined(X11) && (!defined(_MACOSX)) && (!defined(TARGET_SUBPLATFORM_IPHONE)) && !defined(_LINUX_SERVER) && !defined(_MAC_SERVER)
+#if !defined(X11) && !defined(_MACOSX) && !defined(TARGET_SUBPLATFORM_IPHONE) && !defined(_LINUX_SERVER) && !defined(_MAC_SERVER) && !defined(TARGET_SUBPLATFORM_ANDROID)
 #define socklen_t int
 #endif
 
@@ -551,7 +551,7 @@ static void free_ntoa_message_callback_info(MCNToAMessageCallbackInfo *t_info)
 		MCValueRelease(t_info->message);
 		MCValueRelease(t_info->name);
 		MCValueRelease(t_info->list);
-		MCMemoryDelete(t_info);
+		MCMemoryDestroy(t_info);
 	}
 }
 
@@ -600,7 +600,7 @@ bool MCS_ntoa(MCStringRef p_hostname, MCObject *p_target, MCNameRef p_message, M
 	else
 	{
 		MCNToAMessageCallbackInfo *t_info = NULL;
-		t_success = MCMemoryNew(t_info);
+		t_success = MCMemoryCreate(t_info);
 		if (t_success)
 		{
 			t_info->message = MCValueRetain(p_message);
@@ -725,9 +725,16 @@ bool MCS_connect_socket(MCSocket *p_socket, struct sockaddr_in *p_addr)
             t_port_reuse = 1;
             if (setsockopt(p_socket->fd, SOL_SOCKET, SO_REUSEPORT, (const char *)&t_port_reuse, sizeof(t_port_reuse)) != 0)
             {
-                p_socket->error = strclone("can't use the local port");
-                p_socket->doclose();
-                return false;
+				switch (errno)
+				{
+					case ENOPROTOOPT:
+						// option not supported by OS, ignore error
+						break;
+					default:
+						p_socket->error = strclone("can't use the local port");
+						p_socket->doclose();
+						return false;
+				}
             }
 #endif
 
@@ -821,6 +828,11 @@ MCSocket *MCS_open_socket(MCNameRef name, MCNameRef from, Boolean datagram, MCOb
 		MCresult->sets("can't create socket");
 		return NULL;
 	}
+    
+#ifdef SO_NOSIGPIPE
+    int set = 1;
+    setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
+#endif
 
 	// HH-2017-01-26: [[ Bug 18454 ]] Set the broadcast flagged base on property 'allowDatagramBroadcasts'
 	if(datagram)
@@ -868,8 +880,8 @@ MCSocket *MCS_open_socket(MCNameRef name, MCNameRef from, Boolean datagram, MCOb
 		}
 		else
 		{
-			MCOpenSocketCallbackInfo *t_info;
-			MCMemoryNew(t_info);
+			MCOpenSocketCallbackInfo *t_info = nullptr;
+			/* UNCHECKED */ MCMemoryNew(t_info);
 			t_info->m_socket = s;
 			s->resolve_state = kMCSocketStateResolving;
 			if (!MCS_name_to_sockaddr(MCNameGetString(s->name), &t_info->m_sockaddr, open_socket_resolve_callback, t_info))
@@ -1134,6 +1146,11 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
 		MCresult->sets("can't create socket");
 		return NULL;
 	}
+    
+#ifdef SO_NOSIGPIPE
+    int set = 1;
+    setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
+#endif
 
 	unsigned long val = 1;
 
@@ -1146,8 +1163,15 @@ MCSocket *MCS_accept(uint2 port, MCObject *object, MCNameRef message, Boolean da
     on = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char *)&on, sizeof(on)) != 0)
     {
-        MCresult->sets("can't reuse port");
-        return NULL;
+		switch (errno)
+		{
+			case ENOPROTOOPT:
+				// option not supported by OS, ignore error
+				break;
+			default:
+				MCresult->sets("can't reuse port");
+				return NULL;
+		}
     }
 #endif
 
@@ -1462,6 +1486,8 @@ MCSocket::~MCSocket()
 	deletewrites();
 
 	delete rbuffer;
+    
+    delete[] error;
 	
 	// MM-2014-06-13: [[ Bug 12567 ]] Added support for specifying an end host name to verify against.
 	MCValueRelease(endhostname);

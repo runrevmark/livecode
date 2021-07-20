@@ -188,6 +188,10 @@ public class ExtVideoView extends SurfaceView implements MediaPlayerControl {
         mVideoHeight = 0;
         getHolder().addCallback(mSHCallback);
         getHolder().setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+
+        /* We always want the video's surface view to sit on top of any OpenGL
+         * surface view, so set this as a media overlay. */
+        setZOrderMediaOverlay(true);
         setFocusable(true);
         setFocusableInTouchMode(true);
         requestFocus();
@@ -395,9 +399,7 @@ public class ExtVideoView extends SurfaceView implements MediaPlayerControl {
             mVideoHeight = mp.getVideoHeight();
 
             int seekToPosition = mSeekWhenPrepared;  // mSeekWhenPrepared may be changed after seekTo() call
-            if (seekToPosition != 0) {
-                seekTo(seekToPosition);
-            }
+            seekTo(seekToPosition);
             // IM-2014-02-25: [[ Bug 11753 ]] don't set looping here as this seems to put
             // the player into an error state
             /* CODE REMOVED */
@@ -805,5 +807,13 @@ public class ExtVideoView extends SurfaceView implements MediaPlayerControl {
 
     public boolean canSeekForward() {
         return mCanSeekForward;
+    }
+    
+    @Override
+    public int getAudioSessionId() {
+      if (mMediaPlayer != null) {
+          return mMediaPlayer.getAudioSessionId();
+      }
+      return 0;
     }
 }

@@ -139,8 +139,6 @@ void MCGroup::SetRadioBehavior(MCExecContext& ctxt, uint32_t part, bool setting)
 	bool t_dirty;
 	t_dirty = changeflag(setting, F_RADIO_BEHAVIOR);
 
-	if (flags & F_RADIO_BEHAVIOR)
-		flags |= F_TAB_GROUP_BEHAVIOR;
 	radio(part, kfocused);
 	radio(part, mfocused);
 
@@ -238,11 +236,11 @@ void MCGroup::SetHilitedButtonId(MCExecContext& ctxt, uint32_t part, integer_t p
 
 void MCGroup::GetHilitedButtonName(MCExecContext& ctxt, uint32_t part, MCStringRef& r_name)
 {
-	MCButton *bptr = gethilitedbutton(part);
-	if (bptr != NULL)
-		r_name = MCValueRetain(MCNameGetString(bptr->getname()));
-	else
-		r_name = MCValueRetain(kMCEmptyString);
+    MCButton *bptr = gethilitedbutton(part);
+    if (bptr != NULL)
+        bptr -> GetShortName(ctxt, r_name);
+    else
+        r_name = MCValueRetain(kMCEmptyString);
 }
 
 void MCGroup::SetHilitedButtonName(MCExecContext& ctxt, uint32_t part, MCStringRef p_name)
@@ -806,4 +804,14 @@ void MCGroup::GetClipsToRect(MCExecContext& ctxt, bool& r_clips_to_rect)
 void MCGroup::SetVisible(MCExecContext &ctxt, uinteger_t part, bool setting)
 {
 	MCControl::SetVisible(ctxt, part, setting);
+}
+
+void MCGroup::SetOpaque(MCExecContext &ctxt, bool setting)
+{
+	if (changeflag(setting, F_OPAQUE))
+	{
+		sync_mfocus(false, false);
+		MCObject::Redraw();
+		m_layer_attr_changed = true;
+	}
 }

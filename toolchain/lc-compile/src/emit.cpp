@@ -171,6 +171,9 @@ extern "C" void EmitPosition(PositionRef position);
 extern "C" void OutputBeginManifest(void);
 
 extern "C" int IsBootstrapCompile(void);
+extern "C" int IsNotBytecodeOutput(void);
+
+extern "C" int ForceCBindingsAsBuiltins(void);
 
 extern "C" void DependStart(void);
 extern "C" void DependFinish(void);
@@ -271,6 +274,18 @@ static const char *s_output_code_filename = NULL;
 
 //////////
 
+struct CompiledModule
+{
+    CompiledModule *next;
+    NameRef name;
+    byte_t *bytecode;
+    size_t bytecode_len;
+};
+
+static CompiledModule *s_compiled_modules = NULL;
+
+//////////
+
 struct EmittedModule
 {
     EmittedModule *next;
@@ -306,17 +321,31 @@ static bool EmitEmittedModules(void)
     for(EmittedModule *t_module = s_emitted_modules; t_module != nullptr; t_module = t_module->next)
     {
         const char *t_modified_name = t_module->modified_name;
-    
+        
         if (0 > fprintf(t_file,
-                        "static __builtin_module_info __%s_module_info =\n{\n    0,\n    0,\n    %s_module_data,\n    sizeof(%s_module_data),\n    %s_Initialize,\n    %s_Finalize,\n    __builtin_ordinal_map\n};\n",
-                        t_modified_name,
-                        t_modified_name,
+                        "static __builtin_module_info __%s_module_info =\n{\n    0,\n    0,\n    %s_module_data,\n    sizeof(%s_module_data),\n",
                         t_modified_name,
                         t_modified_name,
                         t_modified_name))
             return false;
         
-        if (0 > fprintf(t_file, "__builtin_module_loader __%s_loader(&__%s_module_info);\n\n",
+        if (!ForceCBindingsAsBuiltins())
+        {
+            if (0 > fprintf(t_file,
+                            "    %s_Initialize,\n    %s_Finalize,\n",
+                            t_modified_name,
+                            t_modified_name))
+                return false;
+        }
+        else
+        {
+            if (0 > fprintf(t_file,
+                            "    nullptr,\n    nullptr,\n"))
+                return false;
+        }
+    
+        if (0 > fprintf(t_file,
+                        "    __builtin_ordinal_map\n};\n__builtin_module_loader __%s_loader(&__%s_module_info);\n\n",
                         t_modified_name,
                         t_modified_name))
             return false;
@@ -342,9 +371,16 @@ struct EmittedBuiltin
 static EmittedBuiltin *s_emitted_builtins = nullptr;
 static uindex_t s_emitted_builtin_count = 0;
 
-static MCStringRef EmittedBuiltinAdd(NameRef p_symbol_name, uindex_t p_type_index)
+static MCStringRef EmittedBuiltinAdd(NameRef p_symbol_name, uindex_t p_type_index, bool p_force)
 {
-    if (!OutputFileAsC || OutputFileAsAuxC)
+    if (!p_force && (!OutputFileAsC || OutputFileAsAuxC))
+    {
+        return MCNameGetString(to_mcnameref(p_symbol_name));
+    }
+
+    /* If this is a parameterized foriegn type, then don't shim it */
+    if (p_type_index == UINDEX_MAX &&
+        strchr(cstring_from_nameref(p_symbol_name), ':') != NULL)
     {
         return MCNameGetString(to_mcnameref(p_symbol_name));
     }
@@ -428,6 +464,9 @@ static struct { MCScriptForeignPrimitiveType type; const char *ctype; } s_primit
     DEFINE_PRIMITIVE_TYPE_MAPPING(CDouble, double)
     DEFINE_PRIMITIVE_TYPE_MAPPING(SInt, int32_t)
     DEFINE_PRIMITIVE_TYPE_MAPPING(UInt, uint32_t)
+    DEFINE_PRIMITIVE_TYPE_MAPPING(NaturalUInt, natural_uint_t)
+    DEFINE_PRIMITIVE_TYPE_MAPPING(NaturalSInt, natural_sint_t)
+    DEFINE_PRIMITIVE_TYPE_MAPPING(NaturalFloat, natural_float_t)
 };
 
 #undef DEFINE_PRIMITIVE_TYPE_MAPPING
@@ -571,7 +610,16 @@ static bool EmitEmittedBuiltins(void)
 
 static const char *kOutputCDefinitions =
     "#include <stdint.h>\n"
-    "#include <stddef.h>\n"
+    "#include <stddef.h>\n\n"
+    "#if UINTPTR_MAX == 0xffffffff\n"
+    "typedef uint32_t natural_uint_t;\n"
+    "typedef int32_t natural_sint_t;\n"
+    "typedef float natural_float_t;\n"
+    "#elif UINTPTR_MAX == 0xffffffffffffffff\n"
+    "typedef uint64_t natural_uint_t;\n"
+    "typedef int64_t natural_sint_t;\n"
+    "typedef double natural_float_t;\n"
+    "#endif\n\n"
     "typedef void (*__builtin_shim_type)(void*, void**);\n"
     "struct __builtin_module_info\n"
     "{\n"
@@ -633,8 +681,46 @@ static void __EmitModuleOrder(NameRef p_name)
     s_ordered_modules[s_ordered_module_count++] = p_name;
 }
 
+static bool
+EmitCompiledModules (void)
+{
+    const char *t_filename = nil;
+    FILE *t_file = OpenOutputBytecodeFile (&t_filename);
+    
+    if (nil == t_file)
+        goto error_cleanup;
+    
+    while(s_compiled_modules != nullptr)
+    {
+        size_t t_written;
+        t_written = fwrite (s_compiled_modules->bytecode, sizeof(byte_t), s_compiled_modules->bytecode_len, t_file);
+    
+        if (t_written != s_compiled_modules->bytecode_len)
+            goto error_cleanup;
+        
+        s_compiled_modules = s_compiled_modules->next;
+    }
+    
+    fflush (t_file);
+    fclose (t_file);
+    
+    return true;
+    
+error_cleanup:
+    if (nil != t_file)
+        fclose (t_file);
+    Error_CouldNotWriteOutputFile (t_filename);
+    return false;
+}
+
 void EmitFinish(void)
 {
+    if (s_compiled_modules != NULL &&
+        !EmitCompiledModules())
+    {
+        goto error_cleanup;
+    }
+    
     if (!EmitEmittedBuiltins())
     {
         goto error_cleanup;
@@ -699,7 +785,7 @@ void EmitBeginLibraryModule(NameRef p_name, intptr_t& r_index)
 }
 
 static bool
-EmitEndModuleGetByteCodeBuffer (MCAutoByteArray & r_bytecode)
+EmitEndModuleGetByteCodeBuffer (byte_t*& r_bytecode, size_t& r_bytecode_len)
 {
 	MCAutoValueRefBase<MCStreamRef> t_stream;
 	MCMemoryOutputStreamCreate (&t_stream);
@@ -714,40 +800,13 @@ EmitEndModuleGetByteCodeBuffer (MCAutoByteArray & r_bytecode)
 	                            t_bytecode_len);
 
 	MCAssert (t_bytecode_len <= UINDEX_MAX);
-	r_bytecode.Give ((byte_t *) t_bytecode, (uindex_t)t_bytecode_len);
+    r_bytecode = (byte_t*)t_bytecode;
+    r_bytecode_len = t_bytecode_len;
 
 	return true;
 
  error_cleanup:
 	Error_CouldNotGenerateBytecode();
-	return false;
-}
-
-static bool
-EmitEndModuleOutputBytecode (const byte_t *p_bytecode,
-                             size_t p_bytecode_len)
-{
-	const char *t_filename = nil;
-	FILE *t_file = OpenOutputBytecodeFile (&t_filename);
-
-	if (nil == t_file)
-		goto error_cleanup;
-
-	size_t t_written;
-	t_written = fwrite (p_bytecode, sizeof(byte_t), p_bytecode_len, t_file);
-
-	if (t_written != p_bytecode_len)
-		goto error_cleanup;
-
-	fflush (t_file);
-	fclose (t_file);
-
-	return true;
-
- error_cleanup:
-	if (nil != t_file)
-		fclose (t_file);
-	Error_CouldNotWriteOutputFile (t_filename);
 	return false;
 }
 
@@ -772,17 +831,20 @@ EmitEndModuleOutputC (NameRef p_module_name,
 		if (t_modified_name[i] == '.')
 			t_modified_name[i] = '_';
     
-    // Emit the initializer reference.
-    if (0 > fprintf(s_output_code_file,
-                    "extern \"C\" bool %s_Initialize(void);\n",
-                    t_modified_name))
-        goto error_cleanup;
-    
-    // Emit the finalizer reference.
-    if (0 > fprintf(s_output_code_file,
-                    "extern \"C\" void %s_Finalize(void);\n",
-                    t_modified_name))
-        goto error_cleanup;
+    if (!ForceCBindingsAsBuiltins())
+    {
+        // Emit the initializer reference.
+        if (0 > fprintf(s_output_code_file,
+                        "extern \"C\" bool %s_Initialize(void);\n",
+                        t_modified_name))
+            goto error_cleanup;
+        
+        // Emit the finalizer reference.
+        if (0 > fprintf(s_output_code_file,
+                        "extern \"C\" void %s_Finalize(void);\n",
+                        t_modified_name))
+            goto error_cleanup;
+    }
     
 	if (0 > fprintf(t_file, "static unsigned char %s_module_data[] = {", t_modified_name))
 		goto error_cleanup;
@@ -888,8 +950,7 @@ EmitEndModule (void)
 {
 	const char *t_module_string = nil;
 
-	MCAutoByteArray t_bytecode;
-	const byte_t *t_bytecode_buf = nil;
+    byte_t *t_bytecode_buf = nil;
 	size_t t_bytecode_len = 0;
 
 	MCAutoByteArray t_interface;
@@ -905,11 +966,8 @@ EmitEndModule (void)
 
 	/* ---------- 1. Get bytecode */
 
-	if (!EmitEndModuleGetByteCodeBuffer (t_bytecode))
+	if (!EmitEndModuleGetByteCodeBuffer (t_bytecode_buf, t_bytecode_len))
 		goto cleanup;
-
-	t_bytecode_buf = t_bytecode.Bytes();
-	t_bytecode_len = t_bytecode.ByteCount();
 
 	/* ---------- 2. Output module contents */
 	if (OutputFileAsC)
@@ -920,9 +978,13 @@ EmitEndModule (void)
 	}
 	else if (OutputFileAsBytecode)
 	{
-		if (!EmitEndModuleOutputBytecode (t_bytecode_buf, t_bytecode_len))
-			goto cleanup;
-	}
+        CompiledModule *t_cmodule = (CompiledModule*)Allocate(sizeof(CompiledModule));
+        t_cmodule->next = s_compiled_modules;
+        t_cmodule->name = s_module_name;
+        t_cmodule->bytecode = t_bytecode_buf;
+        t_cmodule->bytecode_len = t_bytecode_len;
+        s_compiled_modules = t_cmodule;
+    }
 
 	/* ---------- 3. Output module interface */
 	if (!EmitEndModuleGetInterfaceBuffer (t_bytecode_buf, t_bytecode_len,
@@ -1071,10 +1133,42 @@ void EmitVariableDefinition(intptr_t p_index, PositionRef p_position, NameRef p_
 
 static void EmitForeignHandlerDefinition(intptr_t p_index, PositionRef p_position, NameRef p_name, intptr_t p_type_index, intptr_t p_binding, bool p_force_builtin)
 {
-    MCAutoStringRef t_binding_str;
-    if (strcmp((const char *)p_binding, "<builtin>") == 0 || p_force_builtin)
+    MCAutoStringRef t_binding(to_mcstringref(p_binding));
+    MCAutoCustomPointer<struct MCScriptForeignHandlerInfo, MCScriptForeignHandlerInfoRelease> t_info;
+    if (!MCScriptForeignHandlerInfoParse(*t_binding, &t_info))
     {
-        t_binding_str = EmittedBuiltinAdd(p_force_builtin ? nameref_from_cstring((const char *)p_binding) : p_name, p_type_index);
+        return;
+    }
+    
+    bool t_force_c_builtin = t_info->language == kMCScriptForeignHandlerLanguageC &&
+                            ForceCBindingsAsBuiltins();
+    
+    MCAutoStringRef t_binding_str;
+    if (t_info->language == kMCScriptForeignHandlerLanguageBuiltinC ||
+        p_force_builtin ||
+        t_force_c_builtin)
+    {
+        NameRef t_symbol_name;
+        if (t_info->language == kMCScriptForeignHandlerLanguageBuiltinC)
+        {
+            t_symbol_name = p_name;
+        }
+        else if (p_force_builtin)
+        {
+            t_symbol_name = nameref_from_cstring((const char *)p_binding);
+        }
+        else
+        {
+            MCAutoStringRefAsCString t_symbol_c_string;
+            if (!t_symbol_c_string . Lock(t_info->c.function))
+            {
+                return;
+            }
+            
+            t_symbol_name = nameref_from_cstring(*t_symbol_c_string);
+        }
+        
+        t_binding_str = EmittedBuiltinAdd(t_symbol_name, p_type_index, ForceCBindingsAsBuiltins());
     }
     else
         t_binding_str = to_mcstringref(p_binding);
@@ -1350,7 +1444,7 @@ void EmitForeignType(intptr_t p_binding, intptr_t& r_type_index)
 {
     uindex_t t_type_index;
     MCStringRef t_binding_str = 
-            EmittedBuiltinAdd(nameref_from_mcstringref(to_mcstringref(p_binding)), UINDEX_MAX);
+            EmittedBuiltinAdd(nameref_from_mcstringref(to_mcstringref(p_binding)), UINDEX_MAX, false);
     
     MCScriptAddForeignTypeToModule(s_builder, t_binding_str, t_type_index);
     r_type_index = t_type_index;

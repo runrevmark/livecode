@@ -59,6 +59,10 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
 #include <sys/xattr.h>
 
+#ifdef __IPHONE_14_0
+#import <AppTrackingTransparency/AppTrackingTransparency.h>
+#endif
+
 #include "mblstore.h"
 #include "mblsyntax.h"
 
@@ -519,6 +523,41 @@ bool MCSystemGetLaunchData(MCArrayRef &r_data)
 	return false;
 }
 
+bool MCSystemGetTrackingAuthorizationStatus (MCStringRef& r_status)
+{
+#ifdef __IPHONE_14_0
+    if (@available(iOS 14, *))
+    {
+        ATTrackingManagerAuthorizationStatus t_status = [ATTrackingManager trackingAuthorizationStatus];
+        switch (t_status)
+        {
+            case ATTrackingManagerAuthorizationStatusAuthorized:
+                //NSLog(@"ATTrackingManagerAuthorizationStatusAuthorized");
+                r_status = MCSTR("authorized");
+                break;
+            case ATTrackingManagerAuthorizationStatusDenied:
+                //NSLog(@"ATTrackingManagerAuthorizationStatusDenied");
+                r_status = MCSTR("denied");
+                break;
+            case ATTrackingManagerAuthorizationStatusRestricted:
+                //NSLog(@"ATTrackingManagerAuthorizationStatusRestricted");
+                r_status = MCSTR("restricted");
+                break;
+            case ATTrackingManagerAuthorizationStatusNotDetermined:
+                //NSLog(@"ATTrackingManagerAuthorizationStatusNotDetermined");
+                r_status = MCSTR("not determined");
+                break;
+        }
+        return true;
+    }
+    else
+#endif
+    {
+        r_status = MCSTR("not supported");
+        return false;
+    }
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // We do not need this in iOS, as beep is already implemented and handled.
@@ -541,6 +580,13 @@ bool MCSystemVibrate (int32_t p_number_of_vibrates)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+
+bool MCSystemGetDeviceModel(MCStringRef& r_model)
+{
+    NSString *t_device_model_name = MCIPhoneGetDeviceModelName();
+	
+	return MCStringCreateWithCFStringRef((CFStringRef)t_device_model_name, r_model);
+}
 
 bool MCSystemGetDeviceResolution(MCStringRef& p_resolution)
 {
@@ -584,26 +630,26 @@ bool MCSystemGetPixelDensity(real64_t& r_density)
 // SN-2014-10-15: [[ Merge-6.7.0-rc-3 ]]
 ////////////////////////////////////////////////////////////////////////////////
 
-static UIKeyboardType MCMiscGetUIKeyboardTypeFromExecEnum(MCMiscKeyboardType p_type)
+UIKeyboardType MCInterfaceGetUIKeyboardTypeFromExecEnum(MCInterfaceKeyboardType p_type)
 {
     switch(p_type)
     {
-        case kMCMiscKeyboardTypeAlphabet:
+        case kMCInterfaceKeyboardTypeAlphabet:
             return UIKeyboardTypeAlphabet;
-        case kMCMiscKeyboardTypeNumeric:
+        case kMCInterfaceKeyboardTypeNumeric:
             return UIKeyboardTypeNumbersAndPunctuation;
-        case kMCMiscKeyboardTypeUrl:
+        case kMCInterfaceKeyboardTypeUrl:
             return UIKeyboardTypeURL;
-        case kMCMiscKeyboardTypeNumber:
+        case kMCInterfaceKeyboardTypeNumber:
             return UIKeyboardTypeNumberPad;
-        case kMCMiscKeyboardTypePhone:
+        case kMCInterfaceKeyboardTypePhone:
             return UIKeyboardTypePhonePad;
-        case kMCMiscKeyboardTypeContact:
+        case kMCInterfaceKeyboardTypeContact:
             return UIKeyboardTypeNamePhonePad;
-        case kMCMiscKeyboardTypeEmail:
+        case kMCInterfaceKeyboardTypeEmail:
             return UIKeyboardTypeEmailAddress;
 #ifdef __IPHONE_4_1
-        case kMCMiscKeyboardTypeDecimal:
+        case kMCInterfaceKeyboardTypeDecimal:
             return UIKeyboardTypeDecimalPad;
 #endif // __IPHONE_4_1
         default:
@@ -613,34 +659,34 @@ static UIKeyboardType MCMiscGetUIKeyboardTypeFromExecEnum(MCMiscKeyboardType p_t
 
 bool MCSystemSetKeyboardType(intenum_t p_type)
 {
-    MCIPhoneSetKeyboardType(MCMiscGetUIKeyboardTypeFromExecEnum((MCMiscKeyboardType)p_type));
+    MCIPhoneSetKeyboardType(MCInterfaceGetUIKeyboardTypeFromExecEnum((MCInterfaceKeyboardType)p_type));
     
     return  true;
 }
 
-static UIReturnKeyType MCMiscGetUIReturnKeyTypeFromMCExecEnum(MCMiscKeyboardReturnKey p_type)
+UIReturnKeyType MCInterfaceGetUIReturnKeyTypeFromExecEnum(MCInterfaceReturnKeyType p_type)
 {
     switch(p_type)
     {
-        case kMCMiscKeyboardReturnKeyGo:
+        case kMCInterfaceReturnKeyTypeGo:
             return UIReturnKeyGo;
-        case kMCMiscKeyboardReturnKeyGoogle:
+        case kMCInterfaceReturnKeyTypeGoogle:
             return UIReturnKeyGoogle;
-        case kMCMiscKeyboardReturnKeyJoin:
+        case kMCInterfaceReturnKeyTypeJoin:
             return UIReturnKeyJoin;
-        case kMCMiscKeyboardReturnKeyNext:
+        case kMCInterfaceReturnKeyTypeNext:
             return UIReturnKeyNext;
-        case kMCMiscKeyboardReturnKeySearch:
+        case kMCInterfaceReturnKeyTypeSearch:
             return UIReturnKeySearch;
-        case kMCMiscKeyboardReturnKeySend:
+        case kMCInterfaceReturnKeyTypeSend:
             return UIReturnKeySend;
-        case kMCMiscKeyboardReturnKeyRoute:
+        case kMCInterfaceReturnKeyTypeRoute:
             return UIReturnKeyRoute;
-        case kMCMiscKeyboardReturnKeyYahoo:
+        case kMCInterfaceReturnKeyTypeYahoo:
             return UIReturnKeyYahoo;
-        case kMCMiscKeyboardReturnKeyDone:
+        case kMCInterfaceReturnKeyTypeDone:
             return UIReturnKeyDone;
-        case kMCMiscKeyboardReturnKeyEmergencyCall:
+        case kMCInterfaceReturnKeyTypeEmergencyCall:
             return UIReturnKeyEmergencyCall;
         default:
             return UIReturnKeyDefault;
@@ -649,8 +695,14 @@ static UIReturnKeyType MCMiscGetUIReturnKeyTypeFromMCExecEnum(MCMiscKeyboardRetu
 
 bool MCSystemSetKeyboardReturnKey(intenum_t p_type)
 {
-    MCIPhoneSetReturnKeyType(MCMiscGetUIReturnKeyTypeFromMCExecEnum((MCMiscKeyboardReturnKey)p_type));
+    MCIPhoneSetReturnKeyType(MCInterfaceGetUIReturnKeyTypeFromExecEnum((MCInterfaceReturnKeyType)p_type));
                              
+    return true;
+}
+
+bool MCSystemSetKeyboardDisplay(intenum_t p_type)
+{
+    MCIPhoneSetKeyboardDisplay((MCIPhoneKeyboardDisplayMode)p_type);
     return true;
 }
 
@@ -680,7 +732,7 @@ bool MCSystemGetPreferredLanguages(MCStringRef& r_preferred_languages)
 		for (NSString *t_lang in t_preferred_langs)
 		{
             MCAutoStringRef t_language;
-            if (t_success && MCStringCreateWithCFString((CFStringRef)t_lang, &t_language))
+            if (t_success && MCStringCreateWithCFStringRef((CFStringRef)t_lang, &t_language))
                 t_success = MCListAppend(*t_languages, *t_language);
         }
 	}
@@ -696,7 +748,7 @@ bool MCSystemGetCurrentLocale(MCStringRef& r_current_locale)
 	NSString *t_current_locale_id = nil;
 	t_current_locale_id = [[NSLocale currentLocale] objectForKey: NSLocaleIdentifier];
 
-	/* UNCHECKED */ MCStringCreateWithCFString((CFStringRef)t_current_locale_id, r_current_locale);
+	/* UNCHECKED */ MCStringCreateWithCFStringRef((CFStringRef)t_current_locale_id, r_current_locale);
 
 	return true;
 }
@@ -705,13 +757,9 @@ bool MCSystemGetCurrentLocale(MCStringRef& r_current_locale)
 
 bool MCSystemGetSystemIdentifier(MCStringRef& r_identifier)
 {
-    // MM-2013-05-21: [[ Bug 10895 ]] The method uniqueIdentifier of UIDevice is now deprecated (as of May 2013).
-    //  Calling the method dynamically prevents apps from being rejected by the app store
-    //  but preserves functionality for testing and backwards compatibility.
-    NSString *t_identifier;
-    t_identifier = objc_msgSend([UIDevice currentDevice], sel_getUid("uniqueIdentifier"));
-	
-    return MCStringCreateWithCFString((CFStringRef)t_identifier, r_identifier);
+	// Deprecated in LC 6.0
+	r_identifier = MCValueRetain(kMCEmptyString);
+	return true;
 }
 
 bool MCSystemGetIdentifierForVendor(MCStringRef& r_identifier)
@@ -723,7 +771,7 @@ bool MCSystemGetIdentifierForVendor(MCStringRef& r_identifier)
     {
         NSString *t_identifier;
         t_identifier = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
-        return MCStringCreateWithCFString((CFStringRef)t_identifier, r_identifier);
+        return MCStringCreateWithCFStringRef((CFStringRef)t_identifier, r_identifier);
     }
 
     r_identifier = MCValueRetain(kMCEmptyString);
@@ -740,7 +788,7 @@ bool MCSystemGetApplicationIdentifier(MCStringRef& r_identifier)
 	NSString *t_identifier;
 	t_identifier = [t_plist objectForKey: @"CFBundleIdentifier"];
 	
-	return MCStringCreateWithCFString((CFStringRef)t_identifier, r_identifier);
+	return MCStringCreateWithCFStringRef((CFStringRef)t_identifier, r_identifier);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -958,7 +1006,7 @@ bool MCSystemSetRemoteControlDisplayProperties(MCExecContext& ctxt, MCArrayRef p
 	
 	// MW-2013-10-01: [[ Bug 11136 ]] Make sure we don't do anything if on anything less
 	//   than 5.0.
-	if (MCmajorosversion < 500)
+	if (MCmajorosversion < MCOSVersionMake(5,0,0))
 		return ES_NORMAL;
 	
 	// MW-2013-10-01: [[ Bug 11136 ]] Fetch the symbols we cannot link to for 4.3.
@@ -1003,7 +1051,8 @@ bool MCSystemSetRemoteControlDisplayProperties(MCExecContext& ctxt, MCArrayRef p
                     MCAutoStringRef t_string;
                     if (!ctxt . ConvertToString(t_prop_value, &t_string))
                         continue;
-					t_value = MCStringConvertToAutoreleasedNSString(*t_string);
+                        
+					t_value = [MCStringConvertToAutoreleasedNSString(*t_string) retain];
                 }
 					break;
 				case kRCDPropTypeImage:
@@ -1053,6 +1102,8 @@ bool MCSystemSetRemoteControlDisplayProperties(MCExecContext& ctxt, MCArrayRef p
 	if (t_success)
 		[[s_info_center defaultCenter] setNowPlayingInfo: t_info_dict];
 	
+    [t_info_dict release];
+    
 	return ES_NORMAL;
 }
 

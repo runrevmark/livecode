@@ -15,10 +15,9 @@ for more details.
 You should have received a copy of the GNU General Public License
 along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 
-/*
-A widget to display icons for picking
+/**
+This widget is an icon picker, using icons from the iconSVG library.
 */
-
 widget com.livecode.widget.iconpicker
 
 use com.livecode.canvas
@@ -28,9 +27,10 @@ use com.livecode.library.iconsvg
 use com.livecode.library.widgetutils
 
 metadata author is "LiveCode"
-metadata version is "1.0.0"
+metadata version is "1.0.3"
 metadata title is "Icon Picker"
 metadata userVisible is "false"
+metadata _ide is "true"
 
 private variable mDataCount as Integer
 private variable mDataList as List
@@ -48,6 +48,7 @@ private variable mViewWidth as Real
 private variable mDataTravel as Real
 private variable mViewTopPosition as Real
 private variable mFirstDataItem as Integer
+private variable mLastDataItem as Integer
 private variable mRecalculate as Boolean
 private variable mRecalculateGeometry as Boolean
 private variable mHoverRow as Integer
@@ -58,15 +59,86 @@ private variable mSelectedElement as optional String
 private variable mShowNames as Boolean
 private variable mIconSize as Number
 private variable mFilterString as String
+private variable mShowSelectedElement as Boolean
 
+/**
+The preferred size of the widget.
+
+Syntax: 
+get the preferredSize of <widget>
+
+Value:
+A two-item list with the width and height needed to display the widget
+with the current display preferences.
+
+Description:
+The <preferredSize> property is used when the icon widget is popped up
+using the 'popup widget' syntax
+*/
 property preferredSize		get getPreferredSize
 metadata preferredSize.user_visible is "false"
 
+/**
+The selected icon name
+
+Syntax: 
+set the selectedIcon of <widget> to pIcon
+get the selectedIcon of <widget>
+
+Value:
+An icon name, from the IconSVG library
+
+*/
 property selectedIcon get mSelectedElement set setSelectedElement
+
+/**
+Whether the icon picker has a border or not
+
+Syntax: 
+set the showFrameBorder of <widget> to {true | false}
+get the showFrameBorder of <widget>
+
+*/
 property showFrameBorder	get mFrameBorder	set setFrameBorder
+
+/**
+Whether to display the names of the icons or not
+
+Syntax: 
+set the showNames of <widget> to {true | false}
+get the showNames of <widget>
+*/
 property showNames get mShowNames set SetShowNames
+
+/**
+The width and height of the rectangles in which the icons are rendered
+
+Syntax: 
+set the iconSize of <widget> to pSize
+get the iconSize of <widget>
+
+Value:
+A two-item list with the width and height of the rect in which the icons are rendered
+*/
 property iconSize get mIconSize set SetIconSize
+
+/**
+Filters the list of icons to display according to a string
+
+Syntax: 
+set the filterString of <widget> to pString
+get the filterString of <widget>
+*/
 property filterString get mFilterString set SetFilterString
+
+/**
+Controls whether a title bar is drawn displaying the currently selected icon
+
+Syntax:
+set the showSelectedElement of <widget> to {true | false}
+get the showSelectedElement of <widget>
+*/
+property showSelectedElement get mShowSelectedElement set setShowSelectedElement
 
 constant kIconColor is [0,0,0]
 
@@ -76,7 +148,7 @@ constant kMinCols is 3
 constant kMinRows is 3
 
 public handler OnCreate()
-    put "" into mFilterString
+	put "" into mFilterString
 	SetDataList()
 	put the empty array into mPaths
 	put 1 into mFirstDataItem
@@ -87,6 +159,7 @@ public handler OnCreate()
 	put 0 into mViewTopPosition
 	put true into mFrameBorder
 
+	put true into mShowSelectedElement
 	put false into mShowNames
 	put kDefaultIconSize into mIconSize
 
@@ -121,7 +194,8 @@ handler SetDataList()
     else
         put tDataList into tFilteredData
     end if
-    
+
+    put the number of elements in tFilteredData into mLastDataItem
     put tFilteredData into mDataList
     put true into mRecalculate
     redraw all
@@ -154,8 +228,10 @@ public handler OnPaint()
 	end if
 	
 	paintScrollbar(this canvas, getPaint("scrollbar", "fill"))
-	
-	drawTitleBar()
+
+   if mShowSelectedElement is true then
+	   drawTitleBar()
+   end if
 	drawFrame()
 
 end handler
@@ -304,6 +380,8 @@ public handler OnMouseUp() returns nothing
    end if
 
    redraw all
+
+   post "mouseUp"
 end handler
 
 public handler OnMouseCancel() returns nothing
@@ -343,7 +421,9 @@ private handler indexToSectorRect(in pIndex as Integer) returns Rectangle
 
 	variable tRow as Integer
 	variable tCol as Integer
-	put the floor of ((pIndex - 1) / mNumCols) + 1 into tRow
+
+	put the ceiling of (pIndex / mNumCols) into tRow
+
 	put pIndex wrap mNumCols into tCol
 
 	put (tCol - 1) * mViewWidth / mNumCols into tLeft
@@ -368,6 +448,11 @@ private handler mousePosToIconNumber(in pMouse as Point) returns Integer
    if tNumber < mFirstDataItem then
       put 0 into tNumber
    end if
+
+	-- Ignore clicks after the last icon
+	if tNumber > mLastDataItem then
+		put 0 into tNumber
+	end if
 
 	return tNumber
 end handler
@@ -399,7 +484,11 @@ private handler updateFirstDataItem()
 end handler
 
 private handler topRowHeight() returns Number
-	return mIconSize * (1 + kIconPaddingRatio * 2)
+   if mShowSelectedElement is true then
+	   return mIconSize * (1 + kIconPaddingRatio * 2)
+   else
+      return 0
+   end if
 end handler
 
 private handler minContentHeight() returns Number
@@ -587,7 +676,15 @@ end handler
 
 private handler SetFilterString(in pString as String)
     put pString into mFilterString
+    put 1 into mFirstDataItem
+    put true into mRecalculateGeometry
+
     SetDataList()
+    redraw all
+end handler
+
+private handler SetShowSelectedElement(in pShow as Boolean)
+    put pShow into mShowSelectedElement
     redraw all
 end handler
 

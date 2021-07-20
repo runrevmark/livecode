@@ -27,8 +27,8 @@ inkmode:
 the name of the ink
 
 Value (enum):
-The <ink> of an <object(glossary)> is a <string> designating one of 48
-<transfer mode|transfer modes>.By default, the <ink> of newly created
+The <ink> of an <object(glossary)> is a <string> designating one of 25
+<transfer mode|transfer modes>. By default, the <ink> of newly created
 <object|objects> is "srcCopy"
 
 
@@ -51,39 +51,39 @@ There are 25 transfer modes:
 
 Structural Blends (Porter Duff operators):
 
-        * blendClear
-        * blendSrc
-        * blendDst
-        * blendSrcOver
-        * blendDstOver
-        * blendSrcIn
-        * blendDstIn
-        * blendSrcOut
-        * blendDstOut
-        * blendSrcAtop
-        * blendDstAtop
-        * blendXor
+* blendClear
+* blendSrc
+* blendDst
+* blendSrcOver
+* blendDstOver
+* blendSrcIn
+* blendDstIn
+* blendSrcOut
+* blendDstOut
+* blendSrcAtop
+* blendDstAtop
+* blendXor
 
 
 Image Processing Blends (SVG/PDF operators):
 
-        * blendPlus
-        * blendMultiply
-        * blendScreen
-        * blendOverlay
-        * blendDarken
-        * blendLighten
-        * blendDodge
-        * blendBurn
-        * blendHardLight
-        * blendSoftLight
-        * blendDifference
-        * blendExclusion
+* blendPlus
+* blendMultiply
+* blendScreen
+* blendOverlay
+* blendDarken
+* blendLighten
+* blendDodge
+* blendBurn
+* blendHardLight
+* blendSoftLight
+* blendDifference
+* blendExclusion
 
 
 Bitwise - This ink has been deprecated from version 5.0
 
-        * srcCopy
+* srcCopy
 
 The rendered pixels of an object are combined with the corresponding
 background pixels using the specified ink before the blendLevel is
@@ -97,10 +97,6 @@ applied.
 > something other than 0.
 
 References: object (glossary), property (glossary), pixel (glossary),
-background (glossary), transfer mode (glossary), string (keyword),
-notSrcCopy (keyword), colorOverlay (property), innerGlow (property),
-innerShadow (property), blendLevel (property), dropShadow (property),
-outerGlow (property)
+background (glossary), string (keyword)
 
 Tags: ui
-

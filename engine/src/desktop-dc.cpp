@@ -135,6 +135,8 @@ Boolean MCScreenDC::open()
 Boolean MCScreenDC::close(Boolean force)
 {
 	MCPlatformReleaseMenu(icon_menu);
+    
+    MCPlatformReleaseWindow(backdrop_window);
 	
 	// COCOA-TODO: Is this still needed?
 	if (ncolors != 0)
@@ -908,9 +910,10 @@ void MCScreenDC::flushevents(uint2 e)
 		t_mask = kMCPlatformEventKeyDown;
 	else if (e == FE_KEYUP)
 		t_mask = kMCPlatformEventKeyUp;
-	
-	if (t_mask != 0)
-		MCPlatformFlushEvents(t_mask);
+    else if (e == FE_ALL)
+        t_mask = kMCPlatformEventMouseDown | kMCPlatformEventMouseUp | kMCPlatformEventKeyDown | kMCPlatformEventKeyUp;
+    
+    MCPlatformFlushEvents(t_mask);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -937,6 +940,13 @@ void MCScreenDC::activateIME(Boolean activate)
 
 void MCScreenDC::closeIME()
 {
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void MCScreenDC::getsystemappearance(MCSystemAppearance &r_appearance)
+{
+	MCPlatformGetSystemProperty(kMCPlatformSystemPropertySystemAppearance, kMCPlatformPropertyTypeInt32, &r_appearance);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1104,7 +1114,11 @@ MCImageBitmap *MCScreenDC::snapshot(MCRectangle &p_rect, uint4 p_window, MCStrin
 
 void MCScreenDC::controlgainedfocus(MCStack *p_stack, uint32_t p_id)
 {
-	MCPlatformSwitchFocusToView(p_stack -> getwindow(), p_id);
+	MCPlatformWindowRef t_window = p_stack -> getwindow();
+	if (t_window != nullptr)
+	{
+		MCPlatformSwitchFocusToView(p_stack -> getwindow(), p_id);
+	}
 }
 
 void MCScreenDC::controllostfocus(MCStack *p_stack, uint32_t p_id)

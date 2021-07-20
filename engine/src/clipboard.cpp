@@ -76,6 +76,7 @@ bool MCClipboard::Lock(bool p_skip_pull) const
 
 bool MCClipboard::Unlock() const
 {
+    MCAssert(m_lock_count > 0);
     // Decrement the lock count. If it moves from one to zero, push any changes
     // out to the underlying OS clipboard.
     //
@@ -203,7 +204,8 @@ bool MCClipboard::AddFileList(MCStringRef p_file_names)
                 return false;
             
             // Encode it appropriately for this clipboard
-            MCAutoDataRef t_encoded_path(m_clipboard->EncodeFileListForTransfer((MCStringRef)t_path));
+            MCAutoDataRef t_encoded_path;
+            t_encoded_path.Give(m_clipboard->EncodeFileListForTransfer((MCStringRef)t_path));
 			if (*t_encoded_path == NULL)
 				return false;
             
@@ -222,7 +224,8 @@ bool MCClipboard::AddFileList(MCStringRef p_file_names)
     else
     {
         // Convert the file list into the correct format
-		MCAutoDataRef t_encoded_list(m_clipboard->EncodeFileListForTransfer(p_file_names));
+        MCAutoDataRef t_encoded_list;
+        t_encoded_list.Give(m_clipboard->EncodeFileListForTransfer(p_file_names));
 		if (*t_encoded_list == NULL)
 			return false;
         
@@ -247,21 +250,35 @@ bool MCClipboard::AddFileList(MCStringRef p_file_names)
 
 bool MCClipboard::AddText(MCStringRef p_string)
 {
-    // Convert the text to styled text and add via the styled text method
-    MCAutoDataRef t_styled(ConvertTextToStyledText(p_string));
-    if (*t_styled == NULL)
-        return false;
-    return AddLiveCodeStyledText(*t_styled);
-}
+    // [Bug 19206] Converting text to styled text was causing 
+    // presentation issues when attempting to paste into other
+    // applications due to the HTML format being included.
+    // Only add the plain text representations to the clipboard.
 
-bool MCClipboard::AddTextToItem(MCRawClipboardItem* p_item, MCStringRef p_string)
-{
     AutoLock t_lock(this);
     
     // Clear contents if the clipboard contains external data
     if (m_clipboard->IsExternalData())
         Clear();
     
+    // Clear contents to ensure that the clipboard does not end up
+    // containing data from different copy events.
+    // i.e. the HTML/RTF representation would be left untouched
+    if (HasLiveCodeStyledTextOrCompatible())
+    {
+        m_clipboard->Clear();
+    }
+    
+    // Get the first item on the clipboard
+    MCAutoRefcounted<MCRawClipboardItem> t_item = GetItem();
+    if (t_item == NULL)
+        return false;
+
+    return AddTextToItem(t_item, p_string);
+}
+
+bool MCClipboard::AddTextToItem(MCRawClipboardItem* p_item, MCStringRef p_string)
+{
     // For each text encoding that the underlying clipboard supports, encode the
     // text and add it.
     bool t_success = true;
@@ -356,14 +373,16 @@ bool MCClipboard::AddLiveCodeStyledText(MCDataRef p_pickled_text)
     if (t_success && (t_type_string = m_clipboard->GetKnownTypeString(kMCRawClipboardKnownTypeRTF)) != NULL)
     {
         // This type is optional as it may not be a faithful representation
-        MCAutoDataRef t_rtf(ConvertStyledTextToRTF(p_pickled_text));
+        MCAutoDataRef t_rtf;
+        t_rtf.Give(ConvertStyledTextToRTF(p_pickled_text));
         if (*t_rtf != NULL)
             t_success = t_item->AddRepresentation(t_type_string, *t_rtf);
     }
     if (t_success && (t_type_string = m_clipboard->GetKnownTypeString(kMCRawClipboardKnownTypeHTML)) != NULL)
     {
         // This type is optional as it may not be a faithful representation
-        MCAutoStringRef t_html(ConvertStyledTextToHTML(p_pickled_text));
+        MCAutoStringRef t_html;
+        t_html.Give(ConvertStyledTextToHTML(p_pickled_text));
         if (*t_html != NULL)
 		{
 			// All platforms accept UTF-8 as an encoding for HTML on the clipboard
@@ -373,7 +392,7 @@ bool MCClipboard::AddLiveCodeStyledText(MCDataRef p_pickled_text)
 			if (t_success)
 			{
 				MCAutoDataRef t_encoded;
-				t_encoded = m_clipboard->EncodeHTMLFragmentForTransfer(*t_html_utf8);
+				t_encoded.Give(m_clipboard->EncodeHTMLFragmentForTransfer(*t_html_utf8));
 				t_success = *t_encoded != nil;
 				if (t_success)
 					t_success = t_item->AddRepresentation(t_type_string, *t_encoded);
@@ -385,7 +404,8 @@ bool MCClipboard::AddLiveCodeStyledText(MCDataRef p_pickled_text)
     if (t_success)
     {
         // This type is optional as it may not be a faithful representation
-        MCAutoStringRef t_text(ConvertStyledTextToText(p_pickled_text));
+        MCAutoStringRef t_text;
+        t_text.Give(ConvertStyledTextToText(p_pickled_text));
         if (*t_text != NULL)
             t_success = AddTextToItem(t_item, *t_text);
     }
@@ -396,7 +416,8 @@ bool MCClipboard::AddLiveCodeStyledText(MCDataRef p_pickled_text)
 bool MCClipboard::AddLiveCodeStyledTextArray(MCArrayRef p_styled_text)
 {
     // Convert the styled text array to serialised styled text and add that way.
-    MCAutoDataRef t_pickled_text(ConvertStyledTextArrayToStyledText(p_styled_text));
+    MCAutoDataRef t_pickled_text;
+    t_pickled_text.Give(ConvertStyledTextArrayToStyledText(p_styled_text));
     if (*t_pickled_text == NULL)
         return false;
     
@@ -410,7 +431,8 @@ bool MCClipboard::AddHTMLText(MCStringRef p_html_string)
     // format.
     //
     // This is a lossy process but preserves legacy behaviour.
-    MCAutoDataRef t_pickled_text(ConvertHTMLToStyledText(p_html_string));
+    MCAutoDataRef t_pickled_text;
+    t_pickled_text.Give(ConvertHTMLToStyledText(p_html_string));
     if (*t_pickled_text == NULL)
         return false;
     
@@ -424,7 +446,8 @@ bool MCClipboard::AddRTFText(MCDataRef p_rtf_data)
     // format.
     //
     // This is a lossy process but preserves legacy behaviour.
-    MCAutoDataRef t_pickled_text(ConvertRTFToStyledText(p_rtf_data));
+    MCAutoDataRef t_pickled_text;
+    t_pickled_text.Give(ConvertRTFToStyledText(p_rtf_data));
     if (*t_pickled_text == NULL)
         return false;
     
@@ -472,7 +495,7 @@ bool MCClipboard::AddHTML(MCStringRef p_html)
 
 	// Encode the HTML in the required format for the clipboard
 	MCAutoDataRef t_encoded;
-	t_encoded = m_clipboard->EncodeHTMLFragmentForTransfer(*t_html_utf8);
+	t_encoded.Give(m_clipboard->EncodeHTMLFragmentForTransfer(*t_html_utf8));
 	if (*t_encoded == nil)
 		return false;
 
@@ -639,7 +662,10 @@ bool MCClipboard::AddPrivateData(MCDataRef p_private_data)
     
     // Ensure that an item is always on the clipboard, even if it is empty
     if (m_clipboard->GetItemCount() == 0)
-        m_clipboard->AddItem(m_clipboard->CreateNewItem());
+    {
+        MCAutoRefcounted<MCRawClipboardItem> t_item = m_clipboard->CreateNewItem();
+        m_clipboard->AddItem(t_item);
+    }
     
     return true;
 }
@@ -869,10 +895,11 @@ bool MCClipboard::CopyAsFileList(MCStringRef& r_file_list) const
             
             // Get the data for this representation and decode it
             MCAutoStringRef t_url;
-            MCAutoDataRef t_encoded_url(t_rep->CopyData());
+            MCAutoDataRef t_encoded_url;
+            t_encoded_url.Give(t_rep->CopyData());
 			if (*t_encoded_url == NULL)
 				return false;
-            t_url.Reset(m_clipboard->DecodeTransferredFileList(*t_encoded_url));
+            t_url.Give(m_clipboard->DecodeTransferredFileList(*t_encoded_url));
 			if (*t_url == NULL)
 				return false;
             
@@ -898,7 +925,8 @@ bool MCClipboard::CopyAsFileList(MCStringRef& r_file_list) const
             return false;
         
 		// Decode the list of files
-        MCAutoDataRef t_data(t_rep->CopyData());
+        MCAutoDataRef t_data;
+        t_data.Give(t_rep->CopyData());
 		if (*t_data == NULL)
 			return false;
 		t_output = m_clipboard->DecodeTransferredFileList(*t_data);
@@ -1042,12 +1070,11 @@ bool MCClipboard::CopyAsHTMLText(MCStringRef& r_html) const
     if (!CopyAsLiveCodeStyledText(&t_pickled_text))
         return false;
     
-	MCAutoStringRef t_html;
-	t_html.Give(ConvertStyledTextToHTML(*t_pickled_text));
-    if (*t_html == nil)
+	MCStringRef t_html = ConvertStyledTextToHTML(*t_pickled_text);
+    if (t_html == nil)
         return false;
     
-    r_html = t_html.Take();
+    r_html = t_html;
     return true;
 }
 
@@ -1183,7 +1210,8 @@ int MCClipboard::GetLegacyOrdering() const
         const MCRawClipboardItemRep* t_rep = t_item->FetchRepresentationAtIndex(i);
         
         // Is this an image representation?
-        MCAutoStringRef t_type(t_rep->CopyTypeString());
+        MCAutoStringRef t_type;
+        t_type.Give(t_rep->CopyTypeString());
         if (MCTypeMatches(*t_type, m_clipboard->GetKnownTypeString(kMCRawClipboardKnownTypePNG))
             || MCTypeMatches(*t_type, m_clipboard->GetKnownTypeString(kMCRawClipboardKnownTypeGIF))
             || MCTypeMatches(*t_type, m_clipboard->GetKnownTypeString(kMCRawClipboardKnownTypeJPEG)))
@@ -1471,7 +1499,8 @@ bool MCClipboard::CopyAsEncodedText(const MCRawClipboardItem* p_item, MCRawClipb
         return false;
     
     // Get the data for this representation and decode it
-    MCAutoDataRef t_encoded(t_rep->CopyData());
+    MCAutoDataRef t_encoded;
+    t_encoded.Give(t_rep->CopyData());
 
 	// IM-2016-11-21: [[ Bug 18652 ]] Check for null return from CopyData()
 	if (!t_encoded.IsSet())

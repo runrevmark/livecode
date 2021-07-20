@@ -39,7 +39,6 @@ public:
 	virtual ~MCStatement();
 	virtual Parse_stat parse(MCScriptPoint &);
 	virtual void exec_ctxt(MCExecContext&);
-	virtual void compile(MCSyntaxFactoryRef factory);
 	
 	virtual uint4 linecount();
 	
@@ -67,20 +66,6 @@ public:
 	{
 		return pos;
 	}
-};
-
-class MCComref : public MCStatement
-{
-	MCNameRef name;
-    MCHandler *handler;
-	MCParameter *params;
-	bool resolved : 1;
-    bool global_handler : 1;
-public:
-	MCComref(MCNameRef n);
-	virtual ~MCComref();
-	virtual Parse_stat parse(MCScriptPoint &);
-	virtual void exec_ctxt(MCExecContext&);
 };
 
 #endif

@@ -501,3 +501,44 @@ wait 2 ticks
 TestAssert "the ticks change with time", the ticks - tTime >= 2
 end TestTicks
 
+on TestEffectiveRectIsUpdatedWhileScreenIsLocked
+   local tRectBefore, tRectAfter, tEffectiveRectBefore, tEffectiveRectAfter
+   
+   local tLeft,tTop
+   put 100 into tLeft
+   put 200 into tTop
+   
+   create stack "TestStack"
+   put the rect of stack "TestStack" into tRectBefore
+   lock screen
+   set the top of stack "TestStack" to the top of stack "TestStack" + tTop
+   set the left of stack "TestStack" to the left of stack "TestStack" + tLeft
+   put the effective rect of stack "TestStack" into tEffectiveRectBefore
+   put the rect of stack "TestStack" into tRectAfter
+   unlock screen
+   put the effective rect of stack "TestStack" into tEffectiveRectAfter
+   add tTop to item 2 of tRectBefore
+   add tTop to item 4 of tRectBefore
+   add tLeft to item 1 of tRectBefore
+   add tLeft to item 3 of tRectBefore
+   TestAssert "rect of stack is updated while screen is locked", tRectBefore is tRectAfter
+   TestAssert "effective rect of stack is updated while screen is locked", tEffectiveRectBefore is tEffectiveRectAfter
+   delete stack "TestStack" 
+end TestEffectiveRectIsUpdatedWhileScreenIsLocked
+
+on TestUngroupAndQuit
+    -- Bug 21500: run a subprocess in which we ungroup a group and
+    -- then quit, to test that it no longer crashes
+   local tStackToRun, tOptions
+   put the effective filename of me into tStackToRun
+   set the itemdelimiter to slash
+   if the environment is not "server" then
+      put "_ungroupandquit.livecodescript" into item -1 of tStackToRun
+      if the environment contains "command line" then
+         put "-ui" into tOptions
+      end if
+   end if
+   TestRunStack tOptions, tStackToRun
+   TestAssert "ungroup does not crash on quit", the result is empty
+end TestUngroupAndQuit
+

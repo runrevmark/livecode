@@ -157,6 +157,7 @@ struct MCEvent
 					uint32_t modifiers;
 					uint32_t key_code;
 					uint32_t char_code;
+					MCEventKeyState state;
 				} press;
 			};
 		} key;
@@ -490,32 +491,37 @@ static void MCEventQueueDispatchEvent(MCEvent *p_event)
 	case kMCEventTypeKeyPress:
 		{
 			MCStackHandle t_stack = t_event->key.stack;
-            
-            MCObject *t_target = t_menu != nil ? t_menu : t_stack;
+
+			MCObject *t_target = t_menu != nil ? t_menu : t_stack;
 
 			MCmodifierstate = t_event -> key . press . modifiers;
 
-			// If 'char_code' is 0, then this key press has not generated a
-			// character.
+			MCAutoStringRef t_char;
+
 			if (t_event -> key . press . char_code == 0)
 			{
-				t_target -> kdown(kMCEmptyString, t_event -> key . press . key_code);
-				t_target -> kup(kMCEmptyString, t_event -> key . press . key_code);
-				break;
+				// If 'char_code' is 0, then this key press has not generated a
+				// character.
+				t_char = kMCEmptyString;
+			}
+			else
+			{
+				// Otherwise 'char_code' is the unicode codepoint, so first map to
+				// UTF-16 codeunits
+				unichar_t t_unichars[2];
+				uindex_t t_length = 1;
+				if (MCUnicodeCodepointToSurrogates(t_event->key.press.char_code, t_unichars[0], t_unichars[1]))
+					t_length = 2;
+
+				// Now the string is created with the appropriate unicode-capable function
+				MCStringCreateWithChars(t_unichars, t_length, &t_char);
 			}
 
-			// Otherwise 'char_code' is the unicode codepoint, so first map to
-			// UTF-16 codeunits
-			unichar_t t_unichars[2];
-            uindex_t t_length = 1;
-            if (MCUnicodeCodepointToSurrogates(t_event->key.press.char_code, t_unichars[0], t_unichars[1]))
-                t_length = 2;
+			if (t_event->key.press.state == kMCEventKeyStateDown || t_event->key.press.state == kMCEventKeyStatePressed)
+				t_target -> kdown(*t_char, t_event -> key . press . key_code);
 
-			// Now the string is created with the appropriate unicode-capable function
-			MCAutoStringRef t_buffer;
-            MCStringCreateWithChars(t_unichars, t_length, &t_buffer);
-			t_target -> kdown(*t_buffer, t_event -> key . press . key_code);
-			t_target -> kup(*t_buffer, t_event -> key . press . key_code);
+			if (t_event->key.press.state == kMCEventKeyStateUp || t_event->key.press.state == kMCEventKeyStatePressed)
+				t_target -> kup(*t_char, t_event -> key . press . key_code);
 		}
 		break;
 
@@ -555,7 +561,10 @@ static void MCEventQueueDispatchEvent(MCEvent *p_event)
 	{
 #ifdef _MOBILE
 		MCStackHandle t_stack(t_event->touch.stack);
-		handle_touch(t_stack, t_event->touch.phase, t_event->touch.id, t_event->touch.taps, t_event->touch.x, t_event->touch.y);
+        if (t_stack)
+        {
+            handle_touch(t_stack, t_event->touch.phase, t_event->touch.id, t_event->touch.taps, t_event->touch.x, t_event->touch.y);
+        }
 #else
         MCUnreachable();
 #endif
@@ -692,10 +701,10 @@ static void MCEventQueueDestroyEvent(MCEvent *p_event)
     {
         MCStackHandle(MCEventQueueGetEventStack(p_event)).ExternalRelease();
     }
-#ifdef _MOBILE
     else if (p_event -> type == kMCEventTypeCustom)
+    {
         p_event -> custom . event -> Destroy();
-#endif
+    }
     
     MCMemoryDelete(p_event);
 }
@@ -940,6 +949,7 @@ bool MCEventQueuePostNotify(MCEventQueueNotifyCallback p_callback, void *p_state
 //////////
 
 // IM-2014-02-14: [[ HiDPI ]] Post backing scale changes with window reshape message
+MC_DLLEXPORT_DEF
 bool MCEventQueuePostWindowReshape(MCStack *p_stack, MCGFloat p_backing_scale)
 {
 	// We look through the current event queue, looking for the last window
@@ -948,11 +958,10 @@ bool MCEventQueuePostWindowReshape(MCStack *p_stack, MCGFloat p_backing_scale)
 	t_event = nil;
 	for(MCEvent *t_new_event = s_first_event; t_new_event != nil; t_new_event = t_new_event -> next)
     {
-        MCStackHandle t_stack = t_new_event->window.stack;
-        if (t_stack.IsValid())
+        if (t_new_event -> type == kMCEventTypeWindowReshape)
         {
-            if (t_new_event -> type == kMCEventTypeWindowReshape
-                && t_stack == p_stack)
+            MCStackHandle t_stack = t_new_event->window.stack;
+            if (t_stack.IsValid() && t_stack == p_stack)
             {
                 t_event = t_new_event;
             }
@@ -1084,7 +1093,7 @@ bool MCEventQueuePostKeyFocus(MCStack *p_stack, bool p_owner)
 }
 
 MC_DLLEXPORT_DEF
-bool MCEventQueuePostKeyPress(MCStack *p_stack, uint32_t p_modifiers, uint32_t p_char_code, uint32_t p_key_code)
+bool MCEventQueuePostKeyPress(MCStack *p_stack, uint32_t p_modifiers, uint32_t p_char_code, uint32_t p_key_code, MCEventKeyState p_key_state)
 {
 	MCEvent *t_event;
 	if (!MCEventQueuePost(kMCEventTypeKeyPress, t_event))
@@ -1094,6 +1103,7 @@ bool MCEventQueuePostKeyPress(MCStack *p_stack, uint32_t p_modifiers, uint32_t p
 	t_event -> key . press . modifiers = p_modifiers;
 	t_event -> key . press . char_code = p_char_code;
 	t_event -> key . press . key_code = p_key_code;
+	t_event -> key . press . state = p_key_state;
 
 	return true;
 }
@@ -1209,9 +1219,20 @@ struct MCTouch
 };
 
 static MCTouch *s_touches = nil;
+static bool s_touches_for_widget = false;
 
 static void handle_touch(MCStack *p_stack, MCEventTouchPhase p_phase, uint32_t p_id, uint32_t p_taps, int32_t x, int32_t y)
 {
+    /* Touch messages might flow to a widget, or to a control.
+     *
+     * If a widget handles the first touch in a sequence, then the sequence is
+     * considered grabbed by the widget event manager and should receive all
+     * subsequent touch events in the sequence.
+     *
+     * If a widget does not handle the first touch in a sequence, then the
+     * sequence is considered not grabbed by the widget event manager and no
+     * touch events should flow into the widget event manager. */
+
 	MCTouch *t_previous_touch;
 	t_previous_touch = nil;
 	
@@ -1224,68 +1245,111 @@ static void handle_touch(MCStack *p_stack, MCEventTouchPhase p_phase, uint32_t p
 	// IM-2013-09-30: [[ FullscreenMode ]] Translate touch location to stack coords
 	MCPoint t_touch_loc;
 	t_touch_loc = p_stack->view_viewtostackloc(MCPointMake(x, y));
-	
-	if (p_phase != kMCEventTouchPhaseBegan)
-	{
-		for(t_touch = s_touches; t_touch != nil; t_previous_touch = t_touch, t_touch = t_touch -> next)
-			if (t_touch -> id == p_id)
-				break;
-		
-		if (t_touch != nil)
-		{
-			t_target = t_touch -> target;
-				
-			// MW-2011-09-05: [[ Bug 9683 ]] Make sure we remove (and delete the touch) here if
-			//   it is 'end' or 'cancelled' so that a cleartouches inside an invoked handler
-			//   doesn't cause a crash.			
-			if (p_phase == kMCEventTouchPhaseEnded || p_phase == kMCEventTouchPhaseCancelled)
-			{
-				if (t_previous_touch == nil)
-					s_touches = t_touch -> next;
-				else
-					t_previous_touch -> next = t_touch -> next;
-				
-				delete t_touch;
-			}
-		}
-	}
-	else
-	{
-		t_touch = new (nothrow) MCTouch;
-		t_touch -> next = s_touches;
-		t_touch -> id = p_id;
-		
-		t_target = p_stack -> getcurcard() -> hittest(t_touch_loc.x, t_touch_loc.y);
-		t_touch -> target = t_target -> GetHandle();
-		
-		s_touches = t_touch;
-	}
 
-	if (t_target != nil)
-	{
-        // Touches on widgets are handled differently
-        if (t_target->gettype() == CT_WIDGET)
+    /* If true, then the event should be passed to the widget event manager
+     * first. If the touches are already grabbed by a widget then the event
+     * must be passed to the widget event manager. */
+    bool t_widget_first = s_touches_for_widget;
+
+    if (p_phase != kMCEventTouchPhaseBegan)
+    {
+        for(t_touch = s_touches; t_touch != nil; t_previous_touch = t_touch, t_touch = t_touch -> next)
+            if (t_touch -> id == p_id)
+                break;
+        
+        /* If there is a touch, fetch the target and delete the touch record if it
+         * is ending or cancelling a touch. */
+        if (t_touch != nil)
         {
-            MCwidgeteventmanager->event_touch(MCObjectCast<MCWidget>(t_target),
-                                              p_id, p_phase, t_touch_loc.x, t_touch_loc.y);
+			if ((t_touch -> target).IsValid())
+			{
+				t_target = t_touch -> target;
+			}
+			
+            // MW-2011-09-05: [[ Bug 9683 ]] Make sure we remove (and delete the touch) here if
+            //   it is 'end' or 'cancelled' so that a cleartouches inside an invoked handler
+            //   doesn't cause a crash.			
+            if (p_phase == kMCEventTouchPhaseEnded ||
+				p_phase == kMCEventTouchPhaseCancelled ||
+				!(t_touch -> target).IsValid())
+            {
+                if (t_previous_touch == nil)
+                    s_touches = t_touch -> next;
+                else
+                    t_previous_touch -> next = t_touch -> next;
+                
+                delete t_touch;
+            }
+        }
+    }
+    else
+    {
+        t_touch = new (nothrow) MCTouch;
+        t_touch -> next = s_touches;
+        t_touch -> id = p_id;
+
+        /* If the touch sequence isn't for widgets, then we must find a control
+         * to send the event to. In this case, if this is the first touch in 
+         * a sequence *and* the target is a widget, we must allow the widget
+         * event manager to have a look at it. */
+        if (!s_touches_for_widget)
+        {
+            t_target = p_stack -> getcurcard() -> hittest(t_touch_loc.x, t_touch_loc.y);
+            if (t_target != nullptr)
+            {
+                if (t_touch->next == nullptr &&
+                    t_target->gettype() == CT_WIDGET)
+                {
+                    t_widget_first = true;
+                }
+            
+                t_touch -> target = t_target -> GetHandle();
+            }
         }
         else
         {
-            switch(p_phase)
+            t_target = s_touches -> target;
+            t_touch -> target = t_target -> GetHandle();
+        }
+        
+        s_touches = t_touch;
+    }
+    
+	if (t_target != nil)
+	{
+        /* If the touch must be passed to the widget event manager then do that
+         * first. */
+        if (t_widget_first)
+        {
+            /* If the widget handled the touch, or a widget has grabbed all
+             * touches in a sequence (s_touches_for_widget == true), then
+             * make sure all future touches are handled by the widget em and
+             * don't fall through to the engine. */
+            if (MCwidgeteventmanager->event_touch(MCObjectCast<MCWidget>(t_target),
+                                                  p_id, p_phase, t_touch_loc.x, t_touch_loc.y) ||
+                s_touches_for_widget)
             {
-                case kMCEventTouchPhaseBegan:
-                    t_target -> message_with_args(MCM_touch_start, p_id);
-                    break;
-                case kMCEventTouchPhaseMoved:
-                    t_target -> message_with_args(MCM_touch_move, p_id, t_touch_loc.x, t_touch_loc.y);
-                    break;
-                case kMCEventTouchPhaseEnded:
-                    t_target -> message_with_args(MCM_touch_end, p_id);
-                    break;
-                case kMCEventTouchPhaseCancelled:
-                    t_target -> message_with_args(MCM_touch_release, p_id);
-                    break;
+                /* If this was touch event caused the sequence to end, then
+                 * make sure future touch events reconsider the target. */
+                s_touches_for_widget = s_touches != nullptr;
+                return;
             }
+        }
+        
+        switch(p_phase)
+        {
+            case kMCEventTouchPhaseBegan:
+                t_target -> message_with_args(MCM_touch_start, p_id);
+                break;
+            case kMCEventTouchPhaseMoved:
+                t_target -> message_with_args(MCM_touch_move, p_id, t_touch_loc.x, t_touch_loc.y);
+                break;
+            case kMCEventTouchPhaseEnded:
+                t_target -> message_with_args(MCM_touch_end, p_id);
+                break;
+            case kMCEventTouchPhaseCancelled:
+                t_target -> message_with_args(MCM_touch_release, p_id);
+                break;
         }
 	}
 }

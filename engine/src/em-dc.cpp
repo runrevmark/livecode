@@ -19,6 +19,7 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "prefix.h"
 
 #include "em-dc.h"
+#include "em-javascript.h"
 #include "em-view.h"
 #include "em-async.h"
 #include "em-event.h"
@@ -30,6 +31,50 @@ along with LiveCode.  If not see <http://www.gnu.org/licenses/>.  */
 #include "redraw.h"
 #include "dispatch.h"
 #include "globals.h"
+#include "graphics_util.h"
+
+#include <emscripten.h>
+
+/* ================================================================
+ * Helper Functions
+ * ================================================================ */
+
+MCRectangle MCEmscriptenGetWindowRect(uint32_t p_window_id)
+{
+	uint32_t t_left, t_top, t_right, t_bottom;
+	MCEmscriptenGetWindowRect(p_window_id, &t_left, &t_top, &t_right, &t_bottom);
+	
+	return MCRectangleMake(t_left, t_top, t_right - t_left, t_bottom - t_top);
+}
+
+void MCEmscriptenSetWindowRect(uint32_t p_window_id, const MCRectangle &p_rect)
+{
+	MCEmscriptenSetWindowRect(p_window_id, p_rect.x, p_rect.y, p_rect.x + p_rect.width, p_rect.y + p_rect.height);
+}
+
+MCRectangle MCEmscriptenGetDisplayRect()
+{
+	uint32_t t_left, t_top, t_right, t_bottom;
+	MCEmscriptenGetDisplayRect(&t_left, &t_top, &t_right, &t_bottom);
+	
+	return MCRectangleMake(t_left, t_top, t_right - t_left, t_bottom - t_top);
+}
+
+/* ================================================================
+ * Initialization / Finalization
+ * ================================================================ */
+
+extern "C" bool MCEmscriptenDCInitializeJS();
+bool MCEmscriptenDCInitialize()
+{
+	return MCEmscriptenDCInitializeJS();
+}
+
+extern "C" void MCEmscriptenDCFinalizeJS();
+void MCEmscriptenDCFinalize()
+{
+	MCEmscriptenDCFinalizeJS();
+}
 
 /* ================================================================
  * Construction/Destruction
@@ -42,13 +87,13 @@ MCCreateScreenDC()
 }
 
 MC_DLLEXPORT_DEF MCStack *
-MCEmscriptenGetCurrentStack()
+MCEmscriptenGetStackForWindow(Window p_window)
 {
 	if (MCnoui) return nil;
-
-	MCScreenDC *t_dc = static_cast<MCScreenDC *>(MCscreen);
-
-	return t_dc->GetCurrentStack();
+	
+	MCStack *t_stack = MCdispatcher->findstackd(p_window);
+	
+	return t_stack;
 }
 
 MC_DLLEXPORT_DEF
@@ -57,8 +102,31 @@ bool MCEmscriptenHandleMousePress(MCStack *p_stack, uint32_t p_time, uint32_t p_
 	if (MCnoui) return false;
 	
 	MCScreenDC *t_dc = static_cast<MCScreenDC *>(MCscreen);
+	t_dc->update_mouse_press_state(p_state, p_button);
 	
-	t_dc->handle_mouse_press(p_stack, p_time, p_modifiers, p_state, p_button);
+	MCEventQueuePostMousePress(p_stack, p_time, p_modifiers, p_state, p_button);
+	
+	return true;
+}
+
+static inline MCPoint MCEmscriptenWindowToGlobalLoc(MCStack *p_stack, const MCPoint &p_loc)
+{
+	MCRectangle t_window_rect = p_stack->view_getrect();
+	return MCPointOffset(p_loc, t_window_rect.x, t_window_rect.y);
+}
+
+MC_DLLEXPORT_DEF
+bool MCEmscriptenHandleMousePosition(MCStack *p_stack, uint32_t p_time, uint32_t p_modifiers, int32_t p_x, int32_t p_y)
+{
+	if (MCnoui) return false;
+	
+	MCScreenDC *t_dc = static_cast<MCScreenDC *>(MCscreen);
+	
+	MCPoint t_position = MCPointMake(p_x, p_y);
+	if (p_stack)
+		t_position = MCEmscriptenWindowToGlobalLoc(p_stack, t_position);
+	if (t_dc->update_mouse_position(t_position))
+		MCEventQueuePostMousePosition(p_stack, p_time, p_modifiers, p_x, p_y);
 	
 	return true;
 }
@@ -66,6 +134,7 @@ bool MCEmscriptenHandleMousePress(MCStack *p_stack, uint32_t p_time, uint32_t p_
 MCScreenDC::MCScreenDC()
 	: m_main_window(nil), m_mouse_button_state(0)
 {
+	m_mouse_position = MCPointMake(-1,-1);
 }
 
 MCScreenDC::~MCScreenDC()
@@ -76,18 +145,22 @@ Boolean
 MCScreenDC::open()
 {
 	return
+		MCEmscriptenJSInitialize() &&
 		MCEmscriptenEventInitialize() &&
 		MCEmscriptenViewInitialize() &&
-        MCEmscriptenLibUrlInitialize();
+        MCEmscriptenLibUrlInitialize() &&
+        MCEmscriptenDCInitialize();
 }
 
 
 Boolean
 MCScreenDC::close(Boolean force)
 {
+	MCEmscriptenDCFinalize();
 	MCEmscriptenViewFinalize();
 	MCEmscriptenEventFinalize();
     MCEmscriptenLibUrlFinalize();
+    MCEmscriptenJSFinalize();
 
 	return true;
 }
@@ -100,59 +173,69 @@ void
 MCScreenDC::openwindow(Window p_window,
                        Boolean override)
 {
-	/* FIXME Implement multiple windows */
+	uint32_t t_window = reinterpret_cast<uint32_t>(p_window);
+	MCLog("set window visible");
+	MCEmscriptenSetWindowVisible(t_window, true);
 
-	if (nil != m_main_window)
-	{
-		if (m_main_window == p_window) {
-			return;
-		}
-		else
-		{
-			MCEmscriptenNotImplemented();
-		}
-	}
-
-	m_main_window = p_window;
-
+	MCLog("find stack");
 	MCStack *t_stack = MCdispatcher->findstackd(p_window);
 
 	/* Enable drawing */
+	MCLog("activate tilecache");
 	t_stack->view_activatetilecache();
 
 	t_stack->setextendedstate(false, ECS_DONTDRAW);
 
-	/* Set mouse & keyboard focus */
-	UpdateFocus();
-
 	/* Set up view to match window, as far as possible */
 	/* FIXME Implement HiDPI support */
 
-	MCEmscriptenViewSetBounds(t_stack->view_getrect());
+	MCEmscriptenSetWindowRect(t_window, t_stack->view_getrect());
 
 	t_stack->view_configure(true);
-	t_stack->view_dirty_all();
+	t_stack->dirtyall();
 }
 
 void
 MCScreenDC::closewindow(Window p_window)
 {
-	/* FIXME Implement multiple windows */
-
 	MCAssert(p_window);
 
-	if (p_window != m_main_window)
-	{
-		return;
-	}
-
-	m_main_window = nil;
+	uint32_t t_window = reinterpret_cast<uint32_t>(p_window);
+	MCEmscriptenSetWindowVisible(t_window, false);
 }
 
 void
 MCScreenDC::destroywindow(Window & x_window)
 {
+	uint32_t t_window = reinterpret_cast<uint32_t>(x_window);
+	MCEmscriptenDestroyWindow(t_window);
+	
 	x_window = nil;
+}
+
+void
+MCScreenDC::raisewindow(Window p_window)
+{
+	uint32_t t_window = reinterpret_cast<uint32_t>(p_window);
+	MCEmscriptenRaiseWindow(t_window);
+}
+
+uintptr_t
+MCScreenDC::dtouint(Drawable p_window)
+{
+	return reinterpret_cast<uint32_t>(p_window);
+}
+
+Boolean
+MCScreenDC::uinttowindow(uintptr_t p_uint, Window &r_window)
+{
+	r_window = reinterpret_cast<Window>(p_uint);
+	return True;
+}
+
+void *MCScreenDC::GetNativeWindowHandle(Window p_window)
+{
+    return (void*)dtouint(p_window);
 }
 
 bool
@@ -161,25 +244,27 @@ MCScreenDC::platform_getwindowgeometry(Window p_window,
 {
 	/* FIXME Implement HiDPI support */
 
-	r_rect = MCEmscriptenViewGetBounds();
+	uint32_t t_window = reinterpret_cast<uint32_t>(p_window);
+	r_rect = MCEmscriptenGetWindowRect(t_window);
 	return true;
 }
 
-void
-MCScreenDC::UpdateFocus()
+/* ================================================================
+ * Display management
+ * ================================================================ */
+
+bool MCScreenDC::platform_getdisplays(bool p_effective, MCDisplay *&r_displays, uint32_t &r_count)
 {
-	MCAssert(nil != m_main_window);
-
-	MCStack *t_stack = GetCurrentStack();
-
-	MCEventQueuePostMouseFocus(t_stack, 0, true);
-	MCEventQueuePostKeyFocus(t_stack, true);
-}
-
-MCStack *
-MCScreenDC::GetCurrentStack()
-{
-	return MCdispatcher->findstackd(m_main_window);
+	MCDisplay *t_display = nil;
+	if (!MCMemoryNew(t_display))
+		return false;
+	
+	t_display->viewport = t_display->workarea = MCEmscriptenGetDisplayRect();
+	t_display->pixel_scale = emscripten_get_device_pixel_ratio();
+	
+	r_displays = t_display;
+	r_count = 1;
+	return true;
 }
 
 /* ================================================================
@@ -362,7 +447,7 @@ MCScreenDC::popupaskdialog(uint32_t p_type, MCStringRef p_title, MCStringRef p_m
 
 
 void
-MCScreenDC::handle_mouse_press(MCStack *p_stack, uint32_t p_time, uint32_t p_modifiers, MCMousePressState p_state, int32_t p_button)
+MCScreenDC::update_mouse_press_state(MCMousePressState p_state, int32_t p_button)
 {
 	// track mouse button pressed state
 	/* NOTE - assumes there are no more than 32 mouse buttons */
@@ -373,8 +458,17 @@ MCScreenDC::handle_mouse_press(MCStack *p_stack, uint32_t p_time, uint32_t p_mod
 		else if (p_state == kMCMousePressStateUp)
 			m_mouse_button_state &= ~(1UL << p_button);
 	}
+}
+
+bool
+MCScreenDC::update_mouse_position(const MCPoint &p_position)
+{
+	if (MCPointIsEqual(m_mouse_position, p_position))
+		return false;
 	
-	MCEventQueuePostMousePress(p_stack, p_time, p_modifiers, p_state, p_button);
+	m_mouse_position = p_position;
+	
+	return true;
 }
 
 Boolean
@@ -392,6 +486,6 @@ MCScreenDC::platform_querymouse(int16_t& r_x, int16_t& r_y)
 {
     // There is no asynchronous mouse position in Emscripten; just whatever the
     // browser has told us about.
-    r_x = MCmousex;
-    r_y = MCmousey;
+    r_x = m_mouse_position.x;
+    r_y = m_mouse_position.y;
 }

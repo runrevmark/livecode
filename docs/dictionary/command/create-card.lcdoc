@@ -22,7 +22,7 @@ Example:
 create card "Main"
 
 Example:
-create card (field "ouput")
+create card (field "output")
 
 Example:
 create card "Main" in stack "Stack"
@@ -42,8 +42,8 @@ The <create card> <command> places the <ID> <property> of the newly
 created <card> in the <it> <variable>.
 
 Description:
-Use the <create card> <command> to add a new <card> to the <current
-stack>. 
+Use the <create card> <command> to add a new <card> to the 
+<current stack>. 
 
 The new card is placed after the current card. If <stackName>
 is specified, it will be placed in <stackName>, otherwise 
@@ -59,4 +59,3 @@ command (glossary), card (keyword), templateCard (keyword), it (keyword),
 newCard (message), stack (object), ID (property), defaultStack (property)
 
 Tags: objects
-

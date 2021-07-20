@@ -127,8 +127,8 @@ public:
     void appendglobalnames(MCStringRef& r_string, bool first);
 	void newglobal(MCNameRef name);
 	
-	Parse_stat parse(MCObject *, MCStringRef);
-	void compile(MCSyntaxFactoryRef ctxt);
+    Parse_stat parse(MCObject *, MCDataRef);
+    Parse_stat parse(MCObject *, MCStringRef);
 	
 	Exec_stat findhandler(Handler_type, MCNameRef name, MCHandler *&);
 	bool hashandler(Handler_type type, MCNameRef name);

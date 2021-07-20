@@ -21,7 +21,7 @@
 			[
 				# Workaround x86 linux builder identifying (via uname -m) as x86_64:
 				#   Use target arch executables if building on linux for linux
-				'host_os == "linux" and OS == "linux"',
+				'host_os == "linux" and OS == "linux" and cross_compile == 0',
 				{
 					'variables':
 					{
@@ -32,7 +32,7 @@
 				},
 			],
 			[
-				'host_os == "linux" and OS != "linux"',
+				'host_os == "linux" and (OS != "linux" or cross_compile != 0)',
 				{
 					'variables':
 					{
@@ -61,13 +61,21 @@
 		{
 			'target_name': 'libicu',
 			'type': 'none',
-
-			'toolsets': ['host','target'],
-
+			
+			'toolsets': ['host', 'target'],
+			
 			'dependencies':
 			[
 				'fetch.gyp:fetch',
+				'libicu_include',
+				'libicu_link',
 			],
+		},
+		{
+			'target_name': 'libicu_include',
+			'type': 'none',
+
+			'toolsets': ['host','target'],
 
 			# Needs to be all dependents as used by the HarfBuzz public headers
 			'all_dependent_settings':
@@ -100,7 +108,13 @@
 					],
 				],
 			},
-			
+		},
+		{
+			'target_name': 'libicu_link',
+			'type': 'none',
+
+			'toolsets': ['host','target'],
+
 			'link_settings':
 			{	
 				'target_conditions':
@@ -177,19 +191,28 @@
 						'toolset_os == "android"',
 						{
 							# Gyp doesn't seem to handle non-absolute paths here properly...
-							'library_dirs':
+							'conditions':
 							[
-								'lib/android/<(target_arch)',
-							],
-							
-							'libraries':
-							[
-								'-licui18n',
-								'-licuio',
-								'-licuuc',
-								'-licudata',
-								'-lstdc++',
-								'-lm',
+								[
+									'OS == "android"',
+									{
+										'library_dirs':
+										[
+											'lib/android/<(target_arch)/<(android_subplatform)',
+										],
+										
+										'libraries':
+										[
+											'-licui18n',
+											'-licuio',
+											'-licuuc',
+											'-licudata',
+											'-lstdc++',
+											'-lm',
+											'-latomic',
+										],
+									},
+								],
 							],
 						},
 					],

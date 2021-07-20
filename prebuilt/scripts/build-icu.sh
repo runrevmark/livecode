@@ -17,10 +17,23 @@ ICU_TGZ="icu-${ICU_VERSION}.tar.gz"
 ICU_SRC="icu-${ICU_VERSION}"
 cd "${BUILDDIR}"
 
+# Needed for cross-compiles
+case $(uname) in
+	Linux*)
+		HOST_ICU_DIR="${BUILDDIR}/icu-${ICU_VERSION}-linux-${CROSS_HOST}"
+		;;
+	Darwin*)
+		HOST_ICU_DIR="${BUILDDIR}/icu-${ICU_VERSION}-mac-i386"
+		;;
+	CYGWIN*)
+		HOST_ICU_DIR="${BUILDDIR}/icu-${ICU_VERSION}-win32-i386"
+		;;
+esac
+
 if [ ! -d "$ICU_SRC" ] ; then
 	if [ ! -e "$ICU_TGZ" ] ; then
 		echo "Fetching ICU source"
-		fetchUrl "http://download.icu-project.org/files/icu4c/${ICU_VERSION}/icu4c-${ICU_VERSION_ALT}-src.tgz" "${ICU_TGZ}"
+		fetchUrl "https://downloads.sourceforge.net/project/icu/ICU4C/${ICU_VERSION}/icu4c-${ICU_VERSION_ALT}-src.tgz" "${ICU_TGZ}"
 		if [ $? != 0 ] ; then
 			echo "    failed"
 			if [ -e "${ICU_TGZ}" ] ; then 
@@ -42,7 +55,7 @@ function buildICU {
 	local PLATFORM=$1
 	local ARCH=$2
 	local SUBPLATFORM=$3
-	
+
 	# Platform-specific options for ICU
 	case "${PLATFORM}" in
 		mac)
@@ -56,16 +69,19 @@ function buildICU {
 			CONFIG_TYPE="Linux"
 			if [ "${ARCH}" == "x86_64" ] ; then
 				CONFIG_TYPE+=" --with-library-bits=64"
-			elif [ "${ARCH}" == "armv6-hf" ] ; then
-				CONFIG_TYPE+=" --host=arm-linux-gnueabihf --with-cross-build=${HOST_ICU_DIR}"
+			elif [ "${ARCH}" == "armv6hf" ] ; then
+				CONFIG_TYPE+=" --host=arm-rpi-linux-gnueabihf --with-cross-build=${HOST_ICU_DIR}"
+			elif [ "${ARCH}" == "armv7" ] ; then
+				CONFIG_TYPE+=" --host=arm-rpi2-linux-gnueabihf --with-cross-build=${HOST_ICU_DIR}"
 			else
 				CONFIG_TYPE+=" --with-library-bits=32"
 			fi
 			;;
+
 		android)
-			CONFIG_TYPE="Linux --host=arm-linux-androideabi --with-cross-build=${HOST_ICU_DIR} --disable-tools"
-			export ANDROID_CFLAGS="-D__STDC_INT64__ -DU_HAVE_NL_LANGINFO_CODESET=0"
-			export ANDROID_CXXFLAGS="${ANDROID_CFLAGS}"
+			CONFIG_TYPE="Linux --with-cross-build=${HOST_ICU_DIR} --disable-tools"
+			export EXTRA_CFLAGS="-D__STDC_INT64__ -DU_HAVE_NL_LANGINFO_CODESET=0"
+			export EXTRA_CXXFLAGS="${EXTRA_CFLAGS}"
 			;;
 		emscripten)
 			CONFIG_TYPE=
@@ -82,13 +98,13 @@ function buildICU {
 
 	# Utility for displaying platform name
 	if [ ! -z "${SUBPLATFORM}" ] ; then
-		local NAME="${PLATFORM}/${SUBPLATFORM}/${ARCH}"
+		local NAME="${PLATFORM}/${ARCH}/${SUBPLATFORM}"
 		local PLATFORM_NAME=${SUBPLATFORM}
 	else
 		local NAME="${PLATFORM}/${ARCH}"
 		local PLATFORM_NAME=${PLATFORM}
 	fi
-	
+
 	ICU_ARCH_SRC="${ICU_SRC}-${PLATFORM_NAME}-${ARCH}"
 
 	# Copy the source to a target-specific directory
@@ -114,6 +130,11 @@ function buildICU {
 		echo "*DEBUG* calling setCCForArch"
 		setCCForTarget "${PLATFORM}" "${ARCH}" "${SUBPLATFORM}"
 		
+		# We need to pass the target triple for Android builds
+		if [ "${PLATFORM}" == "android" ] ; then
+			CONFIG_TYPE+=" --host=${ANDROID_TRIPLE}"
+		fi
+
 		echo "*DEBUG* calling ICU configure script"
 		# Method for configuration depends on the platform
 		if [ -z "${CONFIG_TYPE}" ] ; then
@@ -130,6 +151,11 @@ function buildICU {
 				;;
 		esac	
 
+		# Make sure U_HAVE_STRTOD_L is 0 on android
+ 		if [ "${PLATFORM}" == "android" ] ; then
+ 			sed -i -e "s/U_HAVE_STRTOD_L=1/U_HAVE_STRTOD_L=0/" icudefs.mk
+ 		fi
+ 		
 		echo "Building ICU for ${NAME}"
 		export VERBOSE=1
 		${EMMAKE} make clean && \

@@ -21,7 +21,8 @@
 #include "libbrowser_cef.h"
 
 #include <include/cef_app.h>
-
+#include <include/cef_parser.h>
+#include <include/wrapper/cef_scoped_temp_dir.h>
 #include <list>
 #include <set>
 
@@ -249,9 +250,7 @@ static const char *s_auth_scheme_strings[] =
 
 bool MCCefAuthSchemeFromCefString(const CefString &p_string, MCCefAuthScheme &r_scheme)
 {
-	const char **t_strings;
-	t_strings = s_auth_scheme_strings;
-	
+
 	for (uint32_t i = 0; s_auth_scheme_strings[i] != nil; i++)
 	{
 		if (p_string == s_auth_scheme_strings[i])
@@ -271,6 +270,8 @@ static bool s_cef_initialised = false;
 static bool s_cefbrowser_initialised = false;
 
 static uint32_t s_instance_count = 0;
+
+static CefScopedTempDir s_temp_cache;
 
 void MCCefBrowserExternalInit(void)
 {
@@ -295,8 +296,14 @@ public:
 		if (MCCefPlatformGetHiDPIEnabled())
 			p_command_line->AppendSwitch(MC_CEF_HIDPI_SWITCH);
 	}
+	
+	virtual void OnBeforeCommandLineProcessing(const CefString &p_process_type, CefRefPtr<CefCommandLine> p_command_line) OVERRIDE
+	{
+		// Enable WebRTC
+		p_command_line->AppendSwitch("enable-media-stream");
+	}
 
-	IMPLEMENT_REFCOUNTING(MCCefBrowserApp)
+	IMPLEMENT_REFCOUNTING(MCCefBrowserApp);
 };
 
 extern "C" int initialise_weak_link_cef(void);
@@ -492,8 +499,13 @@ bool MCCefInitialise(void)
 	CefSettings t_settings;
 	t_settings.multi_threaded_message_loop = MC_CEF_USE_MULTITHREADED_MESSAGELOOP;
 	t_settings.command_line_args_disabled = true;
+	t_settings.windowless_rendering_enabled = true;
 	t_settings.no_sandbox = true;
+#ifdef _DEBUG
+	t_settings.log_severity = LOGSEVERITY_VERBOSE;
+#else
 	t_settings.log_severity = LOGSEVERITY_DISABLE;
+#endif
 	
     bool t_success = true;
 #ifdef TARGET_PLATFORM_LINUX
@@ -503,12 +515,18 @@ bool MCCefInitialise(void)
     if (t_success)
         t_success = __MCCefBuildPath(t_library_path, kCefProcessName, &t_settings.browser_subprocess_path);
 #endif
-    
-    if (t_success)
-        t_success = __MCCefBuildPath(t_library_path, "locales", &t_settings.locales_dir_path);
-    if (t_success)
-        t_success = __MCCefBuildPath(t_library_path, "", &t_settings.resources_dir_path);
+
+	if (t_success)
+		t_success = __MCCefBuildPath(t_library_path, "locales", &t_settings.locales_dir_path);
+	if (t_success)
+		t_success = __MCCefBuildPath(t_library_path, "", &t_settings.resources_dir_path);
+
+	if (t_success)
+		t_success = s_temp_cache.CreateUniqueTempDir();
 	
+	if (t_success)
+		CefString(&t_settings.cache_path).FromString(s_temp_cache.GetPath());
+
 	CefRefPtr<CefApp> t_app = new (nothrow) MCCefBrowserApp();
 	
 	if (t_success)
@@ -568,9 +586,14 @@ void MCCefFinalise(void)
 {
 	if (!s_cef_initialised)
 		return;
+
+	if (s_temp_cache.IsValid())
+	{
+		s_temp_cache.Delete();
+	}
 	
 	CefShutdown();
-	
+
 	s_cef_initialised = false;
 }
 
@@ -676,6 +699,16 @@ public:
 					MCCStringFree(t_tmp);
 			}
 				break;
+				case VTYPE_NULL:
+				case VTYPE_BOOL:
+				case VTYPE_DOUBLE:
+				case VTYPE_STRING:
+				case VTYPE_BINARY:
+				case VTYPE_DICTIONARY:
+				case VTYPE_LIST:
+				case VTYPE_INVALID:
+				/* UNIMPLEMENTED */
+				break;
 		}
 		
 		return t_converted;
@@ -715,19 +748,31 @@ struct MCCefErrorInfo
 
 class MCCefBrowserClient : public CefClient, CefLifeSpanHandler, CefRequestHandler, /* CefDownloadHandler ,*/ CefLoadHandler, CefContextMenuHandler, CefDragHandler
 {
+public:
+	enum PageOrigin
+	{
+		kNone,
+		kSetUrl,
+		kSetSource,
+		kBrowse,
+	};
+
 private:
 	int m_browser_id;
-	
+	int m_popup_browser_id = 0;
+
 	MCCefBrowserBase *m_owner;
 	
 	MCCefMessageResult m_message_result;
 	std::map<int64_t, MCCefErrorInfo> m_load_error_frames;
 	
-	// IM-2014-05-06: [[ Bug 12384 ]] Set of URLs for which callback messages will not be sent
-	std::set<CefString> m_ignore_urls;
+	// Describes where loading url requests came from
+	std::map<CefString, PageOrigin> m_load_url_origins;
 	
 	CefString m_last_request_url;
 	
+	PageOrigin m_displayed_page_origin;
+
 	// Error handling - we need to keep track of url that failed to load in a
 	// frame so we can send the correct url in onLoadEnd()
 	void AddLoadErrorFrame(int64_t p_id, const CefString &p_url, const CefString &p_error_msg, CefLoadHandler::ErrorCode p_error_code)
@@ -786,6 +831,7 @@ public:
 	{
 		m_owner = p_owner;
 		m_browser_id = 0;
+		m_displayed_page_origin = PageOrigin::kNone;
 	}
 	
 	// IM-2014-07-21: [[ Bug 12296 ]] Method to allow owner to notify client of its deletion
@@ -802,25 +848,31 @@ public:
 	virtual CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() OVERRIDE { return this; }
 	virtual CefRefPtr<CefDragHandler> GetDragHandler() OVERRIDE { return this; }
 	
-	void AddIgnoreUrl(const CefString &p_url)
+	void AddLoadingUrl(const CefString &p_url, PageOrigin p_origin)
 	{
-		m_ignore_urls.insert(p_url);
+		m_load_url_origins[p_url] = p_origin;
 	}
 	
-	void RemoveIgnoreUrl(const CefString &p_url)
+	void RemoveLoadingUrl(const CefString &p_url)
 	{
-		m_ignore_urls.erase(p_url);
+		m_load_url_origins.erase(p_url);
 	}
 	
-	// IM-2014-05-06: [[ Bug 12384 ]] Test if callback should be sent for URL
-	bool IgnoreUrl(const CefString &p_url)
+	bool GetLoadingUrlOrigin(const CefString &p_url, PageOrigin &r_origin)
 	{
-		std::set<CefString>::iterator t_iter;
-		t_iter = m_ignore_urls.find(p_url);
-		
-		return t_iter != m_ignore_urls.end();
+		auto t_iter = m_load_url_origins.find(p_url);
+		if (t_iter == m_load_url_origins.end())
+			return false;
+
+		r_origin = t_iter->second;
+		return true;
 	}
-	
+
+	PageOrigin GetDisplayedPageOrigin()
+	{
+		return m_displayed_page_origin;
+	}
+
 	MCCefMessageResult &GetMessageResult()
 	{
 		return m_message_result;
@@ -875,10 +927,7 @@ public:
 			
 			if (t_success)
 				t_success = MCCefStringToUtf8String(t_args->GetString(0), t_handler);
-			
-			uint32_t t_arg_count;
-			t_arg_count = 0;
-			
+
 			MCBrowserListRef t_param_list;
 			t_param_list = nil;
 			
@@ -912,24 +961,12 @@ public:
 			if (m_owner != nil)
 				m_owner->OnCefBrowserCreated(p_browser);
 		}
-		
-		MCCefIncrementInstanceCount();
-	}
-	
-	virtual bool DoClose(CefRefPtr<CefBrowser> p_browser) OVERRIDE
-	{
-		// We handle browser closing here to stop CEF sending WM_CLOSE to the stack window
-		if (p_browser->GetIdentifier() == m_browser_id)
+		else
 		{
-			// Close the browser window
-			if (m_owner != nil)
-				m_owner->PlatformCloseBrowserWindow(p_browser);
-			
-			// return true to prevent default handling
-			return true;
+			m_popup_browser_id = p_browser->GetIdentifier();
 		}
-		
-		return CefLifeSpanHandler::DoClose(p_browser);
+
+		MCCefIncrementInstanceCount();
 	}
 	
 	virtual void OnBeforeClose(CefRefPtr<CefBrowser> p_browser) OVERRIDE
@@ -957,8 +994,12 @@ public:
 		// IM-2014-07-21: [[ Bug 12296 ]] If browser has been closed then exit
 		if (nil == m_owner)
 			return true;
-		
-		return !m_owner->GetAllowNewWindow();
+
+		CefWindowInfo(t_window_info);
+		t_window_info.SetAsWindowless(p_browser->GetHost()->GetWindowHandle());
+		p_window_info = t_window_info;
+		return false;
+
 	}
 	
 	// CefDragHandler interface
@@ -973,19 +1014,40 @@ public:
 	// CefRequestHandler interface
 	
 	// Called on UI thread
-	virtual bool OnBeforeBrowse(CefRefPtr<CefBrowser> p_browser, CefRefPtr<CefFrame> p_frame, CefRefPtr<CefRequest> p_request, bool p_is_redirect) OVERRIDE
+	virtual bool OnBeforeBrowse(CefRefPtr<CefBrowser> p_browser, CefRefPtr<CefFrame> p_frame, CefRefPtr<CefRequest> p_request, bool p_user_gesture, bool p_is_redirect) OVERRIDE
 	{
 		// IM-2014-07-21: [[ Bug 12296 ]] If browser has been closed then exit
 		if (nil == m_owner)
 			return true;
-		
+
+		if (p_browser->GetIdentifier() == m_popup_browser_id)
+		{
+			char * t_url = nullptr;
+			if (MCCefStringToUtf8String(p_request->GetURL(), t_url))
+			{
+				m_owner->GoToURL(t_url);
+			}
+			p_browser->GetHost()->CloseBrowser(true);
+			return false;
+		}
+
 		bool t_cancel;
 		t_cancel = false;
 		
 		CefString t_url;
 		t_url = p_request->GetURL();
 		
-		if (IgnoreUrl(t_url))
+		PageOrigin t_origin = PageOrigin::kNone;
+
+		if (p_user_gesture)
+		{
+			t_origin = PageOrigin::kBrowse;
+			/* UNCHECKED */ AddLoadingUrl(t_url, t_origin);
+		}
+		else
+			/* UNCHECKED */ GetLoadingUrlOrigin(t_url, t_origin);
+
+		if (t_origin == PageOrigin::kSetSource)
 			return false;
 		
 		char *t_url_str;
@@ -1007,7 +1069,10 @@ public:
 		CefString t_url;
 		t_url = p_request->GetURL();
 		
-		if (IgnoreUrl(t_url))
+		PageOrigin t_origin = PageOrigin::kNone;
+		/* UNCHECKED */ GetLoadingUrlOrigin(t_url, t_origin);
+
+		if (t_origin == PageOrigin::kSetSource)
 			return RV_CONTINUE;
 		
 		m_last_request_url = t_url;
@@ -1096,8 +1161,8 @@ public:
 	
 	// CefLoadHandler interface
 	// Methods called on UI thread or render process main thread
-	
-	virtual void OnLoadStart(CefRefPtr<CefBrowser> p_browser, CefRefPtr<CefFrame> p_frame) OVERRIDE
+
+	virtual void OnLoadStart(CefRefPtr<CefBrowser> p_browser, CefRefPtr<CefFrame> p_frame, cef_transition_type_t p_transition_type) OVERRIDE
 	{
 		// IM-2014-07-21: [[ Bug 12296 ]] If browser has been closed then exit
 		if (nil == m_owner)
@@ -1115,22 +1180,23 @@ public:
 		if (!t_is_error)
 			t_url = p_frame->GetURL();
 		
-		if (IgnoreUrl(t_url))
+		bool t_frame;
+		t_frame = !p_frame->IsMain();
+
+		PageOrigin t_origin = PageOrigin::kNone;
+		/* UNCHECKED */ GetLoadingUrlOrigin(t_url, t_origin);
+
+		if (!t_frame && !t_is_error)
+			m_displayed_page_origin = t_origin;
+
+		if (!t_frame && t_origin == PageOrigin::kSetSource)
 			return;
 		
 		char *t_url_str;
 		t_url_str = nil;
 		/* UNCHECKED */ MCCefStringToUtf8String(t_url, t_url_str);
 		
-		bool t_frame;
-		t_frame = !p_frame->IsMain();
-		
-		if (t_is_error)
-		{
-			if (t_error_code == ERR_UNKNOWN_URL_SCHEME)
-				m_owner->OnNavigationRequestUnhandled(t_frame, t_url_str);
-		}
-		else
+		if (!t_is_error)
 		{
 			if (!t_frame)
 				m_owner->OnNavigationBegin(t_frame, t_url_str);
@@ -1157,15 +1223,19 @@ public:
 		if (!t_is_error)
 			t_url = p_frame->GetURL();
 		
-		if (IgnoreUrl(t_url))
+		bool t_frame;
+		t_frame = !p_frame->IsMain();
+
+		PageOrigin t_origin = PageOrigin::kNone;
+		/* UNCHECKED */ GetLoadingUrlOrigin(t_url, t_origin);
+		/* UNCHECKED */ RemoveLoadingUrl(t_url);
+
+		if (!t_frame && t_origin == PageOrigin::kSetSource)
 			return CefLoadHandler::OnLoadEnd(p_browser, p_frame, p_http_status_code);
 		
 		char *t_url_str;
 		t_url_str = nil;
 		/* UNCHECKED */ MCCefStringToUtf8String(t_url, t_url_str);
-		
-		bool t_frame;
-		t_frame = !p_frame->IsMain();
 		
 		if (t_is_error)
 		{
@@ -1198,10 +1268,23 @@ public:
 	
 	virtual void OnLoadError(CefRefPtr<CefBrowser> p_browser, CefRefPtr<CefFrame> p_frame, CefLoadHandler::ErrorCode p_error_code, const CefString &p_error_text, const CefString &p_failed_url) OVERRIDE
 	{
-		// IM-2015-11-16: [[ Bug 16360 ]] Contrary to the CEF API docs, OnLoadEnd is NOT called after OnLoadError when the error code is ERR_ABORTED.
-		//    This occurs when requesting a new url be loaded when in the middle of loading the previous url, or when the url load is otherwise cancelled.
-		if (p_error_code != ERR_ABORTED)
+		if (p_error_code == ERR_UNKNOWN_URL_SCHEME)
+		{
+			bool t_frame;
+			t_frame = !p_frame->IsMain();
+
+			char *t_url_str = nullptr;
+			if (MCCefStringToUtf8String(p_failed_url, t_url_str))
+			{
+				m_owner->OnNavigationRequestUnhandled(t_frame, t_url_str);
+			}
+		}
+		else if (p_error_code != ERR_ABORTED)
+		{
+			// IM-2015-11-16: [[ Bug 16360 ]] Contrary to the CEF API docs, OnLoadEnd is NOT called after OnLoadError when the error code is ERR_ABORTED.
+			//    This occurs when requesting a new url be loaded when in the middle of loading the previous url, or when the url load is otherwise cancelled.
 			AddLoadErrorFrame(p_frame->GetIdentifier(), p_failed_url, p_error_text, p_error_code);
+		}
 	}
 	
 	// ContextMenuHandler interface
@@ -1213,13 +1296,93 @@ public:
 		if (nil == m_owner)
 			return;
 		
-		// clearing the menu model prevents the context menu from opening
-		if (!m_owner->GetEnableContextMenu())
+		extern void MCCefMenuFilterItems(CefRefPtr<CefMenuModel> p_menu);
+
+		if (m_owner->GetEnableContextMenu())
+			MCCefMenuFilterItems(p_model);
+		else
 			p_model->Clear();
 	}
 	
-	IMPLEMENT_REFCOUNTING(MCCefBrowserClient)
+	IMPLEMENT_REFCOUNTING(MCCefBrowserClient);
 };
+
+void MCCefMenuFilterItems(CefRefPtr<CefMenuModel> p_menu)
+{
+	// Remove unwanted items from the default menu,
+	// keeping text editing and autocorrect options
+
+	cef_menu_item_type_t t_prev_type = MENUITEMTYPE_NONE;
+
+	uindex_t t_item_count = p_menu->GetCount();
+	uindex_t t_index = 0;
+	while (t_index < t_item_count)
+	{
+		bool t_remove = false;
+		cef_menu_item_type_t t_type = p_menu->GetTypeAt(t_index);
+		if (t_type == MENUITEMTYPE_SUBMENU)
+		{
+			CefRefPtr<CefMenuModel> t_submenu;
+			t_submenu = p_menu->GetSubMenuAt(t_index);
+			MCCefMenuFilterItems(t_submenu);
+			// remove filtered submenu if empty
+			t_remove = t_submenu->GetCount() == 0;
+		}
+		else if (t_type == MENUITEMTYPE_SEPARATOR)
+		{
+			// remove separator if last item in menu was a separator
+			if (t_prev_type == MENUITEMTYPE_SEPARATOR)
+				t_remove = true;
+		}
+		else
+		{
+			int t_command_id;
+			t_command_id = p_menu->GetCommandIdAt(t_index);
+			switch (t_command_id)
+			{
+			case MENU_ID_UNDO:
+			case MENU_ID_REDO:
+			case MENU_ID_CUT:
+			case MENU_ID_COPY:
+			case MENU_ID_PASTE:
+			case MENU_ID_DELETE:
+			case MENU_ID_SELECT_ALL:
+				break;
+
+			case MENU_ID_SPELLCHECK_SUGGESTION_0:
+			case MENU_ID_SPELLCHECK_SUGGESTION_1:
+			case MENU_ID_SPELLCHECK_SUGGESTION_2:
+			case MENU_ID_SPELLCHECK_SUGGESTION_3:
+			case MENU_ID_SPELLCHECK_SUGGESTION_4:
+			case MENU_ID_NO_SPELLING_SUGGESTIONS:
+			case MENU_ID_ADD_TO_DICTIONARY:
+				break;
+
+			default:
+				t_remove = true;
+				break;
+			}
+		}
+
+		if (t_remove)
+		{
+			p_menu->RemoveAt(t_index);
+			t_item_count--;
+		}
+		else
+		{
+			// remember the type of this item
+			t_prev_type = t_type;
+			t_index++;
+		}
+	}
+
+	// if the last item is a separator then remove it
+	if (t_prev_type == MENUITEMTYPE_SEPARATOR)
+	{
+		p_menu->RemoveAt(t_item_count - 1);
+	}
+}
 
 bool MCCefBrowserBase::Initialize()
 {
@@ -1231,10 +1394,13 @@ bool MCCefBrowserBase::Initialize()
 	
 	// IM-2014-05-06: [[ Bug 12384 ]] Browser must be created with non-empty URL or setting
 	// htmltext will not work
-	CefString t_url(CEF_DUMMY_URL);
+	
+	// Using a blank data url here forces the CEF render process to load,
+	// allowing subsequent calls to MCCefBrowserBase::LoadHTMLText to succeed
+	CefString t_url("data:text/html;charset=utf-8,");
 	
 	// IM-2014-05-06: [[ Bug 12384 ]] Prevent callback messages for dummy URL
-	m_client->AddIgnoreUrl(t_url);
+	m_client->AddLoadingUrl(t_url, MCCefBrowserClient::PageOrigin::kSetSource);
 	PlatformConfigureWindow(t_window_info);
 
 	if (MC_CEF_USE_MULTITHREADED_MESSAGELOOP)
@@ -1255,12 +1421,15 @@ bool MCCefBrowserBase::Initialize()
 void MCCefBrowserBase::Finalize()
 {
 	if (m_browser != nil)
-		m_browser->GetHost()->CloseBrowser(false);
+		m_browser->GetHost()->CloseBrowser(true);
 	
 	// IM-2014-07-21: [[ Bug 12296 ]] Notify client of browser being closed
 	if (m_client)
 		m_client->OnOwnerClosed();
-	
+    
+    if (m_javascript_handlers != nil)
+        MCCStringFree(m_javascript_handlers);
+    
 	m_browser = nil;
 	m_client = nil;
 }
@@ -1274,7 +1443,7 @@ MCCefBrowserBase::MCCefBrowserBase()
 	m_instance_id = 0;
 	
 	m_send_advanced_messages = false;
-	m_show_context_menu = false;
+	m_show_context_menu = true;
 	m_allow_new_window = false;
 	
 	m_javascript_handlers = nil;
@@ -1534,20 +1703,30 @@ char *MCCefBrowserBase::GetSource(void)
 	return t_src_str;
 }
 
-void MCCefBrowserBase::SetSource(const char *p_source)
+bool MCCefBrowserBase::LoadHTMLText(const char *p_htmltext, const char *p_base_url)
 {
 	// IM-2014-06-25: [[ Bug 12701 ]] CEF will crash if given an empty source string,
 	// so replace here with the source of an empty page :)
-	if (p_source == nil || MCCStringLength(p_source) == 0)
-		p_source = "<html><head></head><body></body></html>";
+	if (p_htmltext == nil || MCCStringLength(p_htmltext) == 0)
+		p_htmltext = "<html><head></head><body></body></html>";
 	
-	CefString t_source;
-	/* UNCHECKED */ MCCefStringFromUtf8String(p_source, t_source);
+	CefString t_htmltext;
+	if (!MCCefStringFromUtf8String(p_htmltext, t_htmltext))
+		return false;
 	
-	// LoadString requires a valid url
-	CefString t_url(CEF_DUMMY_URL);
+	CefString t_base_url;
+	if (!MCCefStringFromUtf8String(p_base_url, t_base_url))
+		return false;
 	
-	m_browser->GetMainFrame()->LoadString(t_source, t_url);
+	m_client->AddLoadingUrl(t_base_url, MCCefBrowserClient::PageOrigin::kSetSource);
+	m_browser->GetMainFrame()->LoadString(t_htmltext, t_base_url);
+	
+	return true;
+}
+
+void MCCefBrowserBase::SetSource(const char *p_source)
+{
+	/* UNCHECKED */ LoadHTMLText(p_source, CEF_DUMMY_URL);
 }
 
 #define MCCEF_VERTICAL_OVERFLOW_PROPERTY "document.body.style.overflowY"
@@ -1646,6 +1825,15 @@ void MCCefBrowserBase::SetUserAgent(const char *p_user_agent)
 
 char *MCCefBrowserBase::GetURL(void)
 {
+	if (m_client->GetDisplayedPageOrigin() == MCCefBrowserClient::PageOrigin::kSetSource)
+	{
+		// return empty string if page was loaded from source
+		char *t_url_string;
+		t_url_string = nil;
+		/* UNCHECKED */ MCCStringClone("", t_url_string);
+		return t_url_string;
+	}
+
 	CefString t_url;
 	t_url = m_browser->GetMainFrame()->GetURL();
 	
@@ -1663,6 +1851,39 @@ bool MCCefBrowserBase::GetImage(void*& r_data, int& r_length)
 	return false;
 }
 
+bool MCCefBrowserBase::GetIsSecure(void)
+{
+	CefRefPtr<CefBrowser> t_browser = GetCefBrowser();
+	if (t_browser == nil)
+		return false;
+
+	CefRefPtr<CefBrowserHost> t_host = t_browser->GetHost();
+	if (t_host == nil)
+		return false;
+
+	CefRefPtr<CefNavigationEntry> t_navigation_entry = t_host->GetVisibleNavigationEntry();
+	if (t_navigation_entry == nil)
+		return false;
+
+	CefRefPtr<CefSSLStatus> t_ssl_status = t_navigation_entry->GetSSLStatus();
+	if (t_ssl_status == nil)
+		return false;
+
+	return t_ssl_status->IsSecureConnection();
+}
+
+bool MCCefBrowserBase::GetAllowUserInteraction(void)
+{
+	bool t_value;
+	/* UNCHECKED */ PlatformGetAllowUserInteraction(t_value);
+	return t_value;
+}
+
+void MCCefBrowserBase::SetAllowUserInteraction(bool p_value)
+{
+	/* UNCHECKED */ PlatformSetAllowUserInteraction(p_value);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Browser Actions
@@ -1671,10 +1892,7 @@ bool MCCefBrowserBase::EvaluateJavaScript(const char *p_script, char *&r_result)
 {
 	bool t_success;
 	t_success = true;
-	
-	const MCCefMessageResult *t_result;
-	t_result = nil;
-	
+
 	CefString t_script;
 	t_success = MCCefStringFromUtf8String(p_script, t_script);
 	
@@ -1712,7 +1930,21 @@ bool MCCefBrowserBase::GoToURL(const char *p_url)
 	if (!MCCefStringFromUtf8String(p_url, t_url))
 		return false;
 	
+	m_client->AddLoadingUrl(t_url, MCCefBrowserClient::PageOrigin::kSetUrl);
+
 	t_frame->LoadURL(t_url);
+	return true;
+}
+
+bool MCCefBrowserBase::StopLoading(void)
+{
+	m_browser->StopLoad();
+	return true;
+}
+
+bool MCCefBrowserBase::Reload(void)
+{
+	m_browser->Reload();
 	return true;
 }
 
@@ -1843,7 +2075,15 @@ bool MCCefBrowserBase::GetBoolProperty(MCBrowserProperty p_property, bool &r_val
 		case kMCBrowserHorizontalScrollbarEnabled:
 			r_value = GetHorizontalScrollbarEnabled();
 			return true;
-			
+
+		case kMCBrowserIsSecure:
+			r_value = GetIsSecure();
+			return true;
+
+		case kMCBrowserAllowUserInteraction:
+			r_value = GetAllowUserInteraction();
+			return true;
+
 		default:
 			break;
 	}
@@ -1870,7 +2110,11 @@ bool MCCefBrowserBase::SetBoolProperty(MCBrowserProperty p_property, bool p_valu
 		case kMCBrowserHorizontalScrollbarEnabled:
 			SetHorizontalScrollbarEnabled(p_value);
 			return true;
-			
+
+		case kMCBrowserAllowUserInteraction:
+			SetAllowUserInteraction(p_value);
+			return true;
+
 		default:
 			break;
 	}
@@ -1919,6 +2163,28 @@ bool MCCefBrowserBase::GetStringProperty(MCBrowserProperty p_property, char *&r_
 			r_value = GetURL();
 			return true;
 			
+		default:
+			break;
+	}
+	
+	return true;
+}
+
+bool MCCefBrowserBase::SetIntegerProperty(MCBrowserProperty p_property, int32_t p_value)
+{
+	switch (p_property)
+	{
+		default:
+			break;
+	}
+	
+	return true;
+}
+
+bool MCCefBrowserBase::GetIntegerProperty(MCBrowserProperty p_property, int32_t &r_value)
+{
+	switch (p_property)
+	{
 		default:
 			break;
 	}

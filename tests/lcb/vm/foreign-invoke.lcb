@@ -26,15 +26,20 @@ foreign handler sprintf(in pTarget as Pointer, in pFormat as ZStringNative, ...)
 foreign handler MCStringCreateWithCString(in pCString as Pointer, out rString as String) returns CBool binds to "<builtin>"
 
 public handler TestForeignInvoke_Varargs()
-   variable tString1 as String
-   variable tString2 as String
+   variable tOutputBuffer as Pointer
    unsafe
-      variable tOutputBuffer as Pointer
       put malloc(4096) into tOutputBuffer
+   end unsafe
 
+   variable tString1 as String
+   unsafe
       sprintf(tOutputBuffer, "no formats")
       MCStringCreateWithCString(tOutputBuffer, tString1)
+   end unsafe
+   test "sprintf works with no variadic arguments" when tString1 is "no formats"
 
+   variable tString2 as String
+   unsafe
       variable tInt as SInt16
       variable tLong as SInt32
       variable tLongLong as SInt64
@@ -47,11 +52,20 @@ public handler TestForeignInvoke_Varargs()
       put 7.5 into tDouble
       sprintf(tOutputBuffer, "%d %ld %lld %.1f %.1lf", tInt, tLong, tLongLong, tFloat, tDouble)
       MCStringCreateWithCString(tOutputBuffer, tString2)
+   end unsafe
+   test "sprintf works with variadic arguments" when tString2 is "1000 1000000000 1000000000000000 3.5 7.5"
 
+   variable tString3 as String
+   unsafe
+      variable tNothing as optional Pointer
+      sprintf(tOutputBuffer, "nullptr %p", tNothing)
+      MCStringCreateWithCString(tOutputBuffer, tString3)
+   end unsafe
+   test "sprintf works with nullptr variadic argument" when tString3 begins with "nullptr "
+
+   unsafe
       free(tOutputBuffer)
    end unsafe
-   test "sprintf works with no variadic arguments" when tString1 is "no formats"
-   test "sprintf works with variadic arguments" when tString2 is "1000 1000000000 1000000000000000 3.5 7.5"
 end handler
 
 --------
@@ -91,4 +105,47 @@ end handler
 
 --------
 
+foreign handler MCProperListConvertToForeignValues(in pList as List, in pTypeInfo as Pointer, \
+   out rCArray as Pointer, out rCount as LCUIndex) returns CBool binds to "<builtin>"
+foreign handler MCAggregateTypeInfo(in pBinding as String, out rTypeInfo as Pointer) returns CBool binds to "<builtin>"
+foreign handler MCValueRelease(in pValue as Pointer) returns nothing binds to "<builtin>"
+foreign handler MCMemoryDelete(in pBlock as Pointer) returns nothing binds to "<builtin>"
+
+unsafe handler CreateCArray(in pList as List, in pAggregateBinding as String, out rPointer as Pointer, out rCount as Integer) returns Boolean
+   variable tCArray as Pointer
+   variable tCount as Integer
+   variable tTypeInfo as Pointer
+   if not MCAggregateTypeInfo(pAggregateBinding, tTypeInfo) then
+      return false
+   end if
+
+   variable tSuccess as Boolean
+   put MCProperListConvertToForeignValues(pList, tTypeInfo, tCArray, tCount) into tSuccess
+
+   MCValueRelease(tTypeInfo)
+   if not tSuccess then
+      return false
+   end if
+
+   put tCArray into rPointer
+   put tCount into rCount
+   return true
+end handler
+
+-- Create a c-array of structs and delete it
+public handler TestProperListToCArray()
+	variable tList as List
+	put [[true, true, true], [false, false, false]] into tList
+    variable tArray as Pointer
+    variable tCount as Integer
+    unsafe
+		test "create c-array of structs" when \
+			CreateCArray(tList, "aaa", tArray, tCount)
+		
+		test "c-array has correct length" when tCount is 2
+	
+		-- Hopefully this would crash if there was a memory issue
+		MCMemoryDelete(tArray)
+	end unsafe
+end handler
 end module

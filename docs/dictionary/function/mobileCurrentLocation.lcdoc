@@ -33,7 +33,7 @@ function returns an array with the following keys
 - "vertical accuracy": the maximum error in meters of the altitude
   value. 
 - "altitude": the distance in meters of the height of the device
-  relative to sea:level. Positive values extend upward of sea:level,
+  relative to sea level. Positive values extend upward of sea:level,
   negative values downward.
 - "timestamp": the time at which the measurement was taken, in seconds
   since 1970.
@@ -56,7 +56,15 @@ Use the <mobileCurrentLocation> function to find the current location of
 the device. If location tracking has not been enabled this function
 returns empty. Otherwise it returns an array.
 
+>*Note*: Before using the <mobileCurrentLocation> function, the 
+<mobileSensorAvailable> function should first be called with the line:
+
+    mobileSensorAvailable("location")
+    
+> Doing this will request the necessary permissions for using location sensors.
+
 References: mobileStopTrackingSensor (command),
-mobileStartTrackingSensor (command), mobileSensorReading (function),
+mobileStartTrackingSensor (command), mobileSensorAvailable (function),
+mobileSensorReading (function),
 trackingError (message), locationChanged (message)
 

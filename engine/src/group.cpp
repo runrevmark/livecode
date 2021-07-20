@@ -120,7 +120,6 @@ MCGroup::MCGroup() :
   kfocused(NULL),
   oldkfocused(NULL),
   newkfocused(NULL),
-  mfocused(NULL),
   vscrollbar(NULL),
   hscrollbar(NULL),
   scrollx(0),
@@ -144,7 +143,6 @@ MCGroup::MCGroup(const MCGroup &gref, bool p_copy_ids) :
   kfocused(NULL),
   oldkfocused(NULL),
   newkfocused(NULL),
-  mfocused(NULL),
   vscrollbar(NULL),
   hscrollbar(NULL),
   scrollx(gref.scrollx),
@@ -381,7 +379,7 @@ void MCGroup::open()
 	if (opened == 1)
 	{
 		mgrabbed = False;
-		newkfocused = oldkfocused = kfocused = mfocused = NULL;
+		newkfocused = oldkfocused = kfocused = NULL;
 		computeminrect(False);
 		setsbrects();
 	}
@@ -611,7 +609,7 @@ void MCGroup::mdrag(void)
 	if (getstack() -> gettool(this) != T_BROWSE)
 		return;
 
-	if (mfocused != NULL)
+	if (mfocused.IsValid())
 	{
 		mfocused -> mdrag();
 	}
@@ -626,13 +624,13 @@ bool MCGroup::mfocus_control(int2 x, int2 y, bool p_check_selected)
 {
     if (controls != nil)
     {
-        MCControl *tptr = controls->prev();
+        MCControlHandle tptr(controls->prev());
         do
         {
             // Check if any group's child is selected and focused
             if (p_check_selected && tptr -> gettype() == CT_GROUP)
             {
-                if (static_cast<MCGroup *>(tptr) -> mfocus_control(x, y, true))
+                if (tptr.IsValid() && tptr.GetAs<MCGroup>() -> mfocus_control(x, y, true))
                 {
                     mfocused = tptr;
                     return true;
@@ -640,7 +638,7 @@ bool MCGroup::mfocus_control(int2 x, int2 y, bool p_check_selected)
             }
             
             bool t_focused;
-            if (p_check_selected)
+            if (p_check_selected && tptr.IsValid())
             {
                 // On the first pass (checking selected objects), just check
                 // if the object is selected and the mouse is inside a resize handle.
@@ -653,26 +651,30 @@ bool MCGroup::mfocus_control(int2 x, int2 y, bool p_check_selected)
                     tptr -> mfocus(x, y);
                 
             }
-            else
+            else if (tptr.IsValid())
             {
                 t_focused = tptr -> mfocus(x, y);
+            }
+            else
+            {
+                t_focused = false;
             }
             
             if (t_focused)
             {
                 Boolean newfocused = tptr != mfocused;
                 
-                if (newfocused && mfocused != NULL)
+                if (newfocused && mfocused.IsValid())
                 {
                     MCControl *oldfocused = mfocused;
                     mfocused = tptr;
                     oldfocused->munfocus();
                 }
-                else
+                else if (tptr.IsValid())
                     mfocused = tptr;
                 
                 // The widget event manager handles enter/leave itself
-                if (newfocused && mfocused != nil &&
+                if (newfocused && mfocused.IsValid() &&
                     mfocused -> gettype() != CT_GROUP &&
 #ifdef WIDGETS_HANDLE_DND
                     mfocused -> gettype() != CT_WIDGET)
@@ -681,12 +683,14 @@ bool MCGroup::mfocus_control(int2 x, int2 y, bool p_check_selected)
                      mfocused -> gettype() != CT_WIDGET))
 #endif
                 {
+                    if (mfocused.IsValid())
+                    {
                         mfocused->enter();
-                        
+                    }
                         // MW-2007-10-31: mouseMove sent before mouseEnter - make sure we send an mouseMove
                         //   ... and now lets make sure it doesn't crash!
                         //   Here mfocused can be NULL if a control was deleted in mfocused -> enter()
-                        if (mfocused != NULL)
+                        if (mfocused.IsValid())
                             mfocused->mfocus(x, y);
                 }
                 return true;
@@ -696,16 +700,16 @@ bool MCGroup::mfocus_control(int2 x, int2 y, bool p_check_selected)
             if (!p_check_selected && tptr == mfocused)
             {
                 // Use the group's munfocus method if the group has an mfocused control.
-                if (mfocused -> gettype() != CT_GROUP
-                    || static_cast<MCGroup *>(mfocused) -> getmfocused() != nil)
+                if (mfocused.IsValid() && (mfocused -> gettype() != CT_GROUP
+                    || mfocused.GetAs<MCGroup>() -> getmfocused() != nil))
                 {
                     MCControl *oldfocused = mfocused;
-                    mfocused = NULL;
+                    mfocused = nullptr;
                     oldfocused->munfocus();
                 }
-                else
+                else if (mfocused.IsValid())
                 {
-                    static_cast<MCGroup *>(mfocused) -> clearmfocus();
+                    mfocused.GetAs<MCGroup>() -> clearmfocus();
                     mfocused = nil;
                 }
             }
@@ -726,7 +730,7 @@ Boolean MCGroup::mfocus(int2 x, int2 y)
 		return MCObject::mfocus(x, y);
 	if (!(flags & F_VISIBLE || showinvisible()))
 	{
-		mfocused = NULL;
+		mfocused = nullptr;
 		mgrabbed = False;
 		return False;
 	}
@@ -745,10 +749,10 @@ Boolean MCGroup::mfocus(int2 x, int2 y)
 		mgrabbed = False;
 		if (sbfocus(x, y, hscrollbar, vscrollbar))
 		{
-			if (mfocused != NULL)
+			if (mfocused.IsValid())
 			{
 				mfocused->munfocus();
-				mfocused = NULL;
+				mfocused = nullptr;
 			}
 			return True;
 		}
@@ -764,10 +768,10 @@ Boolean MCGroup::mfocus(int2 x, int2 y)
 				return True;
 		}
 		else
-			if (mfocused != NULL)
+			if (mfocused.IsValid())
 			{
 				MCControl *oldfocused = mfocused;
-				mfocused = NULL;
+				mfocused = nullptr;
 				oldfocused->munfocus();
 			}
 	}
@@ -779,17 +783,17 @@ Boolean MCGroup::mfocus(int2 x, int2 y)
 void MCGroup::munfocus()
 {
 	mgrabbed = False;
-	if (mfocused != NULL)
+	if (mfocused.IsValid())
 	{
 		MCControl *oldfocused = mfocused;
-		mfocused = NULL;
+		mfocused = nullptr;
 		// IM-2013-08-07: [[ Bug 10671 ]] Release grabbed controls when removing focus
 		state &= ~CS_GRAB;
 		oldfocused->munfocus();
 	}
 	else
 	{
-		mfocused = NULL;
+		mfocused = nullptr;
 		message(MCM_mouse_leave);
 	}
 	state &= ~(CS_MFOCUSED | CS_HSCROLL | CS_VSCROLL);
@@ -816,7 +820,7 @@ Boolean MCGroup::mdown(uint2 which)
     if (tool == T_BROWSE && sbdown(which, hscrollbar, vscrollbar))
         return True;
     
-    if (tool == T_POINTER && (mfocused == NULL || !MCselectgrouped || getflag(F_SELECT_GROUP)))
+    if (tool == T_POINTER && (!mfocused.IsValid() || !MCselectgrouped || getflag(F_SELECT_GROUP)))
 	{
 		if (which == Button1)
 		{
@@ -830,7 +834,7 @@ Boolean MCGroup::mdown(uint2 which)
 		return True;
 	}
     
-	if (mfocused == NULL)
+	if (!mfocused.IsValid())
 		return False;
 	mgrabbed = True;
 	
@@ -842,7 +846,7 @@ Boolean MCGroup::mdown(uint2 which)
 	t_handled = false;
 	
 	state |= CS_MFOCUSED;
-	if (mfocused == NULL || !mfocused->mdown(which))
+	if (!mfocused.IsValid() || !mfocused->mdown(which))
 	{
 		mgrabbed = False;
 		state &= ~CS_MFOCUSED;
@@ -867,7 +871,7 @@ Boolean MCGroup::mup(uint2 which, bool p_release)
 	if (sbup(which, hscrollbar, vscrollbar))
 		return True;
 	Tool tool = getstack()->gettool(this);
-	if (tool == T_POINTER && (mfocused == NULL || !MCselectgrouped || getflag(F_SELECT_GROUP)))
+	if (tool == T_POINTER && (!mfocused.IsValid() || !MCselectgrouped || getflag(F_SELECT_GROUP)))
 	{
 		if (which == Button1)
 		{
@@ -887,10 +891,11 @@ Boolean MCGroup::mup(uint2 which, bool p_release)
 	newkfocused = mfocused;
 	MCControl *oldfocused = mfocused;
 	// MH-2007-03-20: [[ Bug 705 ]] Selecting a radio button using pointer tool unhilites other radio buttons in the group with radiobehavior set.
-	if (tool != T_POINTER)
+    // PM-2018-09-21: [[ Bug 9711 ]] Ensure right-clicking on a grouped radio button does not change the hilite of the group
+	if (tool != T_POINTER && which == Button1)
 		radio(0, oldfocused);
 	mgrabbed = False;
-	if (mfocused == NULL || mfocused->mup(which, p_release))
+	if (!mfocused.IsValid() || mfocused->mup(which, p_release))
 	{
 		newkfocused = NULL;
 		// MH-2007-03-20: [[ Bug 705 ]] Selecting a radio button using pointer tool unhilites other radio buttons in the group with radiobehavior set.
@@ -910,18 +915,18 @@ Boolean MCGroup::doubledown(uint2 which)
 		return True;
 
 	Tool tool = getstack() -> gettool(this);
-	if (tool == T_POINTER && (mfocused == NULL || !MCselectgrouped || getflag(F_SELECT_GROUP)))
+	if (tool == T_POINTER && (!mfocused.IsValid() || !MCselectgrouped || getflag(F_SELECT_GROUP)))
 	{
 		message_with_args(MCM_mouse_double_down, which);
 		return True;
 	}
 
-	if (mfocused == NULL)
+	if (!mfocused.IsValid())
 		return False;
 
 	mgrabbed = True;
 	state |= CS_MFOCUSED;
-	if (mfocused == NULL || !mfocused->doubledown(which))
+	if (!mfocused.IsValid() || !mfocused->doubledown(which))
 	{
 		mgrabbed = False;
 		state &= ~CS_MFOCUSED;
@@ -937,7 +942,7 @@ Boolean MCGroup::doubleup(uint2 which)
 		return True;
 	
 	Tool tool = getstack() -> gettool(this);
-	if (tool == T_POINTER && (mfocused == NULL || !MCselectgrouped || getflag(F_SELECT_GROUP)))
+	if (tool == T_POINTER && (!mfocused.IsValid() || !MCselectgrouped || getflag(F_SELECT_GROUP)))
 	{
 		message_with_args(MCM_mouse_double_up, which);
 		return True;
@@ -945,10 +950,16 @@ Boolean MCGroup::doubleup(uint2 which)
 
 	mgrabbed = False;
 	state &= ~CS_MFOCUSED;
-	if (mfocused == NULL || mfocused -> doubleup(which))
+	if (!mfocused.IsValid() || mfocused -> doubleup(which))
 		return True;
 
 	return False;
+}
+
+uint2 MCGroup::gettransient(void) const
+{
+	// OVERRIDE - groups do not have a transient focus border
+	return 0;
 }
 
 void MCGroup::applyrect(const MCRectangle &nrect)
@@ -980,6 +991,12 @@ void MCGroup::applyrect(const MCRectangle &nrect)
 			vscroll(-scrolly, False);
 			int2 dx = rect.x - nrect.x;
 			int2 dy = rect.y - nrect.y;
+			
+			/* Make sure we update the group rect before the child controls. This
+			 * is to ensure any native layers can fetch the correct rect to compute
+			 * their relative location. */
+			rect = nrect;
+			
 			MCControl *cptr = controls;
 			do
 			{
@@ -994,7 +1011,6 @@ void MCGroup::applyrect(const MCRectangle &nrect)
 			while (cptr != controls);
 			minrect.x -= dx;
 			minrect.y -= dy;
-			rect = nrect;
 			setsbrects();
 			hscroll(oldx, False);
 			vscroll(oldy, False);
@@ -1861,7 +1877,7 @@ void MCGroup::clearfocus(MCControl *cptr)
 {
 	if (cptr == mfocused)
 	{
-		mfocused = NULL;
+		mfocused = nullptr;
 		mgrabbed = False;
 	}
 	if (cptr == oldkfocused)
@@ -2152,54 +2168,31 @@ void MCGroup::boundcontrols()
 	}
 }
 
-void MCGroup::drawselectedchildren(MCDC *dc)
+void MCGroup::drawselection(MCDC *p_context, const MCRectangle& p_dirty)
 {
-    if (!opened || !(getflag(F_VISIBLE) || showinvisible()))
-        return;
+    MCAssert(getopened() != 0 && (getflag(F_VISIBLE) || showinvisible()));
     
     MCControl *t_control = controls;
     if (t_control == nil)
         return;
-    do
-    {
-        if (t_control -> getstate(CS_SELECTED))
-            t_control -> drawselected(dc);
-        
-        if (t_control -> gettype() == CT_GROUP)
-            static_cast<MCGroup *>(t_control) -> drawselectedchildren(dc);
-        
-        t_control = t_control -> next();
-    }
-    while (t_control != controls);
-}
-
-bool MCGroup::updatechildselectedrect(MCRectangle& x_rect)
-{
-    bool t_updated;
-    t_updated = false;
     
-    MCControl *t_control = controls;
-    if (t_control == nil)
-        return t_updated;
     do
     {
-        if (t_control -> getstate(CS_SELECTED))
+        if (t_control != nullptr &&
+             t_control->getopened() != 0 &&
+             (t_control->getflag(F_VISIBLE) || showinvisible()))
         {
-            x_rect = MCU_union_rect(t_control -> geteffectiverect(), x_rect);
-            t_updated = true;
-        }
-        
-        if (t_control -> gettype() == CT_GROUP)
-        {
-            MCGroup *t_group = static_cast<MCGroup *>(t_control);
-            t_updated = t_updated | t_group -> updatechildselectedrect(x_rect);
+            t_control->drawselection(p_context, p_dirty);
         }
         
         t_control = t_control -> next();
     }
     while (t_control != controls);
     
-    return t_updated;
+    if (getselected())
+    {
+        MCControl::drawselection(p_context, p_dirty);
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -3076,11 +3069,17 @@ void MCGroup::relayercontrol(MCControl *p_source, MCControl *p_target)
 
 	if (!computeminrect(False))
 		p_source -> layer_redrawall();
+
+	p_source->layerchanged();
 }
 
 void MCGroup::relayercontrol_remove(MCControl *p_control)
 {
 	p_control -> remove(controls);
+
+	// make sure this group no longer points to the removed control
+	clearfocus(p_control);
+
 	if (!computeminrect(False))
 		layer_redrawrect(p_control -> geteffectiverect());
 		
@@ -3099,6 +3098,8 @@ void MCGroup::relayercontrol_insert(MCControl *p_control, MCControl *p_target)
 
 	if (!computeminrect(False))
 		p_control -> layer_redrawall();
+
+	p_control->layerchanged();
 }
 
 bool MCGroup::getNativeContainerLayer(MCNativeLayer *&r_layer)
